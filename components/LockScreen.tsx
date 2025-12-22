@@ -69,7 +69,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         </div>
 
         <a 
-          href={`https://api.whatsapp.com/send?phone=2340000000000&text=Hello,%20I%20want%20to%20activate%20my%20NaijaShop%20POS.%0A%0ARequest%20Code:%20${requestCode}`} 
+          href={`https://api.whatsapp.com/send?phone=2347062228026&text=Hello,%20I%20want%20to%20activate%20my%20NaijaShop%20POS.%0A%0ARequest%20Code:%20${requestCode}`} 
           target="_blank"
           className="w-full bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-emerald-900/40 uppercase tracking-widest text-xs"
         >

@@ -1,10 +1,12 @@
 
+
 /**
  * Security Utility for NaijaShop POS
  * Handles device fingerprinting and offline activation verification.
  */
 
-// Fix: Replaced import.meta.env with process.env to resolve TypeScript error and maintain environmental variable access consistency.
+// Use the salt from environment variable exclusively
+// Fix: Use process.env to resolve 'Property env does not exist on type ImportMeta' error.
 const APP_SALT = process.env.VITE_APP_SALT;
 
 /**

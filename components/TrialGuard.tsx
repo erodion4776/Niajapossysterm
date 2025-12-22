@@ -37,7 +37,7 @@ export const TrialGuard: React.FC<TrialGuardProps> = ({ children }) => {
         <div className="bg-red-600 text-white p-3 text-center text-sm font-semibold flex items-center justify-center gap-2 sticky top-0 z-50 animate-pulse">
           <span>Trial Expired. Contact Developer to unlock.</span>
           <a 
-            href="https://wa.me/2340000000000" 
+            href="https://wa.me/2347062228026" 
             target="_blank" 
             className="bg-white text-red-600 px-2 py-1 rounded text-xs flex items-center gap-1"
           >
