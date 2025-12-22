@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData } from '../db.ts';
 import { backupToWhatsApp, generateShopKey } from '../utils/whatsapp.ts';
-import { CloudUpload, User as UserIcon, ShieldCheck, Info, Heart, Lock, Key, Store, MapPin, Smartphone, Plus, Trash2, AlertCircle, FileJson, CheckCircle } from 'lucide-react';
+import { CloudUpload, User as UserIcon, ShieldCheck, Info, Heart, Lock, Key, Store, MapPin, Smartphone, Plus, Trash2, AlertCircle, FileJson, CheckCircle, Share2 } from 'lucide-react';
 import { Role } from '../types.ts';
 
 interface SettingsProps {
@@ -13,7 +13,6 @@ interface SettingsProps {
 
 export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
   const isAdmin = role === 'Admin';
-  const isPaid = localStorage.getItem('is_paid') === 'true';
   const [shopName, setShopName] = useState(() => localStorage.getItem('shop_name') || '');
   const [shopInfo, setShopInfo] = useState(() => localStorage.getItem('shop_info') || '');
   const [showAddUser, setShowAddUser] = useState(false);
@@ -23,7 +22,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const users = useLiveQuery(() => db.users.toArray());
-  const hasStaff = users?.some(u => u.role === 'Staff');
 
   useEffect(() => {
     localStorage.setItem('shop_name', shopName);
@@ -40,6 +38,17 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
     backupToWhatsApp({ inventory, sales, expenses, timestamp: Date.now() });
   };
 
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUser.name || !newUser.pin) return;
+    await db.users.add({
+      ...newUser,
+      id: `user-${Date.now()}`
+    });
+    setNewUser({ name: '', pin: '', role: 'Staff' as Role });
+    setShowAddUser(false);
+  };
+
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -53,7 +62,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
           await clearAllData();
 
           await db.transaction('rw', [db.inventory, db.users, db.sales, db.expenses, db.stockLogs], async () => {
-            // 1. Map Products to Inventory
             if (json.products) {
               await db.inventory.bulkAdd(json.products.map((p: any) => ({
                 id: p.id,
@@ -61,60 +69,39 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
                 costPrice: p.cost || 0,
                 sellingPrice: p.price || 0,
                 stock: p.stock || 0,
-                category: 'General',
-                dateAdded: p.dateAdded
+                category: p.category || 'General',
+                dateAdded: p.dateAdded || new Date().toISOString()
               })));
             }
-
-            // 2. Map Users
             if (json.users) {
               await db.users.bulkAdd(json.users.map((u: any) => ({
                 id: u.id,
                 name: u.name,
-                pin: '0000', // Default PIN for imported users
-                role: (u.role === 'admin' ? 'Admin' : 'Staff') as Role,
+                pin: u.pin || '0000',
+                role: (u.role === 'admin' || u.role === 'Admin' ? 'Admin' : 'Staff') as Role,
                 email: u.email
               })));
             }
-
-            // 3. Map Sales (Converting flat list to grouped structure)
             if (json.sales) {
               await db.sales.bulkAdd(json.sales.map((s: any) => ({
                 id: s.id,
-                timestamp: new Date(s.date).getTime(),
-                total: s.totalPrice,
-                totalCost: 0, 
-                items: [{
+                timestamp: new Date(s.date || s.timestamp).getTime(),
+                total: s.totalPrice || s.total,
+                totalCost: s.totalCost || 0, 
+                items: s.items || [{
                   id: s.productId,
-                  name: s.productName,
-                  price: s.totalPrice / s.quantity,
+                  name: s.productName || 'Imported Item',
+                  price: (s.totalPrice || s.total) / (s.quantity || 1),
                   costPrice: 0,
-                  quantity: s.quantity
+                  quantity: s.quantity || 1
                 }],
-                staff_id: 'System',
-                staff_name: 'Imported',
+                staff_id: s.staff_id || 'System',
+                staff_name: s.staff_name || 'Imported',
                 paymentMethod: s.paymentMethod || 'cash'
               })));
             }
-
-            // 4. Map Expenses
-            if (json.expenses) {
-              await db.expenses.bulkAdd(json.expenses.map((e: any) => ({
-                ...e,
-                date: new Date(e.date).getTime()
-              })));
-            }
-
-            // 5. Map Stock Logs
-            if (json.stockLogs) {
-              await db.stockLogs.bulkAdd(json.stockLogs.map((l: any) => ({
-                ...l,
-                date: new Date(l.date).getTime()
-              })));
-            }
           });
-          
-          alert('Database Restored! Your products and history are now live.');
+          alert('Import Successful!');
           window.location.reload();
         }
       } catch (err) {
@@ -124,12 +111,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
       }
     };
     reader.readAsText(file);
-  };
-
-  const handleGenerateKey = async () => {
-    setIsGenerating(true);
-    await generateShopKey();
-    setIsGenerating(false);
   };
 
   const deleteUser = async (id: number | string) => {
@@ -144,7 +125,39 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
         <h1 className="text-2xl font-black text-gray-800 tracking-tight">Admin & Security</h1>
       </header>
 
-      {/* Import Section - Restricted to Admin Only */}
+      {/* 1. Staff Device Setup (New Section) */}
+      {isAdmin && (
+        <section className="bg-emerald-950 p-6 rounded-[32px] shadow-xl text-white space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-emerald-500/20 p-2 rounded-xl text-emerald-400">
+              <Smartphone size={24} />
+            </div>
+            <div>
+              <h2 className="text-lg font-black leading-none">Staff Device Sync</h2>
+              <p className="text-emerald-500 text-[10px] font-bold uppercase tracking-wider mt-1">Connect staff phones</p>
+            </div>
+          </div>
+          
+          <p className="text-xs font-medium opacity-80 leading-relaxed">
+            Generate a secure Shop Key to set up this business on a staff member's device. This transfers your current inventory and shop settings.
+          </p>
+
+          <button 
+            onClick={async () => {
+              setIsGenerating(true);
+              await generateShopKey();
+              setIsGenerating(false);
+            }}
+            disabled={isGenerating}
+            className="w-full bg-emerald-500 text-emerald-950 font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
+          >
+            {isGenerating ? 'Generating...' : 'Generate Setup Key'}
+            {!isGenerating && <Share2 size={16} />}
+          </button>
+        </section>
+      )}
+
+      {/* 2. Import Section */}
       {isAdmin && (
         <section className="bg-emerald-600 p-6 rounded-[32px] shadow-xl text-white space-y-4">
           <div className="flex items-center gap-3">
@@ -152,29 +165,22 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
               <FileJson size={24} />
             </div>
             <div>
-              <h2 className="text-lg font-black leading-none">Import Your Data</h2>
-              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">Products, Sales & Expenses</p>
+              <h2 className="text-lg font-black leading-none">Import Business Data</h2>
+              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">From JSON Backup</p>
             </div>
           </div>
           
           <p className="text-xs font-medium opacity-80 leading-relaxed">
-            Upload your JSON file to instantly sync your stock of Heineken, Stout, Goldberg and other products along with your historical sales.
+            Upload your master backup file to sync all stock and history.
           </p>
 
-          <input 
-            type="file" 
-            accept=".json" 
-            className="hidden" 
-            ref={fileInputRef} 
-            onChange={handleFileImport}
-          />
-          
+          <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleFileImport} />
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
             className="w-full bg-white text-emerald-900 font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
           >
-            {isImporting ? 'Syncing...' : 'Select JSON File'}
+            {isImporting ? 'Processing...' : 'Select Backup File'}
             {!isImporting && <CheckCircle size={16} />}
           </button>
         </section>
@@ -245,6 +251,36 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
           ))}
         </div>
       </section>
+
+      {/* Modal for Adding Users */}
+      {showAddUser && (
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-6 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl">
+            <h2 className="text-2xl font-black mb-6">Register Staff</h2>
+            <form onSubmit={handleAddUser} className="space-y-4">
+              <input 
+                required
+                placeholder="Full Name"
+                className="w-full p-4 bg-gray-50 border rounded-2xl font-bold"
+                value={newUser.name}
+                onChange={e => setNewUser({...newUser, name: e.target.value})}
+              />
+              <input 
+                required
+                placeholder="4-Digit PIN"
+                maxLength={4}
+                className="w-full p-4 bg-gray-50 border rounded-2xl font-bold text-center tracking-[1em]"
+                value={newUser.pin}
+                onChange={e => setNewUser({...newUser, pin: e.target.value})}
+              />
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setShowAddUser(false)} className="flex-1 py-4 font-bold text-gray-400">Cancel</button>
+                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-4 rounded-2xl">Add User</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Backup Section */}
       <section className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
