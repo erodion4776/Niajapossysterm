@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Page, Role } from './types.ts';
-import { initTrialDate, User } from './db.ts';
+import { initTrialDate, User, db } from './db.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { POS } from './pages/POS.tsx';
@@ -17,16 +17,31 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
   const [isLocked, setIsLocked] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    initTrialDate();
-    checkTrialStatus();
+    const startup = async () => {
+      await initTrialDate();
+      await checkActivationStatus();
+      setIsInitialized(true);
+    };
+    startup();
   }, []);
 
-  const checkTrialStatus = () => {
-    const isPaid = localStorage.getItem('is_paid') === 'true';
-    if (isPaid) return;
+  const checkActivationStatus = async () => {
+    // 1. Check IndexedDB first (more permanent)
+    const dbActivated = await db.settings.get('is_activated');
+    const isActivated = localStorage.getItem('is_activated') === 'true' || dbActivated?.value === true;
+    
+    // Sync both if one is missing
+    if (isActivated) {
+      if (localStorage.getItem('is_activated') !== 'true') localStorage.setItem('is_activated', 'true');
+      if (dbActivated?.value !== true) await db.settings.put({ key: 'is_activated', value: true });
+      setIsLocked(false);
+      return;
+    }
 
+    // 2. If not activated, check trial period
     const installDate = parseInt(localStorage.getItem('install_date') || '0');
     if (!installDate) return;
 
@@ -60,6 +75,8 @@ const App: React.FC = () => {
         return <Dashboard setPage={setCurrentPage} role={currentUser.role} />;
     }
   };
+
+  if (!isInitialized) return null;
 
   if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
 
