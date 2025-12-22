@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Page, Role } from './types.ts';
 import { initTrialDate, User } from './db.ts';
@@ -59,6 +60,8 @@ const App: React.FC = () => {
 
   if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
 
+  const isAdmin = currentUser.role === 'Admin';
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-lg mx-auto shadow-xl relative">
       {isLocked && <LockScreen onUnlock={() => setIsLocked(false)} />}
@@ -89,13 +92,15 @@ const App: React.FC = () => {
           <Package size={24} />
           <span className="text-[10px] font-bold mt-1 uppercase">Stock</span>
         </button>
-        <button 
-          onClick={() => setCurrentPage(Page.SETTINGS)}
-          className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.SETTINGS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
-        >
-          <SettingsIcon size={24} />
-          <span className="text-[10px] font-bold mt-1 uppercase">Admin</span>
-        </button>
+        {isAdmin && (
+          <button 
+            onClick={() => setCurrentPage(Page.SETTINGS)}
+            className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.SETTINGS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
+          >
+            <SettingsIcon size={24} />
+            <span className="text-[10px] font-bold mt-1 uppercase">Admin</span>
+          </button>
+        )}
       </nav>
     </div>
   );

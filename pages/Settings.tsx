@@ -83,7 +83,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
                 id: s.id,
                 timestamp: new Date(s.date).getTime(),
                 total: s.totalPrice,
-                totalCost: 0, // Costs would require a lookup, set to 0 to avoid errors
+                totalCost: 0, 
                 items: [{
                   id: s.productId,
                   name: s.productName,
@@ -144,39 +144,41 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
         <h1 className="text-2xl font-black text-gray-800 tracking-tight">Admin & Security</h1>
       </header>
 
-      {/* Import Section - Custom UI for your JSON file */}
-      <section className="bg-emerald-600 p-6 rounded-[32px] shadow-xl text-white space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-xl">
-            <FileJson size={24} />
+      {/* Import Section - Restricted to Admin Only */}
+      {isAdmin && (
+        <section className="bg-emerald-600 p-6 rounded-[32px] shadow-xl text-white space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-xl">
+              <FileJson size={24} />
+            </div>
+            <div>
+              <h2 className="text-lg font-black leading-none">Import Your Data</h2>
+              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">Products, Sales & Expenses</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-black leading-none">Import Your Data</h2>
-            <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">Products, Sales & Expenses</p>
-          </div>
-        </div>
-        
-        <p className="text-xs font-medium opacity-80 leading-relaxed">
-          Upload your JSON file to instantly sync your stock of Heineken, Stout, Goldberg and other products along with your historical sales.
-        </p>
+          
+          <p className="text-xs font-medium opacity-80 leading-relaxed">
+            Upload your JSON file to instantly sync your stock of Heineken, Stout, Goldberg and other products along with your historical sales.
+          </p>
 
-        <input 
-          type="file" 
-          accept=".json" 
-          className="hidden" 
-          ref={fileInputRef} 
-          onChange={handleFileImport}
-        />
-        
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isImporting}
-          className="w-full bg-white text-emerald-900 font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
-        >
-          {isImporting ? 'Syncing...' : 'Select JSON File'}
-          {!isImporting && <CheckCircle size={16} />}
-        </button>
-      </section>
+          <input 
+            type="file" 
+            accept=".json" 
+            className="hidden" 
+            ref={fileInputRef} 
+            onChange={handleFileImport}
+          />
+          
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="w-full bg-white text-emerald-900 font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
+          >
+            {isImporting ? 'Syncing...' : 'Select JSON File'}
+            {!isImporting && <CheckCircle size={16} />}
+          </button>
+        </section>
+      )}
 
       {/* Shop Identity Section */}
       <section className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
