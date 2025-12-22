@@ -2,23 +2,25 @@
 import Dexie, { Table } from 'dexie';
 
 export interface InventoryItem {
-  id?: number;
+  id?: string | number;
   name: string;
   costPrice: number;
   sellingPrice: number;
   stock: number;
   category: string;
+  dateAdded?: string;
 }
 
 export interface User {
-  id?: number;
+  id?: string | number;
   name: string;
   pin: string;
   role: 'Admin' | 'Staff';
+  email?: string;
 }
 
 export interface SaleItem {
-  id: number;
+  id: string | number;
   name: string;
   price: number;
   costPrice: number;
@@ -26,13 +28,29 @@ export interface SaleItem {
 }
 
 export interface Sale {
-  id?: number;
+  id?: string | number;
   items: SaleItem[];
   total: number;
   totalCost: number;
   timestamp: number;
   staff_id: string;
   staff_name: string;
+  paymentMethod?: 'cash' | 'pos' | 'transfer';
+}
+
+export interface Expense {
+  id?: string | number;
+  description: string;
+  amount: number;
+  date: string | number;
+}
+
+export interface StockLog {
+  id?: string | number;
+  productId: string | number;
+  productName: string;
+  quantity: number;
+  date: string | number;
 }
 
 export interface Setting {
@@ -45,15 +63,19 @@ export type NaijaShopDatabase = Dexie & {
   sales: Table<Sale>;
   settings: Table<Setting>;
   users: Table<User>;
+  expenses: Table<Expense>;
+  stockLogs: Table<StockLog>;
 };
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(3).stores({
-  inventory: '++id, name, sellingPrice, stock, category',
-  sales: '++id, timestamp, total, staff_id, staff_name',
+dexieDb.version(4).stores({
+  inventory: 'id, name, sellingPrice, stock, category',
+  sales: 'id, timestamp, total, staff_id, staff_name',
   settings: 'key',
-  users: '++id, name, pin, role'
+  users: 'id, name, pin, role',
+  expenses: 'id, date, amount',
+  stockLogs: 'id, productId, date'
 });
 
 export const db = dexieDb;
@@ -64,16 +86,14 @@ export async function initTrialDate() {
     localStorage.setItem('install_date', Date.now().toString());
   }
   
-  // Request persistent storage
   if (navigator.storage && navigator.storage.persist) {
-    const isPersisted = await navigator.storage.persist();
-    console.log(`Storage persisted: ${isPersisted}`);
+    await navigator.storage.persist();
   }
 
-  // Ensure an initial Admin exists if the DB is empty
   const adminCount = await db.users.where('role').equals('Admin').count();
   if (adminCount === 0) {
     await db.users.add({
+      id: 'admin-default',
       name: 'Shop Owner',
       pin: '0000',
       role: 'Admin'
@@ -82,10 +102,12 @@ export async function initTrialDate() {
 }
 
 export async function clearAllData() {
-  await db.transaction('rw', [db.inventory, db.sales, db.settings, db.users], async () => {
+  await db.transaction('rw', [db.inventory, db.sales, db.settings, db.users, db.expenses, db.stockLogs], async () => {
     await db.inventory.clear();
     await db.sales.clear();
     await db.settings.clear();
     await db.users.clear();
+    await db.expenses.clear();
+    await db.stockLogs.clear();
   });
 }

@@ -1,8 +1,9 @@
+
 import React from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
-import { ShoppingCart, Package, AlertTriangle, TrendingUp, DollarSign, User } from 'lucide-react';
+import { ShoppingCart, Package, AlertTriangle, TrendingUp, DollarSign, ReceiptText, Wallet } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
 interface DashboardProps {
@@ -14,23 +15,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
   const isAdmin = role === 'Admin';
   const lowStockItems = useLiveQuery(() => db.inventory.where('stock').below(5).toArray());
   
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const salesToday = useLiveQuery(() => db.sales.where('timestamp').above(today.getTime()).toArray());
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const salesToday = useLiveQuery(() => db.sales.where('timestamp').between(todayStart.getTime(), todayEnd.getTime()).toArray());
+  const expensesToday = useLiveQuery(() => db.expenses.toArray()); // Simplified for all expenses, or filter by date
 
   const totalSales = salesToday?.reduce((sum, sale) => sum + sale.total, 0) || 0;
-  const totalCost = salesToday?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
-  const profit = totalSales - totalCost;
+  const totalCostOfSales = salesToday?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
+  
+  // Filtering expenses for today specifically if they have ISO strings or timestamps
+  const actualExpensesToday = expensesToday?.filter(e => {
+    const d = new Date(e.date).getTime();
+    return d >= todayStart.getTime() && d <= todayEnd.getTime();
+  }).reduce((sum, e) => sum + e.amount, 0) || 0;
+
+  const grossProfit = totalSales - totalCostOfSales;
+  const netProfit = grossProfit - actualExpensesToday;
 
   return (
     <div className="p-4 space-y-6 pb-24">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Shop Overview</h1>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span className={`w-2 h-2 rounded-full ${isAdmin ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-tight">Active: {role}</p>
-          </div>
+          <h1 className="text-2xl font-bold text-gray-800">Overview</h1>
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-tight">Financial Summary</p>
         </div>
         <div className="bg-emerald-100 p-2.5 rounded-2xl">
           <TrendingUp className="text-emerald-600" size={24} />
@@ -40,21 +50,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
       <div className="grid grid-cols-1 gap-4">
         <div className="bg-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
           <div className="relative z-10">
-            <p className="text-emerald-100 text-sm font-bold uppercase tracking-wider">Today's Revenue</p>
+            <p className="text-emerald-100 text-xs font-bold uppercase tracking-wider">Revenue Today</p>
             <h2 className="text-4xl font-black mt-1">{formatNaira(totalSales)}</h2>
           </div>
           <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={140} />
         </div>
 
-        {isAdmin && (
-          <div className="bg-white border-2 border-emerald-50 p-6 rounded-3xl shadow-sm relative overflow-hidden">
+        <div className="grid grid-cols-2 gap-4">
+           <div className="bg-white border-2 border-amber-50 p-5 rounded-3xl shadow-sm relative overflow-hidden">
             <div className="relative z-10">
-              <p className="text-gray-400 text-sm font-bold uppercase tracking-wider">Net Profit</p>
-              <h2 className="text-3xl font-black mt-1 text-emerald-600">{formatNaira(profit)}</h2>
+              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Expenses</p>
+              <h2 className="text-xl font-black mt-1 text-amber-600">{formatNaira(actualExpensesToday)}</h2>
             </div>
-            <DollarSign className="absolute -right-4 -bottom-4 text-emerald-50 opacity-50" size={120} />
+            <Wallet className="absolute -right-2 -bottom-2 text-amber-50 opacity-50" size={60} />
           </div>
-        )}
+
+          <div className="bg-white border-2 border-emerald-50 p-5 rounded-3xl shadow-sm relative overflow-hidden">
+            <div className="relative z-10">
+              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Net Profit</p>
+              <h2 className="text-xl font-black mt-1 text-emerald-600">{formatNaira(netProfit)}</h2>
+            </div>
+            <DollarSign className="absolute -right-2 -bottom-2 text-emerald-50 opacity-50" size={60} />
+          </div>
+        </div>
 
         <button 
           onClick={() => setPage(Page.POS)}
