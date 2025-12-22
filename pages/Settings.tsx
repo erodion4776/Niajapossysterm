@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
 import { backupToWhatsApp, generateShopKey } from '../utils/whatsapp.ts';
-import { CloudUpload, User as UserIcon, Info, Store, MapPin, Smartphone, Plus, Trash2, FileJson, CheckCircle, Share2, AlertCircle } from 'lucide-react';
+import { CloudUpload, User as UserIcon, Info, Store, MapPin, Smartphone, Plus, Trash2, FileJson, CheckCircle, Share2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Role } from '../types.ts';
 
 interface SettingsProps {
@@ -49,7 +49,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
     setShowAddUser(false);
   };
 
-  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSmartImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -57,48 +57,48 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
     reader.onload = async (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
+        const data = json.inventory || json.products || [];
         
-        const confirmMsg = json.users 
-          ? 'Importing this file will OVERWRITE current Users and Staff. Continue?' 
-          : 'Importing this file will merge inventory and sales data. Current staff will remain active. Continue?';
+        if (data.length === 0) {
+          alert('No valid inventory found in this file.');
+          return;
+        }
 
-        if (confirm(confirmMsg)) {
+        if (confirm(`Detected ${data.length} items. This will merge them with your current stock. Existing items with the same name will be updated. Proceed?`)) {
           setIsImporting(true);
           
-          await db.transaction('rw', [db.inventory, db.users, db.sales, db.expenses, db.stockLogs], async () => {
-            // Restore Inventory
-            if (json.inventory || json.products) {
-              const data = json.inventory || json.products;
-              await db.inventory.clear();
-              await db.inventory.bulkPut(data);
-            }
-            
-            // Restore Sales
-            if (json.sales) {
-              await db.sales.clear();
-              await db.sales.bulkPut(json.sales);
-            }
-            
-            // Restore Expenses
-            if (json.expenses) {
-              await db.expenses.clear();
-              await db.expenses.bulkPut(json.expenses);
-            }
-            
-            // Optional: Restore Users (Only if explicitly in the backup)
-            if (json.users) {
-              await db.users.clear();
-              await db.users.bulkPut(json.users);
-            }
+          let updatedCount = 0;
+          let addedCount = 0;
 
-            // Optional: Restore Settings
-            if (json.settings) {
-              if (json.settings.shopName) localStorage.setItem('shop_name', json.settings.shopName);
-              if (json.settings.shopInfo) localStorage.setItem('shop_info', json.settings.shopInfo);
+          await db.transaction('rw', [db.inventory], async () => {
+            const currentInventory = await db.inventory.toArray();
+            
+            for (const newItem of data) {
+              // Try to find matching item by ID or Name
+              const existing = currentInventory.find(i => 
+                (newItem.id && i.id === newItem.id) || 
+                (i.name.trim().toLowerCase() === newItem.name.trim().toLowerCase())
+              );
+
+              if (existing) {
+                // Update existing item
+                await db.inventory.update(existing.id!, {
+                  stock: newItem.stock,
+                  sellingPrice: newItem.sellingPrice,
+                  costPrice: newItem.costPrice || existing.costPrice,
+                  category: newItem.category || existing.category
+                });
+                updatedCount++;
+              } else {
+                // Add new item (strip old ID to prevent collision)
+                const { id, ...cleanItem } = newItem;
+                await db.inventory.add(cleanItem);
+                addedCount++;
+              }
             }
           });
 
-          alert('Data Sync Complete! Refreshing...');
+          alert(`Import Successful!\nUpdated: ${updatedCount} items\nAdded: ${addedCount} new items`);
           window.location.reload();
         }
       } catch (err) {
@@ -119,11 +119,38 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
   return (
     <div className="p-4 space-y-6 pb-24">
       <header>
-        <h1 className="text-2xl font-black text-gray-800 tracking-tight">Shop Admin</h1>
-        <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Configuration & Security</p>
+        <h1 className="text-2xl font-black text-gray-800 tracking-tight">Admin Settings</h1>
+        <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Management & Security</p>
       </header>
 
-      {/* Staff Sync */}
+      {/* Smart Stock Merge - REBUILT FOR RELIABILITY */}
+      {isAdmin && (
+        <section className="bg-emerald-600 p-6 rounded-[32px] shadow-xl text-white space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-xl">
+              <RefreshCw size={24} className={isImporting ? 'animate-spin' : ''} />
+            </div>
+            <div>
+              <h2 className="text-lg font-black leading-none">Smart Data Merge</h2>
+              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">Sync External Stock</p>
+            </div>
+          </div>
+          <p className="text-xs font-medium opacity-90 leading-relaxed">
+            Upload a JSON backup to update your inventory. We will match items by name so your existing records stay organized.
+          </p>
+          <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleSmartImport} />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="w-full bg-white text-emerald-900 font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
+          >
+            {isImporting ? 'Merging Data...' : 'Merge Inventory'}
+            {!isImporting && <FileJson size={16} />}
+          </button>
+        </section>
+      )}
+
+      {/* Staff Device Sync */}
       {isAdmin && (
         <section className="bg-emerald-950 p-6 rounded-[32px] shadow-xl text-white space-y-4">
           <div className="flex items-center gap-3">
@@ -131,12 +158,12 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
               <Smartphone size={24} />
             </div>
             <div>
-              <h2 className="text-lg font-black leading-none">Staff Device Sync</h2>
-              <p className="text-emerald-500 text-[10px] font-bold uppercase tracking-wider mt-1">Connect new phones</p>
+              <h2 className="text-lg font-black leading-none">Clone to Staff Phone</h2>
+              <p className="text-emerald-500 text-[10px] font-bold uppercase tracking-wider mt-1">Remote Access Setup</p>
             </div>
           </div>
           <p className="text-xs font-medium opacity-80 leading-relaxed">
-            Generate a secure Shop Key to set up this business on a staff member's device.
+            Generate a Setup Key to clone your shop and staff list to another phone.
           </p>
           <button 
             onClick={async () => {
@@ -147,65 +174,38 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
             disabled={isGenerating}
             className="w-full bg-emerald-500 text-emerald-950 font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
           >
-            {isGenerating ? 'Generating...' : 'Generate Setup Key'}
+            {isGenerating ? 'Generating...' : 'Get Setup Key'}
             {!isGenerating && <Share2 size={16} />}
           </button>
-        </section>
-      )}
-
-      {/* Import Section - Redesigned for safety */}
-      {isAdmin && (
-        <section className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600">
-              <FileJson size={24} />
-            </div>
-            <div>
-              <h2 className="text-lg font-black leading-none text-gray-800">Restore/Merge Data</h2>
-              <p className="text-emerald-600 text-[10px] font-bold uppercase tracking-wider mt-1">From Master Backup</p>
-            </div>
-          </div>
-          <p className="text-xs font-medium text-gray-500 leading-relaxed">
-            Upload your backup JSON file to sync inventory and sales. This will update stock levels and sales history.
-          </p>
-          <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleFileImport} />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            className="w-full bg-gray-900 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
-          >
-            {isImporting ? 'Processing Data...' : 'Select Backup File'}
-            {!isImporting && <CheckCircle size={16} />}
-          </button>
-          <div className="flex items-start gap-2 bg-amber-50 p-3 rounded-xl border border-amber-100">
-            <AlertCircle className="text-amber-500 flex-shrink-0" size={14} />
-            <p className="text-[9px] text-amber-800 font-bold uppercase leading-normal">Note: If the backup contains user accounts, it may change your login PINs.</p>
-          </div>
         </section>
       )}
 
       {/* Shop Identity */}
       <section className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
         <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-          <Store size={14} /> Shop Identity
+          <Store size={14} /> Shop Information
         </h2>
         <div className="space-y-4">
-          <input 
-            disabled={!isAdmin}
-            type="text" 
-            placeholder="Business Name"
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-bold text-sm text-gray-900"
-            value={shopName}
-            onChange={(e) => setShopName(e.target.value)}
-          />
-          <input 
-            disabled={!isAdmin}
-            type="text" 
-            placeholder="Address / Phone"
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-bold text-sm text-gray-900"
-            value={shopInfo}
-            onChange={(e) => setShopInfo(e.target.value)}
-          />
+          <div className="space-y-1">
+            <span className="text-[9px] font-bold text-gray-400 uppercase ml-2">Business Name</span>
+            <input 
+              disabled={!isAdmin}
+              type="text" 
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-bold text-sm text-gray-900"
+              value={shopName}
+              onChange={(e) => setShopName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <span className="text-[9px] font-bold text-gray-400 uppercase ml-2">Address / Phone</span>
+            <input 
+              disabled={!isAdmin}
+              type="text" 
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-bold text-sm text-gray-900"
+              value={shopInfo}
+              onChange={(e) => setShopInfo(e.target.value)}
+            />
+          </div>
         </div>
       </section>
 
@@ -213,11 +213,11 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
       <section className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
         <div className="flex justify-between items-center">
           <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-            <UserIcon size={14} /> Registered Staff
+            <UserIcon size={14} /> Registered Accounts
           </h2>
           {isAdmin && (
             <button onClick={() => setShowAddUser(true)} className="text-emerald-600 font-bold text-xs uppercase flex items-center gap-1">
-              <Plus size={14} /> Add Staff
+              <Plus size={14} /> Register Staff
             </button>
           )}
         </div>
@@ -246,7 +246,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
       {/* Backup */}
       <section className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
         <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-          <CloudUpload size={14} /> Cloud Backup
+          <CloudUpload size={14} /> Database Export
         </h2>
         <button 
           onClick={handleBackup}
@@ -257,8 +257,8 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
               <CloudUpload size={24} />
             </div>
             <div className="text-left">
-              <p className="font-black text-lg leading-none">Share to WhatsApp</p>
-              <p className="text-[10px] font-bold uppercase opacity-60 mt-1">Export database file</p>
+              <p className="font-black text-lg leading-none">Backup to WhatsApp</p>
+              <p className="text-[10px] font-bold uppercase opacity-60 mt-1">Save your shop records</p>
             </div>
           </div>
         </button>
@@ -285,9 +285,9 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
         <div className="mx-auto w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-inner">
           <Info className="text-gray-300" size={28} />
         </div>
-        <h3 className="text-lg font-black text-gray-800">NaijaShop POS Pro</h3>
+        <h3 className="text-lg font-black text-gray-800">NaijaShop Pro</h3>
         <p className="text-[10px] text-gray-400 font-medium leading-relaxed max-w-[200px] mx-auto uppercase tracking-widest">
-          Offline-first architecture. <br/> Lagos, Nigeria.
+          Secure. Offline-First. <br/> Nigeria's Leading Shop POS.
         </p>
       </div>
     </div>
