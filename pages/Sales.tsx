@@ -4,8 +4,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, Sale } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
 import { 
-  History, Search, Filter, Calendar, Trash2, Edit3, 
-  X, CheckCircle, FileText, Smartphone, CreditCard, Banknote 
+  History, Search, Calendar, Trash2, 
+  X, FileText, Smartphone, Receipt
 } from 'lucide-react';
 import { Role } from '../types.ts';
 
@@ -17,7 +17,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
   const isAdmin = role === 'Admin';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
-  const [filterType, setFilterType] = useState<'all' | 'cash' | 'pos' | 'transfer'>('all');
 
   const sales = useLiveQuery(async () => {
     let query = db.sales.orderBy('timestamp').reverse();
@@ -30,9 +29,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
       String(sale.id).includes(searchTerm) || 
       sale.items.some(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    const matchesFilter = filterType === 'all' || sale.paymentMethod === filterType;
-    
-    return matchesSearch && matchesFilter;
+    return matchesSearch;
   }) || [];
 
   const handleDeleteSale = async (sale: Sale) => {
@@ -60,16 +57,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
     }
   };
 
-  const handleUpdatePayment = async (saleId: number | string, method: any) => {
-    if (!isAdmin) return;
-    try {
-      await db.sales.update(saleId, { paymentMethod: method });
-      if (selectedSale) setSelectedSale({...selectedSale, paymentMethod: method});
-    } catch (err) {
-      alert('Update failed');
-    }
-  };
-
   return (
     <div className="p-4 space-y-4 pb-24 animate-in fade-in duration-500">
       <header className="flex justify-between items-center">
@@ -77,12 +64,12 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
           <h1 className="text-2xl font-black text-gray-800 tracking-tight">History</h1>
           <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Transaction Records</p>
         </div>
-        <div className="bg-blue-50 p-3 rounded-2xl text-blue-600">
+        <div className="bg-emerald-50 p-3 rounded-2xl text-emerald-600">
           <History size={24} />
         </div>
       </header>
 
-      {/* Search & Filter */}
+      {/* Search Bar */}
       <div className="space-y-3">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -94,22 +81,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {['all', 'cash', 'pos', 'transfer'].map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilterType(type as any)}
-              className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${
-                filterType === type 
-                ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-100' 
-                : 'bg-white border-gray-100 text-gray-400'
-              }`}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Sales List */}
@@ -120,12 +91,8 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             onClick={() => setSelectedSale(sale)}
             className="w-full bg-white p-4 rounded-[28px] border border-gray-50 text-left flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all"
           >
-            <div className={`p-3 rounded-2xl ${
-              sale.paymentMethod === 'cash' ? 'bg-amber-50 text-amber-600' :
-              sale.paymentMethod === 'pos' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
-            }`}>
-              {sale.paymentMethod === 'cash' ? <Banknote size={24}/> :
-               sale.paymentMethod === 'pos' ? <CreditCard size={24}/> : <Smartphone size={24}/>}
+            <div className="p-3 rounded-2xl bg-gray-50 text-emerald-600">
+              <Receipt size={24}/>
             </div>
             <div className="flex-1">
               <div className="flex justify-between items-start">
@@ -170,7 +137,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             <div className="space-y-6">
               {/* Receipt Visual */}
               <div className="bg-gray-50 border border-gray-200 rounded-3xl p-5 font-mono text-xs text-gray-600 relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500 opacity-20"></div>
+                <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500 opacity-20"></div>
                 <div className="flex justify-between mb-4">
                   <span className="font-bold">TRANS ID: #{selectedSale.id}</span>
                   <span>{new Date(selectedSale.timestamp).toLocaleDateString()}</span>
@@ -197,23 +164,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
               {/* Admin Actions */}
               {isAdmin && (
                 <div className="space-y-3">
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Edit Payment</p>
-                  <div className="flex gap-2">
-                    {['cash', 'pos', 'transfer'].map(m => (
-                      <button 
-                        key={m}
-                        onClick={() => handleUpdatePayment(selectedSale.id!, m as any)}
-                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all border ${
-                          selectedSale.paymentMethod === m 
-                          ? 'bg-blue-600 border-blue-600 text-white' 
-                          : 'bg-white text-gray-400 border-gray-100'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-
                   <div className="flex gap-3 pt-2">
                     <button 
                       onClick={() => shareReceiptToWhatsApp(selectedSale)}
