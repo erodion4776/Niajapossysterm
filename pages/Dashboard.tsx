@@ -5,7 +5,7 @@ import { db } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
 import { 
   ShoppingCart, Package, AlertTriangle, TrendingUp, DollarSign, 
-  Wallet, BarChart3, History, Calendar, ArrowUpRight
+  Wallet, BarChart3, History, Calendar, ArrowUpRight, Star, Award
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -19,6 +19,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
   
   // Queries
   const lowStockItems = useLiveQuery(() => db.inventory.where('stock').below(5).toArray());
+  const inventory = useLiveQuery(() => db.inventory.toArray());
+  const allSales = useLiveQuery(() => db.sales.toArray());
   
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -36,19 +38,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
     return await db.sales.where('timestamp').aboveOrEqual(sevenDaysAgo.getTime()).toArray();
   });
 
-  const expensesToday = useLiveQuery(() => db.expenses.toArray());
+  const expenses = useLiveQuery(() => db.expenses.toArray());
 
   // Financial Calculations
   const totalSalesToday = salesToday?.reduce((sum, sale) => sum + sale.total, 0) || 0;
   const totalCostToday = salesToday?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
   
-  const actualExpensesToday = expensesToday?.filter(e => {
+  const actualExpensesToday = expenses?.filter(e => {
     const d = new Date(e.date).getTime();
     return d >= todayStart.getTime() && d <= todayEnd.getTime();
   }).reduce((sum, e) => sum + e.amount, 0) || 0;
 
   const grossProfitToday = totalSalesToday - totalCostToday;
   const netProfitToday = grossProfitToday - actualExpensesToday;
+
+  // Best Selling Product Logic
+  const bestSeller = React.useMemo(() => {
+    if (!allSales) return null;
+    const itemMap: Record<string, { name: string, quantity: number }> = {};
+    allSales.forEach(sale => {
+      sale.items.forEach(item => {
+        if (!itemMap[item.name]) {
+          itemMap[item.name] = { name: item.name, quantity: 0 };
+        }
+        itemMap[item.name].quantity += item.quantity;
+      });
+    });
+    const sorted = Object.values(itemMap).sort((a, b) => b.quantity - a.quantity);
+    return sorted[0] || null;
+  }, [allSales]);
+
+  // Store Net Worth (Stock Valuation)
+  const storeNetWorth = React.useMemo(() => {
+    if (!inventory) return 0;
+    return inventory.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.stock || 0)), 0);
+  }, [inventory]);
 
   // Chart Data Processing
   const chartData = React.useMemo(() => {
@@ -78,13 +102,82 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
           <h1 className="text-2xl font-black text-gray-800 tracking-tight">Home</h1>
           <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Business Overview</p>
         </div>
-        <div className="bg-emerald-100 p-2.5 rounded-2xl text-emerald-600">
+        <div className="bg-emerald-100 p-2.5 rounded-2xl text-emerald-600 shadow-sm border border-emerald-50">
           <TrendingUp size={24} />
         </div>
       </header>
 
-      {/* 1. Main Performance Card (Admin) */}
+      {/* 1. High-Impact Stats Card */}
       {isAdmin ? (
+        <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
+          <div className="relative z-10 flex flex-col gap-1">
+            <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Net Profit Today</p>
+            <h2 className="text-4xl font-black tracking-tighter">{formatNaira(netProfitToday)}</h2>
+            <div className="flex items-center gap-2 mt-4">
+              <span className="bg-emerald-500/40 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
+                <ShoppingCart size={10}/> {salesToday?.length || 0} Orders
+              </span>
+              <span className="bg-white/10 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">
+                {formatNaira(totalSalesToday)} Sales
+              </span>
+            </div>
+          </div>
+          <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={160} />
+        </section>
+      ) : (
+        <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
+          <div className="relative z-10">
+            <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-widest">Revenue Today</p>
+            <h2 className="text-4xl font-black mt-1 tracking-tighter">{formatNaira(totalSalesToday)}</h2>
+            <div className="flex items-center gap-2 mt-4">
+              <span className="bg-emerald-500/30 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                {salesToday?.length || 0} Transactions
+              </span>
+            </div>
+          </div>
+          <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={140} />
+        </section>
+      )}
+
+      {/* 2. Admin Analytics Grid */}
+      {isAdmin && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32">
+            <p className="text-gray-400 text-[9px] font-black uppercase tracking-widest">Expenses</p>
+            <h2 className="text-xl font-black text-amber-600">{formatNaira(actualExpensesToday)}</h2>
+            <Wallet className="absolute -right-2 -bottom-2 text-amber-50" size={56} />
+          </div>
+
+          <div className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32">
+            <p className="text-gray-400 text-[9px] font-black uppercase tracking-widest">Store Value</p>
+            <h2 className="text-xl font-black text-blue-600">{formatNaira(storeNetWorth)}</h2>
+            <Package className="absolute -right-2 -bottom-2 text-blue-50" size={56} />
+          </div>
+        </div>
+      )}
+
+      {/* 3. Best Seller Section */}
+      {bestSeller && (
+        <section className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-amber-100 p-3 rounded-2xl text-amber-600 shadow-sm">
+              <Award size={24} strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Top Performing Product</p>
+              <h3 className="text-lg font-black text-gray-800 leading-none">{bestSeller.name}</h3>
+              <p className="text-[10px] font-bold text-emerald-600 uppercase mt-1">Total {bestSeller.quantity} Sold</p>
+            </div>
+          </div>
+          <div className="bg-gray-50 px-3 py-1 rounded-full flex items-center gap-1">
+             <Star size={10} className="fill-amber-400 text-amber-400" />
+             <span className="text-[9px] font-black text-gray-600 uppercase">Best Seller</span>
+          </div>
+        </section>
+      )}
+
+      {/* 4. Weekly Trends Chart */}
+      {isAdmin && (
         <section className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-3">
@@ -94,16 +187,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
               <div>
                 <h2 className="text-sm font-black text-gray-800 uppercase tracking-tight">Performance</h2>
                 <p className="text-[9px] text-gray-400 font-bold uppercase">Weekly Trend</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-100"></span>
-                <span className="text-[7px] font-black text-gray-400 uppercase">Sales</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <span className="text-[7px] font-black text-gray-400 uppercase">Profit</span>
               </div>
             </div>
           </div>
@@ -127,48 +210,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
             ))}
           </div>
         </section>
-      ) : (
-        <div className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
-          <div className="relative z-10">
-            <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-widest">Revenue Today</p>
-            <h2 className="text-4xl font-black mt-1 tracking-tighter">{formatNaira(totalSalesToday)}</h2>
-            <div className="flex items-center gap-2 mt-4">
-              <span className="bg-emerald-500/30 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                {salesToday?.length || 0} Transactions
-              </span>
-            </div>
-          </div>
-          <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={140} />
-        </div>
-      )}
-
-      {/* 2. Key Metrics Grid (Admin) */}
-      {isAdmin && (
-        <div className="grid grid-cols-1 gap-4">
-          <div className="bg-emerald-600 text-white p-6 rounded-[32px] shadow-xl relative overflow-hidden">
-            <div className="relative z-10">
-              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-widest">Revenue Today</p>
-              <h2 className="text-4xl font-black mt-1 tracking-tighter">{formatNaira(totalSalesToday)}</h2>
-            </div>
-            <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={140} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm">
-              <p className="text-gray-400 text-[9px] font-bold uppercase tracking-wider">Expenses</p>
-              <h2 className="text-lg font-black mt-1 text-amber-600">{formatNaira(actualExpensesToday)}</h2>
-              <Wallet className="absolute right-4 bottom-4 text-amber-50" size={20} />
-            </div>
-
-            <div className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm">
-              <p className="text-gray-400 text-[9px] font-bold uppercase tracking-wider">Net Profit</p>
-              <h2 className={`text-lg font-black mt-1 ${netProfitToday >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                {formatNaira(netProfitToday)}
-              </h2>
-              <DollarSign className="absolute right-4 bottom-4 text-emerald-50" size={20} />
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Quick Action */}
@@ -182,7 +223,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
         Start New Sale
       </button>
 
-      {/* 3. Recent Activity Feed */}
+      {/* 5. Recent Activity Feed */}
       <section className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -193,10 +234,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
               <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Today's Sales</h3>
               <p className="text-[9px] text-gray-400 font-bold uppercase">Recent Activity</p>
             </div>
-          </div>
-          <div className="text-right">
-            <span className="text-[9px] font-black text-gray-400 uppercase">Count</span>
-            <p className="text-sm font-black text-gray-800">{salesToday?.length || 0}</p>
           </div>
         </div>
 
@@ -234,7 +271,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
         </div>
       </section>
 
-      {/* 4. Stock Warning */}
+      {/* 6. Stock Warning */}
       <section>
         <div className="flex items-center gap-2 mb-4 px-2">
           <AlertTriangle className="text-amber-500" size={18} />

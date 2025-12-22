@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, InventoryItem } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
-import { Plus, Search, Package, Edit3, X, Lock, Trash2, ArrowUpCircle } from 'lucide-react';
+import { Plus, Search, Package, Edit3, X, Lock, Trash2, ArrowUpCircle, TrendingUp, Wallet, BarChart3 } from 'lucide-react';
 import { Role } from '../types.ts';
 
 interface InventoryProps {
@@ -25,12 +25,25 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
     category: 'General'
   });
 
+  // Financial Calculations for the Header
+  const stats = useMemo(() => {
+    if (!inventory) return { totalCost: 0, totalValue: 0, potentialProfit: 0 };
+    return inventory.reduce((acc, item) => {
+      const cost = (item.costPrice || 0) * (item.stock || 0);
+      const value = (item.sellingPrice || 0) * (item.stock || 0);
+      return {
+        totalCost: acc.totalCost + cost,
+        totalValue: acc.totalValue + value,
+        potentialProfit: acc.potentialProfit + (value - cost)
+      };
+    }, { totalCost: 0, totalValue: 0, potentialProfit: 0 });
+  }, [inventory]);
+
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
     
     try {
-      // With '++id' in db.ts, we don't need to provide an ID manually
       await db.inventory.add({
         ...formData,
         dateAdded: new Date().toISOString()
@@ -75,7 +88,7 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
   ) || [];
 
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="p-4 space-y-6 pb-24">
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-black text-gray-800 tracking-tight">Inventory</h1>
@@ -94,6 +107,37 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
           </div>
         )}
       </header>
+
+      {/* Admin Financial Dashboard */}
+      {isAdmin && (
+        <section className="bg-white border border-gray-100 rounded-[32px] p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <BarChart3 size={16} className="text-emerald-500" />
+            <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Warehouse Valuation</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Total Stock Cost</p>
+              <p className="text-lg font-black text-gray-800 leading-none">{formatNaira(stats.totalCost)}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Potential Profit</p>
+              <p className="text-lg font-black text-emerald-600 leading-none">{formatNaira(stats.potentialProfit)}</p>
+            </div>
+          </div>
+          <div className="pt-4 border-t border-gray-50">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Estimated Revenue</p>
+                <p className="text-xl font-black text-gray-900">{formatNaira(stats.totalValue)}</p>
+              </div>
+              <div className="bg-emerald-50 p-2.5 rounded-2xl text-emerald-600">
+                <TrendingUp size={20} />
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="relative">
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
