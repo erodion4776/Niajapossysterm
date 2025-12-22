@@ -1,9 +1,9 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, clearAllData } from '../db.ts';
+import { db } from '../db.ts';
 import { backupToWhatsApp, generateShopKey } from '../utils/whatsapp.ts';
-import { CloudUpload, User as UserIcon, Info, Store, MapPin, Smartphone, Plus, Trash2, FileJson, CheckCircle, Share2 } from 'lucide-react';
+import { CloudUpload, User as UserIcon, Info, Store, MapPin, Smartphone, Plus, Trash2, FileJson, CheckCircle, Share2, AlertCircle } from 'lucide-react';
 import { Role } from '../types.ts';
 
 interface SettingsProps {
@@ -57,16 +57,48 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
     reader.onload = async (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        if (confirm('Importing this file will overwrite existing data. Proceed?')) {
+        
+        const confirmMsg = json.users 
+          ? 'Importing this file will OVERWRITE current Users and Staff. Continue?' 
+          : 'Importing this file will merge inventory and sales data. Current staff will remain active. Continue?';
+
+        if (confirm(confirmMsg)) {
           setIsImporting(true);
-          await clearAllData();
+          
           await db.transaction('rw', [db.inventory, db.users, db.sales, db.expenses, db.stockLogs], async () => {
-            if (json.inventory) await db.inventory.bulkAdd(json.inventory);
-            if (json.users) await db.users.bulkAdd(json.users);
-            if (json.sales) await db.sales.bulkAdd(json.sales);
-            if (json.expenses) await db.expenses.bulkAdd(json.expenses);
+            // Restore Inventory
+            if (json.inventory || json.products) {
+              const data = json.inventory || json.products;
+              await db.inventory.clear();
+              await db.inventory.bulkPut(data);
+            }
+            
+            // Restore Sales
+            if (json.sales) {
+              await db.sales.clear();
+              await db.sales.bulkPut(json.sales);
+            }
+            
+            // Restore Expenses
+            if (json.expenses) {
+              await db.expenses.clear();
+              await db.expenses.bulkPut(json.expenses);
+            }
+            
+            // Optional: Restore Users (Only if explicitly in the backup)
+            if (json.users) {
+              await db.users.clear();
+              await db.users.bulkPut(json.users);
+            }
+
+            // Optional: Restore Settings
+            if (json.settings) {
+              if (json.settings.shopName) localStorage.setItem('shop_name', json.settings.shopName);
+              if (json.settings.shopInfo) localStorage.setItem('shop_info', json.settings.shopInfo);
+            }
           });
-          alert('Import Successful!');
+
+          alert('Data Sync Complete! Refreshing...');
           window.location.reload();
         }
       } catch (err) {
@@ -121,30 +153,34 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
         </section>
       )}
 
-      {/* Import Section */}
+      {/* Import Section - Redesigned for safety */}
       {isAdmin && (
-        <section className="bg-emerald-600 p-6 rounded-[32px] shadow-xl text-white space-y-4">
+        <section className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
           <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-xl">
+            <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600">
               <FileJson size={24} />
             </div>
             <div>
-              <h2 className="text-lg font-black leading-none">Import Master Data</h2>
-              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">Restore Backup</p>
+              <h2 className="text-lg font-black leading-none text-gray-800">Restore/Merge Data</h2>
+              <p className="text-emerald-600 text-[10px] font-bold uppercase tracking-wider mt-1">From Master Backup</p>
             </div>
           </div>
-          <p className="text-xs font-medium opacity-80 leading-relaxed">
-            Upload your master backup file to sync all stock and business records.
+          <p className="text-xs font-medium text-gray-500 leading-relaxed">
+            Upload your backup JSON file to sync inventory and sales. This will update stock levels and sales history.
           </p>
           <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleFileImport} />
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
-            className="w-full bg-white text-emerald-900 font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
+            className="w-full bg-gray-900 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
           >
-            {isImporting ? 'Processing...' : 'Select JSON File'}
+            {isImporting ? 'Processing Data...' : 'Select Backup File'}
             {!isImporting && <CheckCircle size={16} />}
           </button>
+          <div className="flex items-start gap-2 bg-amber-50 p-3 rounded-xl border border-amber-100">
+            <AlertCircle className="text-amber-500 flex-shrink-0" size={14} />
+            <p className="text-[9px] text-amber-800 font-bold uppercase leading-normal">Note: If the backup contains user accounts, it may change your login PINs.</p>
+          </div>
         </section>
       )}
 
