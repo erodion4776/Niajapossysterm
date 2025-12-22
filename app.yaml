@@ -1,0 +1,15 @@
+
+runtime: nodejs18
+
+handlers:
+  # Route static files (assets, manifest, sw)
+  - url: /(.*\.(json|js|css|png|jpg|svg|tsx|ts))$
+    static_files: \1
+    upload: (.*\.(json|js|css|png|jpg|svg|tsx|ts))$
+
+  # Catch-all: Route all other requests to index.html for SPA routing
+  - url: /.*
+    static_files: index.html
+    upload: index.html
+
+secure: always
