@@ -35,7 +35,6 @@ export interface Sale {
   timestamp: number;
   staff_id: string;
   staff_name: string;
-  paymentMethod?: 'cash' | 'pos' | 'transfer';
 }
 
 export interface Expense {
@@ -69,7 +68,6 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-// Bumped to version 5 and added '++' for auto-incrementing IDs
 dexieDb.version(5).stores({
   inventory: '++id, name, sellingPrice, stock, category',
   sales: '++id, timestamp, total, staff_id, staff_name',

@@ -76,7 +76,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
           <input 
             type="text" 
             placeholder="Search ID or Item Name..."
-            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 font-medium shadow-sm"
+            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 font-medium shadow-sm transition-all"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -91,7 +91,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             onClick={() => setSelectedSale(sale)}
             className="w-full bg-white p-4 rounded-[28px] border border-gray-50 text-left flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all"
           >
-            <div className="p-3 rounded-2xl bg-gray-50 text-emerald-600">
+            <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-600">
               <Receipt size={24}/>
             </div>
             <div className="flex-1">
@@ -118,7 +118,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-gray-300">
               <FileText size={32} />
             </div>
-            <p className="text-gray-400 font-black uppercase text-xs tracking-widest">No matching sales</p>
+            <p className="text-gray-400 font-black uppercase text-xs tracking-widest">No transactions found</p>
           </div>
         )}
       </div>
@@ -161,34 +161,24 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
                 </div>
               </div>
 
-              {/* Admin Actions */}
-              {isAdmin && (
-                <div className="space-y-3">
-                  <div className="flex gap-3 pt-2">
-                    <button 
-                      onClick={() => shareReceiptToWhatsApp(selectedSale)}
-                      className="flex-1 bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-xs uppercase tracking-widest shadow-lg shadow-emerald-50"
-                    >
-                      <Smartphone size={16} /> Share
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteSale(selectedSale)}
-                      className="flex-1 bg-red-50 text-red-500 font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
-                    >
-                      <Trash2 size={16} /> Delete
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {!isAdmin && (
+              {/* Action Buttons */}
+              <div className="space-y-3">
                 <button 
                   onClick={() => shareReceiptToWhatsApp(selectedSale)}
-                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-3 text-xs uppercase tracking-widest"
+                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-lg shadow-emerald-50 text-xs uppercase tracking-widest"
                 >
                   <Smartphone size={18} /> Share Receipt
                 </button>
-              )}
+                
+                {isAdmin && (
+                  <button 
+                    onClick={() => handleDeleteSale(selectedSale)}
+                    className="w-full bg-red-50 text-red-500 font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-xs uppercase tracking-widest border border-red-100"
+                  >
+                    <Trash2 size={16} /> Delete Transaction
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
