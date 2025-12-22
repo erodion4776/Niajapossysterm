@@ -1,11 +1,10 @@
-
 /**
  * Security Utility for NaijaShop POS
- * Handles device fingerprinting and offline activation verification.
+ * Handles device fingerprinting, licensing, and offline activation.
  */
 
-// Use the requested salt from environment or a secure fallback
-const APP_SALT = (import.meta as any).env?.VITE_APP_SALT || "NaijaPOS_Ultra_Secret_2025_v1";
+// This pulls the secret from your Netlify Environment Variables
+const APP_SALT = import.meta.env.VITE_APP_SALT || "NaijaPOS_Ultra_Secret_2025_v1";
 
 /**
  * Generates a SHA-256 hash of a string.
@@ -18,50 +17,69 @@ async function hashString(message: string): Promise<string> {
 }
 
 /**
- * Generates a unique 8-character ID for this device.
- * Format: NG-XX-XXX (e.g., NG-88-XYZ)
+ * Generates a unique 8-character ID for this specific phone/device.
+ * Format: NG-XXXX-XXXX
  */
 export async function generateRequestCode(): Promise<string> {
   let uuid = localStorage.getItem('device_fingerprint');
+  
   if (!uuid) {
     uuid = crypto.randomUUID();
     localStorage.setItem('device_fingerprint', uuid);
   }
 
-  // Combine factors to ensure uniqueness per device/browser fingerprint
+  // Create a fingerprint based on the device and the UUID
   const fingerprintSource = `${navigator.userAgent}-${window.screen.width}x${window.screen.height}-${uuid}`;
   const hash = await hashString(fingerprintSource);
   
-  // Format as NG-XX-XXX
-  const part1 = hash.substring(0, 2).toUpperCase();
-  const part2 = hash.substring(2, 5).toUpperCase();
+  // Format as NG-XXXX-XXXX
+  const part1 = hash.substring(0, 4).toUpperCase();
+  const part2 = hash.substring(4, 8).toUpperCase();
+  
   return `NG-${part1}-${part2}`;
 }
 
 /**
- * Alias for getRequestCode to match component usage
+ * Verifies if the entered key matches the Request Code + Secret Salt.
  */
-export const getRequestCode = generateRequestCode;
+async function verifyActivationKey(requestCode: string, enteredKey: string): Promise<boolean> {
+  if (!enteredKey || enteredKey.length < 8) return false;
 
-/**
- * Offline verification logic (unlockApp).
- * Hashes Request Code + Secret Salt and checks if it matches the enteredKey.
- */
-export async function verifyActivationKey(requestCode: string, enteredKey: string): Promise<boolean> {
-  if (!enteredKey || enteredKey.length < 10) return false;
-  
-  const combo = requestCode.trim() + APP_SALT;
+  // This must match the logic in your keygen.html exactly
+  const combo = requestCode.trim().toUpperCase() + APP_SALT;
   const secretHash = await hashString(combo);
   
-  // The activation key must match the first 10 characters of the secret hash
+  // We compare the first 10 characters of the hash
   const validKey = secretHash.substring(0, 10).toUpperCase();
+  
   return enteredKey.trim().toUpperCase() === validKey;
 }
 
 /**
- * Main unlock function as requested
+ * The main function called by the LockScreen to unlock the app.
  */
 export const unlockApp = async (enteredKey: string): Promise<boolean> => {
   const code = await generateRequestCode();
-  return verifyActivationKey(code, enteredKey);
+  const isValid = await verifyActivationKey(code, enteredKey);
+  
+  if (isValid) {
+    localStorage.setItem('is_activated', 'true');
+    // Also save to IndexedDB if your db.ts logic supports it
+    return true;
+  }
+  
+  return false;
+};
+
+/**
+ * Domain Protection: Prevents the app from running on unauthorized websites.
+ */
+export const isDomainAuthorized = (): boolean => {
+  const authorizedDomain = "naijashop-pos.netlify.app"; // Update this to your real Netlify URL
+  const currentDomain = window.location.hostname;
+  
+  // Allow localhost for testing, but block other domains
+  if (currentDomain === "localhost" || currentDomain === "127.0.0.1") return true;
+  
+  return currentDomain === authorizedDomain;
 };
