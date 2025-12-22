@@ -91,85 +91,111 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-[150] bg-emerald-950 flex flex-col items-center p-8 text-white overflow-y-auto">
-      <div className="mt-12 text-center mb-12">
-        <h1 className="text-4xl font-black tracking-tighter mb-2">NaijaShop</h1>
-        <p className="text-emerald-400 font-bold uppercase text-[10px] tracking-[0.2em]">Inventory & POS Manager</p>
+    <div className="fixed inset-0 z-[150] bg-emerald-950 flex flex-col items-center text-white overflow-y-auto">
+      {/* Hero Header with Branding Image */}
+      <div className="w-full relative h-[320px] flex-shrink-0 flex items-center justify-center overflow-hidden">
+        <img 
+          src="https://i.ibb.co/CK8Xt78C/IMG-20251222-212138.png" 
+          alt="NaijaShop Branding" 
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 opacity-80"
+        />
+        {/* Multilayered Gradient Overlay for "Green Vibe" and Readability */}
+        <div className="absolute inset-0 bg-gradient-to-t from-emerald-950 via-emerald-950/60 to-emerald-900/20"></div>
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-emerald-950/90"></div>
+        
+        <div className="relative z-10 text-center px-8 mt-16 animate-in fade-in zoom-in duration-700">
+          <h1 className="text-5xl font-black tracking-tighter mb-2 drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]">NaijaShop</h1>
+          <div className="bg-emerald-500/20 backdrop-blur-md px-4 py-1 rounded-full border border-emerald-400/30 inline-block shadow-lg">
+            <p className="text-emerald-400 font-black uppercase text-[10px] tracking-[0.3em]">Inventory & POS Manager</p>
+          </div>
+        </div>
       </div>
 
-      {!selectedUser ? (
-        <div className="w-full space-y-6">
-          <p className="text-center text-emerald-100/50 text-xs font-bold uppercase tracking-widest">Select Your Name</p>
-          <div className="grid grid-cols-1 gap-3">
-            {users?.map(user => (
-              <button 
-                key={user.id}
-                onClick={() => setSelectedUser(user)}
-                className="bg-emerald-900/40 border border-emerald-800/50 p-5 rounded-3xl flex items-center justify-between group active:bg-emerald-800 transition-all"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-emerald-500/20 p-3 rounded-2xl text-emerald-400">
-                    <UserIcon size={24} />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-black text-lg">{user.name}</p>
-                    <p className="text-[10px] font-bold text-emerald-500 uppercase">{user.role}</p>
-                  </div>
-                </div>
-                <ArrowRight className="text-emerald-700 group-hover:text-emerald-400 transition-colors" />
-              </button>
-            ))}
-          </div>
-
-          <div className="pt-8 border-t border-emerald-900 flex flex-col gap-4">
-            <button 
-              onClick={() => setShowImport(true)}
-              className="w-full bg-emerald-800/40 border border-emerald-700/50 text-emerald-200 font-bold py-5 rounded-3xl flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg"
-            >
-              <Key size={14} /> I am a Staff (Import Setup Key)
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="w-full max-w-xs animate-slide-up">
-          <button onClick={() => setSelectedUser(null)} className="text-emerald-500 text-xs font-bold uppercase mb-8 flex items-center gap-2">
-            <X size={14} /> Back to Users
-          </button>
-          
-          <div className="text-center mb-10">
-            <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
-              <Lock size={32} />
+      <div className="w-full max-w-sm px-8 pb-16 flex flex-col items-center flex-1">
+        {!selectedUser ? (
+          <div className="w-full space-y-8 animate-in slide-in-from-bottom duration-500">
+            <div className="text-center">
+              <p className="text-emerald-100/40 text-[10px] font-black uppercase tracking-[0.2em]">Secure Access Required</p>
+              <h2 className="text-lg font-bold mt-1 text-emerald-100/80">Identify yourself</h2>
             </div>
-            <h2 className="text-xl font-black">Welcome, {selectedUser.name}</h2>
-            <p className="text-emerald-500/60 text-xs mt-1">Enter your 4-digit PIN</p>
-          </div>
+            
+            <div className="grid grid-cols-1 gap-4">
+              {users?.map(user => (
+                <button 
+                  key={user.id}
+                  onClick={() => setSelectedUser(user)}
+                  className="bg-emerald-900/40 backdrop-blur-sm border border-emerald-800/50 p-6 rounded-[32px] flex items-center justify-between group active:scale-[0.97] active:bg-emerald-800 transition-all shadow-xl"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="bg-emerald-500/20 p-3 rounded-2xl text-emerald-400 border border-emerald-400/20 shadow-inner">
+                      <UserIcon size={24} />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-black text-xl leading-none">{user.name}</p>
+                      <p className="text-[10px] font-bold text-emerald-500 uppercase mt-1.5 tracking-widest">{user.role}</p>
+                    </div>
+                  </div>
+                  <div className="bg-emerald-800/50 p-2 rounded-full text-emerald-600 group-hover:text-emerald-400 group-hover:bg-emerald-700 transition-all">
+                    <ArrowRight size={20} />
+                  </div>
+                </button>
+              ))}
+            </div>
 
-          <div className="space-y-6">
-            <input 
-              type="password" 
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="••••"
-              className="w-full bg-emerald-900/50 border border-emerald-800 rounded-2xl py-6 text-center text-4xl tracking-[1em] font-black focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all placeholder:text-emerald-900/50"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              onKeyUp={(e) => e.key === 'Enter' && handleLogin()}
-              autoFocus
-            />
-            {error && <p className="text-red-400 text-center font-bold text-sm animate-bounce">{error}</p>}
+            <div className="pt-8 border-t border-emerald-900/50">
+              <button 
+                onClick={() => setShowImport(true)}
+                className="w-full bg-emerald-950/50 border border-emerald-800/40 text-emerald-400 font-black py-5 rounded-[28px] flex items-center justify-center gap-3 active:scale-95 transition-all text-xs uppercase tracking-widest"
+              >
+                <Key size={14} className="opacity-60" /> New Staff Setup
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="w-full space-y-8 animate-in slide-in-from-bottom duration-500">
             <button 
-              onClick={handleLogin}
-              className="w-full bg-emerald-500 text-emerald-950 font-black py-5 rounded-2xl shadow-xl shadow-emerald-900/40 active:scale-95 transition-all"
+              onClick={() => setSelectedUser(null)} 
+              className="bg-emerald-900/40 hover:bg-emerald-800/60 p-3 rounded-2xl text-emerald-500 text-[10px] font-black uppercase flex items-center gap-2 transition-all"
             >
-              Unlock App
+              <X size={14} /> Change User
             </button>
-          </div>
-        </div>
-      )}
+            
+            <div className="text-center">
+              <div className="w-24 h-24 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl relative">
+                <Lock size={40} className="relative z-10" />
+                <div className="absolute inset-0 bg-emerald-500/5 animate-pulse rounded-[32px]"></div>
+              </div>
+              <h2 className="text-2xl font-black tracking-tight leading-none">Welcome, {selectedUser.name}</h2>
+              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.2em] mt-3">Enter Secret 4-Digit PIN</p>
+            </div>
 
-      <div className="mt-auto pt-8 flex items-center gap-2 text-emerald-900 font-bold text-[10px] uppercase tracking-tighter opacity-40">
-        <ShieldCheck size={12} />
-        <span>Military-grade local data encryption</span>
+            <div className="space-y-6">
+              <input 
+                type="password" 
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="••••"
+                className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[32px] py-8 text-center text-5xl tracking-[0.8em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all placeholder:text-emerald-900/20 shadow-inner"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                onKeyUp={(e) => e.key === 'Enter' && handleLogin()}
+                autoFocus
+              />
+              {error && <p className="text-red-400 text-center font-black text-xs uppercase tracking-widest animate-bounce">{error}</p>}
+              <button 
+                onClick={handleLogin}
+                className="w-full bg-emerald-500 text-emerald-950 font-black py-6 rounded-[32px] shadow-[0_20px_40px_-10px_rgba(16,185,129,0.3)] active:scale-95 transition-all uppercase tracking-[0.2em] text-sm"
+              >
+                Unlock POS
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-auto pt-12 flex items-center gap-3 text-emerald-900 font-black text-[9px] uppercase tracking-[0.2em] opacity-30">
+          <ShieldCheck size={14} />
+          <span>Secured by NaijaShop Encryption</span>
+        </div>
       </div>
     </div>
   );
