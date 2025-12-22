@@ -36,11 +36,13 @@ export const POS: React.FC<POSProps> = ({ role }) => {
     });
   };
 
-  const removeFromCart = (id: number) => {
+  // Fix: Changed id type from number to string | number to match SaleItem definition
+  const removeFromCart = (id: string | number) => {
     setCart(prev => prev.filter(i => i.id !== id));
   };
 
-  const updateQuantity = (id: number, delta: number) => {
+  // Fix: Changed id type from number to string | number to match SaleItem definition
+  const updateQuantity = (id: string | number, delta: number) => {
     setCart(prev => prev.map(i => {
       if (i.id === id) {
         const newQty = Math.max(1, i.quantity + delta);

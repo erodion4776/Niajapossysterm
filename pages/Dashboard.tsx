@@ -3,7 +3,10 @@ import React from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
-import { ShoppingCart, Package, AlertTriangle, TrendingUp, DollarSign, ReceiptText, Wallet } from 'lucide-react';
+import { 
+  ShoppingCart, Package, AlertTriangle, TrendingUp, DollarSign, 
+  Wallet, BarChart3, History, Calendar, ArrowUpRight 
+} from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
 interface DashboardProps {
@@ -13,6 +16,8 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
   const isAdmin = role === 'Admin';
+  
+  // Queries
   const lowStockItems = useLiveQuery(() => db.inventory.where('stock').below(5).toArray());
   
   const todayStart = new Date();
@@ -20,55 +25,131 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  const salesToday = useLiveQuery(() => db.sales.where('timestamp').between(todayStart.getTime(), todayEnd.getTime()).toArray());
-  const expensesToday = useLiveQuery(() => db.expenses.toArray()); // Simplified for all expenses, or filter by date
+  const salesToday = useLiveQuery(() => 
+    db.sales.where('timestamp').between(todayStart.getTime(), todayEnd.getTime()).reverse().toArray()
+  );
 
-  const totalSales = salesToday?.reduce((sum, sale) => sum + sale.total, 0) || 0;
-  const totalCostOfSales = salesToday?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
+  const last7DaysSales = useLiveQuery(async () => {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    return await db.sales.where('timestamp').aboveOrEqual(sevenDaysAgo.getTime()).toArray();
+  });
+
+  const expensesToday = useLiveQuery(() => db.expenses.toArray());
+
+  // Financial Calculations
+  const totalSalesToday = salesToday?.reduce((sum, sale) => sum + sale.total, 0) || 0;
+  const totalCostToday = salesToday?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
   
-  // Filtering expenses for today specifically if they have ISO strings or timestamps
   const actualExpensesToday = expensesToday?.filter(e => {
     const d = new Date(e.date).getTime();
     return d >= todayStart.getTime() && d <= todayEnd.getTime();
   }).reduce((sum, e) => sum + e.amount, 0) || 0;
 
-  const grossProfit = totalSales - totalCostOfSales;
-  const netProfit = grossProfit - actualExpensesToday;
+  const grossProfitToday = totalSalesToday - totalCostToday;
+  const netProfitToday = grossProfitToday - actualExpensesToday;
+
+  // Chart Data Processing
+  const chartData = React.useMemo(() => {
+    if (!last7DaysSales) return [];
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const label = d.toLocaleDateString('en-NG', { weekday: 'short' });
+      const dayS = new Date(d).setHours(0, 0, 0, 0);
+      const dayE = new Date(d).setHours(23, 59, 59, 999);
+      
+      const daySales = last7DaysSales.filter(s => s.timestamp >= dayS && s.timestamp <= dayE);
+      const revenue = daySales.reduce((sum, s) => sum + s.total, 0);
+      const profit = revenue - daySales.reduce((sum, s) => sum + (s.totalCost || 0), 0);
+      days.push({ label, revenue, profit });
+    }
+    return days;
+  }, [last7DaysSales]);
+
+  const maxChartVal = Math.max(...chartData.map(d => d.revenue), 1000);
 
   return (
-    <div className="p-4 space-y-6 pb-24">
+    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Overview</h1>
-          <p className="text-gray-400 text-xs font-bold uppercase tracking-tight">Financial Summary</p>
+          <h1 className="text-2xl font-black text-gray-800 tracking-tight">Business Hub</h1>
+          <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Real-time Performance</p>
         </div>
-        <div className="bg-emerald-100 p-2.5 rounded-2xl">
-          <TrendingUp className="text-emerald-600" size={24} />
+        <div className="bg-emerald-100 p-2.5 rounded-2xl text-emerald-600">
+          <TrendingUp size={24} />
         </div>
       </header>
 
+      {/* 1. Main Performance Chart (Admin only for full view) */}
+      <section className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-3">
+            <div className="bg-emerald-50 p-2 rounded-xl text-emerald-600">
+              <BarChart3 size={20} />
+            </div>
+            <div>
+              <h2 className="text-sm font-black text-gray-800 uppercase tracking-tight">Weekly Trend</h2>
+              <p className="text-[9px] text-gray-400 font-bold uppercase">Revenue vs Profit</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-100"></span>
+              <span className="text-[7px] font-black text-gray-400 uppercase">Sales</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span className="text-[7px] font-black text-gray-400 uppercase">Profit</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="h-32 flex items-end justify-between gap-2 px-1">
+          {chartData.map((day, idx) => (
+            <div key={idx} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
+              <div className="w-full flex justify-center items-end h-full relative">
+                <div 
+                  className="w-full bg-emerald-50 rounded-t-lg transition-all duration-500 group-hover:bg-emerald-100" 
+                  style={{ height: `${(day.revenue / maxChartVal) * 100}%` }}
+                >
+                  <div 
+                    className="w-full bg-emerald-500 rounded-t-lg absolute bottom-0 transition-all duration-700" 
+                    style={{ height: day.revenue > 0 ? `${(day.profit / day.revenue) * 100}%` : '0%' }}
+                  ></div>
+                </div>
+              </div>
+              <span className="text-[8px] font-black text-gray-400 uppercase">{day.label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 2. Key Metrics Grid */}
       <div className="grid grid-cols-1 gap-4">
-        <div className="bg-emerald-600 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
+        <div className="bg-emerald-600 text-white p-6 rounded-[32px] shadow-xl relative overflow-hidden">
           <div className="relative z-10">
-            <p className="text-emerald-100 text-xs font-bold uppercase tracking-wider">Revenue Today</p>
-            <h2 className="text-4xl font-black mt-1">{formatNaira(totalSales)}</h2>
+            <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-widest">Revenue Today</p>
+            <h2 className="text-4xl font-black mt-1 tracking-tighter">{formatNaira(totalSalesToday)}</h2>
           </div>
           <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={140} />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-           <div className="bg-white border-2 border-amber-50 p-5 rounded-3xl shadow-sm relative overflow-hidden">
+          <div className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm relative overflow-hidden">
             <div className="relative z-10">
-              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Expenses</p>
-              <h2 className="text-xl font-black mt-1 text-amber-600">{formatNaira(actualExpensesToday)}</h2>
+              <p className="text-gray-400 text-[9px] font-bold uppercase tracking-wider">Today's Expenses</p>
+              <h2 className="text-lg font-black mt-1 text-amber-600">{formatNaira(actualExpensesToday)}</h2>
             </div>
             <Wallet className="absolute -right-2 -bottom-2 text-amber-50 opacity-50" size={60} />
           </div>
 
-          <div className="bg-white border-2 border-emerald-50 p-5 rounded-3xl shadow-sm relative overflow-hidden">
+          <div className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm relative overflow-hidden">
             <div className="relative z-10">
-              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Net Profit</p>
-              <h2 className="text-xl font-black mt-1 text-emerald-600">{formatNaira(netProfit)}</h2>
+              <p className="text-gray-400 text-[9px] font-bold uppercase tracking-wider">Net Profit</p>
+              <h2 className="text-lg font-black mt-1 text-emerald-600">{formatNaira(netProfitToday)}</h2>
             </div>
             <DollarSign className="absolute -right-2 -bottom-2 text-emerald-50 opacity-50" size={60} />
           </div>
@@ -76,31 +157,82 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
 
         <button 
           onClick={() => setPage(Page.POS)}
-          className="w-full bg-white border-2 border-gray-100 text-gray-800 font-bold py-5 rounded-3xl shadow-sm flex items-center justify-center gap-3 active:scale-[0.98] transition-all hover:border-emerald-200"
+          className="w-full bg-emerald-50 border border-emerald-100 text-emerald-700 font-black py-5 rounded-[28px] shadow-sm flex items-center justify-center gap-3 active:scale-[0.98] transition-all uppercase tracking-widest text-xs"
         >
-          <div className="bg-emerald-500 text-white p-2 rounded-xl">
-            <ShoppingCart size={20} />
+          <div className="bg-emerald-600 text-white p-2 rounded-xl">
+            <ShoppingCart size={18} />
           </div>
-          New Sale
+          Start New Sale
         </button>
       </div>
 
+      {/* 3. Transaction Log */}
+      <section className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-50 p-2 rounded-xl text-blue-600">
+              <History size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Today's Sales</h3>
+              <p className="text-[9px] text-gray-400 font-bold uppercase">Recent Activity</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-[9px] font-black text-gray-400 uppercase">Count</span>
+            <p className="text-sm font-black text-gray-800">{salesToday?.length || 0}</p>
+          </div>
+        </div>
+
+        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+          {salesToday && salesToday.length > 0 ? (
+            salesToday.map(sale => (
+              <div key={sale.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white p-2 rounded-lg text-gray-300">
+                    <Calendar size={12} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-gray-800">Sale #{String(sale.id).slice(-4)}</p>
+                    <p className="text-[8px] font-bold text-gray-400 uppercase">
+                      {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {sale.items.length} items
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-black text-gray-800">{formatNaira(sale.total)}</p>
+                  <p className="text-[8px] font-bold text-emerald-600 uppercase flex items-center justify-end gap-1">
+                    +{formatNaira(sale.total - (sale.totalCost || 0))} <ArrowUpRight size={8}/>
+                  </p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="py-10 text-center space-y-2 opacity-30">
+              <History size={32} className="mx-auto" />
+              <p className="text-[9px] font-bold uppercase tracking-widest">No transactions yet</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 4. Stock Alerts */}
       <section>
-        <div className="flex items-center gap-2 mb-4">
-          <AlertTriangle className="text-amber-500" size={20} />
-          <h3 className="text-lg font-bold text-gray-800 uppercase tracking-tight">Stock Alerts</h3>
+        <div className="flex items-center gap-2 mb-4 px-2">
+          <AlertTriangle className="text-amber-500" size={18} />
+          <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Stock Alerts</h3>
         </div>
         {lowStockItems && lowStockItems.length > 0 ? (
           <div className="space-y-3">
             {lowStockItems.map(item => (
-              <div key={item.id} className="bg-white border border-gray-100 p-4 rounded-2xl flex justify-between items-center shadow-sm">
+              <div key={item.id} className="bg-white border border-gray-100 p-5 rounded-[28px] flex justify-between items-center shadow-sm">
                 <div>
-                  <h4 className="font-bold text-gray-800">{item.name}</h4>
-                  <p className="text-sm font-semibold text-red-500 mt-0.5">CRITICAL: {item.stock} LEFT</p>
+                  <h4 className="font-black text-gray-800 text-sm">{item.name}</h4>
+                  <p className="text-[10px] font-bold text-red-500 uppercase mt-0.5 tracking-wider">Only {item.stock} left in store</p>
                 </div>
                 <button 
                   onClick={() => setPage(Page.INVENTORY)}
-                  className="bg-gray-50 text-gray-400 p-3 rounded-xl hover:text-emerald-600 transition-colors"
+                  className="bg-gray-50 text-gray-400 p-3 rounded-2xl hover:text-emerald-600 transition-colors"
                 >
                   <Package size={20} />
                 </button>
@@ -108,8 +240,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
             ))}
           </div>
         ) : (
-          <div className="bg-gray-100 p-10 rounded-3xl text-center">
-            <p className="text-gray-400 font-bold uppercase text-xs">All stock is secured</p>
+          <div className="bg-emerald-50/30 p-8 rounded-[32px] text-center border border-emerald-50 border-dashed">
+            <p className="text-emerald-800/40 font-black uppercase text-[9px] tracking-[0.2em]">Warehouse levels are healthy</p>
           </div>
         )}
       </section>
