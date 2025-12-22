@@ -44,14 +44,6 @@ export interface Expense {
   date: string | number;
 }
 
-export interface StockLog {
-  id?: string | number;
-  productId: string | number;
-  productName: string;
-  quantity: number;
-  date: string | number;
-}
-
 export interface Setting {
   key: string;
   value: any;
@@ -63,32 +55,35 @@ export type NaijaShopDatabase = Dexie & {
   settings: Table<Setting>;
   users: Table<User>;
   expenses: Table<Expense>;
-  stockLogs: Table<StockLog>;
 };
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(5).stores({
+dexieDb.version(7).stores({
   inventory: '++id, name, sellingPrice, stock, category',
   sales: '++id, timestamp, total, staff_id, staff_name',
   settings: 'key',
   users: '++id, name, pin, role',
-  expenses: '++id, date, amount',
-  stockLogs: '++id, productId, date'
+  expenses: '++id, date, amount'
 });
 
 export const db = dexieDb;
 
+/**
+ * Initializes basic shop data and trial tracking.
+ */
 export async function initTrialDate() {
   const trialStart = localStorage.getItem('install_date');
   if (!trialStart) {
     localStorage.setItem('install_date', Date.now().toString());
   }
   
+  // Request persistent storage from the browser
   if (navigator.storage && navigator.storage.persist) {
     await navigator.storage.persist();
   }
 
+  // Create default Admin if none exists
   const adminCount = await db.users.where('role').equals('Admin').count();
   if (adminCount === 0) {
     await db.users.add({
@@ -100,12 +95,11 @@ export async function initTrialDate() {
 }
 
 export async function clearAllData() {
-  await db.transaction('rw', [db.inventory, db.sales, db.settings, db.users, db.expenses, db.stockLogs], async () => {
+  await db.transaction('rw', [db.inventory, db.sales, db.settings, db.users, db.expenses], async () => {
     await db.inventory.clear();
     await db.sales.clear();
     await db.settings.clear();
     await db.users.clear();
     await db.expenses.clear();
-    await db.stockLogs.clear();
   });
 }

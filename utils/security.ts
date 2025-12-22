@@ -1,11 +1,16 @@
 
-const SECRET_SALT = "NaijaPOS_2025_Secret_v1";
+/**
+ * Security Utility for NaijaShop POS
+ * Handles device fingerprinting and offline activation verification.
+ */
+
+// Use the requested salt from environment or a secure fallback
+const APP_SALT = (import.meta as any).env?.VITE_APP_SALT || "NaijaPOS_Ultra_Secret_2025_v1";
 
 /**
- * Generates a short hash from a string using SHA-256.
- * Returns a hexadecimal representation.
+ * Generates a SHA-256 hash of a string.
  */
-async function sha256(message: string): Promise<string> {
+async function hashString(message: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(message);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -13,34 +18,50 @@ async function sha256(message: string): Promise<string> {
 }
 
 /**
- * Gets or creates a unique Device ID (Request Code).
+ * Generates a unique 8-character ID for this device.
+ * Format: NG-XX-XXX (e.g., NG-88-XYZ)
  */
-export async function getRequestCode(): Promise<string> {
-  let uuid = localStorage.getItem('device_uuid');
+export async function generateRequestCode(): Promise<string> {
+  let uuid = localStorage.getItem('device_fingerprint');
   if (!uuid) {
     uuid = crypto.randomUUID();
-    localStorage.setItem('device_uuid', uuid);
+    localStorage.setItem('device_fingerprint', uuid);
   }
 
-  const rawString = `${navigator.userAgent}-${window.screen.width}-${uuid}`;
-  const hash = await sha256(rawString);
+  // Combine factors to ensure uniqueness per device/browser fingerprint
+  const fingerprintSource = `${navigator.userAgent}-${window.screen.width}x${window.screen.height}-${uuid}`;
+  const hash = await hashString(fingerprintSource);
   
-  // Format as NY-XXXX-XXXX
-  const part1 = hash.substring(0, 4).toUpperCase();
-  const part2 = hash.substring(4, 8).toUpperCase();
-  return `NS-${part1}-${part2}`;
+  // Format as NG-XX-XXX
+  const part1 = hash.substring(0, 2).toUpperCase();
+  const part2 = hash.substring(2, 5).toUpperCase();
+  return `NG-${part1}-${part2}`;
 }
 
 /**
- * Verifies if an entered activation key is valid for a given request code.
+ * Alias for getRequestCode to match component usage
+ */
+export const getRequestCode = generateRequestCode;
+
+/**
+ * Offline verification logic (unlockApp).
+ * Hashes Request Code + Secret Salt and checks if it matches the enteredKey.
  */
 export async function verifyActivationKey(requestCode: string, enteredKey: string): Promise<boolean> {
   if (!enteredKey || enteredKey.length < 10) return false;
   
-  const target = requestCode.trim() + SECRET_SALT;
-  const hash = await sha256(target);
+  const combo = requestCode.trim() + APP_SALT;
+  const secretHash = await hashString(combo);
   
-  // Key is valid if it matches the first 10 characters of the secret hash (case insensitive)
-  const validKeyPrefix = hash.substring(0, 10).toUpperCase();
-  return enteredKey.trim().toUpperCase() === validKeyPrefix;
+  // The activation key must match the first 10 characters of the secret hash
+  const validKey = secretHash.substring(0, 10).toUpperCase();
+  return enteredKey.trim().toUpperCase() === validKey;
 }
+
+/**
+ * Main unlock function as requested
+ */
+export const unlockApp = async (enteredKey: string): Promise<boolean> => {
+  const code = await generateRequestCode();
+  return verifyActivationKey(code, enteredKey);
+};
