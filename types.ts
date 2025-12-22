@@ -4,6 +4,7 @@ export enum Page {
   DASHBOARD = 'DASHBOARD',
   POS = 'POS',
   INVENTORY = 'INVENTORY',
+  SALES = 'SALES',
   SETTINGS = 'SETTINGS'
 }
 

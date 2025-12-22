@@ -5,10 +5,11 @@ import { initTrialDate, User } from './db.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { POS } from './pages/POS.tsx';
+import { Sales } from './pages/Sales.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
-import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon } from 'lucide-react';
+import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, History } from 'lucide-react';
 
 const TRIAL_PERIOD_DAYS = 3;
 
@@ -51,6 +52,8 @@ const App: React.FC = () => {
         return <Inventory role={currentUser.role} />;
       case Page.POS:
         return <POS role={currentUser.role} />;
+      case Page.SALES:
+        return <Sales role={currentUser.role} />;
       case Page.SETTINGS:
         return <Settings role={currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} />;
       default:
@@ -75,30 +78,37 @@ const App: React.FC = () => {
           onClick={() => setCurrentPage(Page.DASHBOARD)}
           className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
         >
-          <LayoutGrid size={24} />
-          <span className="text-[10px] font-bold mt-1 uppercase">Home</span>
+          <LayoutGrid size={22} />
+          <span className="text-[9px] font-bold mt-1 uppercase">Home</span>
         </button>
         <button 
           onClick={() => setCurrentPage(Page.POS)}
           className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
         >
-          <ShoppingBag size={24} />
-          <span className="text-[10px] font-bold mt-1 uppercase">POS</span>
+          <ShoppingBag size={22} />
+          <span className="text-[9px] font-bold mt-1 uppercase">POS</span>
+        </button>
+        <button 
+          onClick={() => setCurrentPage(Page.SALES)}
+          className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
+        >
+          <History size={22} />
+          <span className="text-[9px] font-bold mt-1 uppercase">Sales</span>
         </button>
         <button 
           onClick={() => setCurrentPage(Page.INVENTORY)}
           className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
         >
-          <Package size={24} />
-          <span className="text-[10px] font-bold mt-1 uppercase">Stock</span>
+          <Package size={22} />
+          <span className="text-[9px] font-bold mt-1 uppercase">Stock</span>
         </button>
         {isAdmin && (
           <button 
             onClick={() => setCurrentPage(Page.SETTINGS)}
             className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.SETTINGS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
           >
-            <SettingsIcon size={24} />
-            <span className="text-[10px] font-bold mt-1 uppercase">Admin</span>
+            <SettingsIcon size={22} />
+            <span className="text-[9px] font-bold mt-1 uppercase">Admin</span>
           </button>
         )}
       </nav>

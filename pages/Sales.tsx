@@ -1,0 +1,248 @@
+
+import React, { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, Sale } from '../db.ts';
+import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
+import { 
+  History, Search, Filter, Calendar, Trash2, Edit3, 
+  X, CheckCircle, FileText, Smartphone, CreditCard, Banknote 
+} from 'lucide-react';
+import { Role } from '../types.ts';
+
+interface SalesProps {
+  role: Role;
+}
+
+export const Sales: React.FC<SalesProps> = ({ role }) => {
+  const isAdmin = role === 'Admin';
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'cash' | 'pos' | 'transfer'>('all');
+
+  const sales = useLiveQuery(async () => {
+    let query = db.sales.orderBy('timestamp').reverse();
+    const results = await query.toArray();
+    return results;
+  }, []);
+
+  const filteredSales = sales?.filter(sale => {
+    const matchesSearch = 
+      String(sale.id).includes(searchTerm) || 
+      sale.items.some(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesFilter = filterType === 'all' || sale.paymentMethod === filterType;
+    
+    return matchesSearch && matchesFilter;
+  }) || [];
+
+  const handleDeleteSale = async (sale: Sale) => {
+    if (!isAdmin) return;
+    if (!confirm(`⚠️ CRITICAL: Deleting this sale will ADD ${sale.items.reduce((sum, i) => sum + i.quantity, 0)} items back to your inventory stock. Proceed?`)) return;
+
+    try {
+      await db.transaction('rw', [db.inventory, db.sales], async () => {
+        // 1. Restore Stock
+        for (const item of sale.items) {
+          const invItem = await db.inventory.get(item.id);
+          if (invItem) {
+            await db.inventory.update(item.id, { 
+              stock: invItem.stock + item.quantity 
+            });
+          }
+        }
+        // 2. Delete Record
+        await db.sales.delete(sale.id!);
+      });
+      setSelectedSale(null);
+      alert('Sale deleted and stock restored successfully.');
+    } catch (err) {
+      alert('Failed to delete sale: ' + (err as Error).message);
+    }
+  };
+
+  const handleUpdatePayment = async (saleId: number | string, method: any) => {
+    if (!isAdmin) return;
+    try {
+      await db.sales.update(saleId, { paymentMethod: method });
+      if (selectedSale) setSelectedSale({...selectedSale, paymentMethod: method});
+    } catch (err) {
+      alert('Update failed');
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4 pb-24 animate-in fade-in duration-500">
+      <header className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-black text-gray-800 tracking-tight">History</h1>
+          <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Transaction Records</p>
+        </div>
+        <div className="bg-blue-50 p-3 rounded-2xl text-blue-600">
+          <History size={24} />
+        </div>
+      </header>
+
+      {/* Search & Filter */}
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input 
+            type="text" 
+            placeholder="Search ID or Item Name..."
+            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 font-medium shadow-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {['all', 'cash', 'pos', 'transfer'].map((type) => (
+            <button
+              key={type}
+              onClick={() => setFilterType(type as any)}
+              className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${
+                filterType === type 
+                ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-100' 
+                : 'bg-white border-gray-100 text-gray-400'
+              }`}
+            >
+              {type}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Sales List */}
+      <div className="space-y-3">
+        {filteredSales.map(sale => (
+          <button 
+            key={sale.id}
+            onClick={() => setSelectedSale(sale)}
+            className="w-full bg-white p-4 rounded-[28px] border border-gray-50 text-left flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all"
+          >
+            <div className={`p-3 rounded-2xl ${
+              sale.paymentMethod === 'cash' ? 'bg-amber-50 text-amber-600' :
+              sale.paymentMethod === 'pos' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+            }`}>
+              {sale.paymentMethod === 'cash' ? <Banknote size={24}/> :
+               sale.paymentMethod === 'pos' ? <CreditCard size={24}/> : <Smartphone size={24}/>}
+            </div>
+            <div className="flex-1">
+              <div className="flex justify-between items-start">
+                <h3 className="font-black text-gray-800">#{String(sale.id).slice(-4)}</h3>
+                <span className="text-emerald-600 font-black">{formatNaira(sale.total)}</span>
+              </div>
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                {new Date(sale.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+              </p>
+              <div className="flex gap-1 mt-2 flex-wrap">
+                {sale.items.map((item, idx) => (
+                  <span key={idx} className="bg-gray-50 text-gray-400 text-[8px] font-bold px-2 py-0.5 rounded-md border border-gray-100 uppercase">
+                    {item.name} x{item.quantity}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </button>
+        ))}
+
+        {filteredSales.length === 0 && (
+          <div className="py-20 text-center space-y-4">
+            <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-gray-300">
+              <FileText size={32} />
+            </div>
+            <p className="text-gray-400 font-black uppercase text-xs tracking-widest">No matching sales</p>
+          </div>
+        )}
+      </div>
+
+      {/* Sale Detail Modal */}
+      {selectedSale && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-t-[40px] sm:rounded-[40px] p-6 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black text-gray-800">Sale Details</h2>
+              <button onClick={() => setSelectedSale(null)} className="p-2 bg-gray-50 text-gray-400 rounded-full">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Receipt Visual */}
+              <div className="bg-gray-50 border border-gray-200 rounded-3xl p-5 font-mono text-xs text-gray-600 relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500 opacity-20"></div>
+                <div className="flex justify-between mb-4">
+                  <span className="font-bold">TRANS ID: #{selectedSale.id}</span>
+                  <span>{new Date(selectedSale.timestamp).toLocaleDateString()}</span>
+                </div>
+                <div className="border-t border-dashed border-gray-300 my-3"></div>
+                <div className="space-y-2">
+                  {selectedSale.items.map((item, idx) => (
+                    <div key={idx} className="flex justify-between">
+                      <span>{item.name} x{item.quantity}</span>
+                      <span>{formatNaira(item.price * item.quantity)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-dashed border-gray-300 my-3"></div>
+                <div className="flex justify-between text-lg font-black text-gray-800">
+                  <span>TOTAL</span>
+                  <span>{formatNaira(selectedSale.total)}</span>
+                </div>
+                <div className="mt-4 pt-4 border-t border-gray-200 text-center opacity-50 uppercase text-[8px] font-bold">
+                  Sold by: {selectedSale.staff_name}
+                </div>
+              </div>
+
+              {/* Admin Actions */}
+              {isAdmin && (
+                <div className="space-y-3">
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Edit Payment</p>
+                  <div className="flex gap-2">
+                    {['cash', 'pos', 'transfer'].map(m => (
+                      <button 
+                        key={m}
+                        onClick={() => handleUpdatePayment(selectedSale.id!, m as any)}
+                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all border ${
+                          selectedSale.paymentMethod === m 
+                          ? 'bg-blue-600 border-blue-600 text-white' 
+                          : 'bg-white text-gray-400 border-gray-100'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button 
+                      onClick={() => shareReceiptToWhatsApp(selectedSale)}
+                      className="flex-1 bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-xs uppercase tracking-widest shadow-lg shadow-emerald-50"
+                    >
+                      <Smartphone size={16} /> Share
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteSale(selectedSale)}
+                      className="flex-1 bg-red-50 text-red-500 font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-xs uppercase tracking-widest"
+                    >
+                      <Trash2 size={16} /> Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!isAdmin && (
+                <button 
+                  onClick={() => shareReceiptToWhatsApp(selectedSale)}
+                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-3 text-xs uppercase tracking-widest"
+                >
+                  <Smartphone size={18} /> Share Receipt
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
