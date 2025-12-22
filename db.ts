@@ -69,13 +69,14 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(4).stores({
-  inventory: 'id, name, sellingPrice, stock, category',
-  sales: 'id, timestamp, total, staff_id, staff_name',
+// Bumped to version 5 and added '++' for auto-incrementing IDs
+dexieDb.version(5).stores({
+  inventory: '++id, name, sellingPrice, stock, category',
+  sales: '++id, timestamp, total, staff_id, staff_name',
   settings: 'key',
-  users: 'id, name, pin, role',
-  expenses: 'id, date, amount',
-  stockLogs: 'id, productId, date'
+  users: '++id, name, pin, role',
+  expenses: '++id, date, amount',
+  stockLogs: '++id, productId, date'
 });
 
 export const db = dexieDb;
@@ -93,7 +94,6 @@ export async function initTrialDate() {
   const adminCount = await db.users.where('role').equals('Admin').count();
   if (adminCount === 0) {
     await db.users.add({
-      id: 'admin-default',
       name: 'Shop Owner',
       pin: '0000',
       role: 'Admin'
