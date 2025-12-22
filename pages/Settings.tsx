@@ -125,6 +125,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
               // Only import if not already existing (basic check by timestamp)
               const exists = await db.sales.where('timestamp').equals(timestamp).count();
               if (exists === 0) {
+                // Fix: Removed non-existent property 'paymentMethod' to strictly adhere to the Sale interface
                 await db.sales.add({
                   items: [{
                     id: sale.productId || `import-${Date.now()}`,
@@ -137,8 +138,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole }) => {
                   totalCost: 0,
                   timestamp,
                   staff_id: 'Imported',
-                  staff_name: 'System Import',
-                  paymentMethod: sale.paymentMethod || 'cash'
+                  staff_name: 'System Import'
                 });
                 addedSales++;
               }
