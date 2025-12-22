@@ -1,11 +1,11 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
 import { 
   ShoppingCart, Package, AlertTriangle, TrendingUp, DollarSign, 
-  Wallet, BarChart3, History, Calendar, ArrowUpRight, Star, Award
+  Wallet, BarChart3, History, Calendar as CalendarIcon, ArrowUpRight, Star, Award, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -16,20 +16,21 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
   const isAdmin = role === 'Admin';
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
-  // Queries
+  // Queries based on selectedDate
   const lowStockItems = useLiveQuery(() => db.inventory.where('stock').below(5).toArray());
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const allSales = useLiveQuery(() => db.sales.toArray());
   
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  const queryStart = new Date(selectedDate);
+  queryStart.setHours(0, 0, 0, 0);
+  const queryEnd = new Date(selectedDate);
+  queryEnd.setHours(23, 59, 59, 999);
 
-  const salesToday = useLiveQuery(() => 
-    db.sales.where('timestamp').between(todayStart.getTime(), todayEnd.getTime()).reverse().toArray()
-  );
+  const salesOnDate = useLiveQuery(() => 
+    db.sales.where('timestamp').between(queryStart.getTime(), queryEnd.getTime()).reverse().toArray()
+  , [selectedDate]);
 
   const last7DaysSales = useLiveQuery(async () => {
     const sevenDaysAgo = new Date();
@@ -40,19 +41,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
 
   const expenses = useLiveQuery(() => db.expenses.toArray());
 
-  // Financial Calculations
-  const totalSalesToday = salesToday?.reduce((sum, sale) => sum + sale.total, 0) || 0;
-  const totalCostToday = salesToday?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
+  // Financial Calculations for the selected date
+  const totalSalesOnDate = salesOnDate?.reduce((sum, sale) => sum + sale.total, 0) || 0;
+  const totalCostOnDate = salesOnDate?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
   
-  const actualExpensesToday = expenses?.filter(e => {
+  const actualExpensesOnDate = expenses?.filter(e => {
     const d = new Date(e.date).getTime();
-    return d >= todayStart.getTime() && d <= todayEnd.getTime();
+    return d >= queryStart.getTime() && d <= queryEnd.getTime();
   }).reduce((sum, e) => sum + e.amount, 0) || 0;
 
-  const grossProfitToday = totalSalesToday - totalCostToday;
-  const netProfitToday = grossProfitToday - actualExpensesToday;
+  const grossProfitOnDate = totalSalesOnDate - totalCostOnDate;
+  const netProfitOnDate = grossProfitOnDate - actualExpensesOnDate;
 
-  // Best Selling Product Logic
+  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+
+  // Best Selling Product Logic (Overall)
   const bestSeller = React.useMemo(() => {
     if (!allSales) return null;
     const itemMap: Record<string, { name: string, quantity: number }> = {};
@@ -74,7 +77,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
     return inventory.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.stock || 0)), 0);
   }, [inventory]);
 
-  // Chart Data Processing
+  // Chart Data Processing (Always stays 7 days)
   const chartData = React.useMemo(() => {
     if (!last7DaysSales) return [];
     const days = [];
@@ -102,23 +105,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
           <h1 className="text-2xl font-black text-gray-800 tracking-tight">Home</h1>
           <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Business Overview</p>
         </div>
-        <div className="bg-emerald-100 p-2.5 rounded-2xl text-emerald-600 shadow-sm border border-emerald-50">
-          <TrendingUp size={24} />
+        <div className="flex gap-2">
+          <div className="relative group">
+            <input 
+              type="date" 
+              className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+            <div className="bg-white border border-gray-100 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2">
+              <CalendarIcon size={20} />
+              {!isToday && <span className="text-[10px] font-black uppercase text-gray-400">{new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
+            </div>
+          </div>
+          <div className="bg-emerald-100 p-2.5 rounded-2xl text-emerald-600 shadow-sm border border-emerald-50">
+            <TrendingUp size={24} />
+          </div>
         </div>
       </header>
 
+      {/* Date Warning Badge */}
+      {!isToday && (
+        <div className="bg-amber-50 border border-amber-100 p-3 rounded-2xl flex items-center justify-between">
+          <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
+            <History size={14} /> Viewing History: {new Date(selectedDate).toLocaleDateString([], { dateStyle: 'long' })}
+          </p>
+          <button 
+            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            className="text-[9px] font-black text-white bg-amber-600 px-3 py-1 rounded-full uppercase"
+          >
+            Reset to Today
+          </button>
+        </div>
+      )}
+
       {/* 1. High-Impact Stats Card */}
       {isAdmin ? (
-        <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
+        <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden transition-all duration-300">
           <div className="relative z-10 flex flex-col gap-1">
-            <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Net Profit Today</p>
-            <h2 className="text-4xl font-black tracking-tighter">{formatNaira(netProfitToday)}</h2>
+            <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
+              {isToday ? 'Net Profit Today' : `Net Profit on ${new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+            </p>
+            <h2 className="text-4xl font-black tracking-tighter">{formatNaira(netProfitOnDate)}</h2>
             <div className="flex items-center gap-2 mt-4">
               <span className="bg-emerald-500/40 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
-                <ShoppingCart size={10}/> {salesToday?.length || 0} Orders
+                <ShoppingCart size={10}/> {salesOnDate?.length || 0} Orders
               </span>
               <span className="bg-white/10 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">
-                {formatNaira(totalSalesToday)} Sales
+                {formatNaira(totalSalesOnDate)} Revenue
               </span>
             </div>
           </div>
@@ -127,11 +161,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
       ) : (
         <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
           <div className="relative z-10">
-            <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-widest">Revenue Today</p>
-            <h2 className="text-4xl font-black mt-1 tracking-tighter">{formatNaira(totalSalesToday)}</h2>
+            <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-widest">
+               {isToday ? 'Revenue Today' : `Revenue for ${new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+            </p>
+            <h2 className="text-4xl font-black mt-1 tracking-tighter">{formatNaira(totalSalesOnDate)}</h2>
             <div className="flex items-center gap-2 mt-4">
               <span className="bg-emerald-500/30 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                {salesToday?.length || 0} Transactions
+                {salesOnDate?.length || 0} Transactions
               </span>
             </div>
           </div>
@@ -143,8 +179,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
       {isAdmin && (
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32">
-            <p className="text-gray-400 text-[9px] font-black uppercase tracking-widest">Expenses</p>
-            <h2 className="text-xl font-black text-amber-600">{formatNaira(actualExpensesToday)}</h2>
+            <p className="text-gray-400 text-[9px] font-black uppercase tracking-widest">Expenses ({isToday ? 'Today' : 'Date'})</p>
+            <h2 className="text-xl font-black text-amber-600">{formatNaira(actualExpensesOnDate)}</h2>
             <Wallet className="absolute -right-2 -bottom-2 text-amber-50" size={56} />
           </div>
 
@@ -212,18 +248,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
         </section>
       )}
 
-      {/* Quick Action */}
-      <button 
-        onClick={() => setPage(Page.POS)}
-        className="w-full bg-emerald-50 border border-emerald-100 text-emerald-700 font-black py-5 rounded-[28px] shadow-sm flex items-center justify-center gap-3 active:scale-[0.98] transition-all uppercase tracking-widest text-xs"
-      >
-        <div className="bg-emerald-600 text-white p-2 rounded-xl">
-          <ShoppingCart size={18} />
-        </div>
-        Start New Sale
-      </button>
-
-      {/* 5. Recent Activity Feed */}
+      {/* 5. Sales Feed for Selected Date */}
       <section className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -231,19 +256,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
               <History size={18} />
             </div>
             <div>
-              <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Today's Sales</h3>
-              <p className="text-[9px] text-gray-400 font-bold uppercase">Recent Activity</p>
+              <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">
+                {isToday ? "Today's Sales" : `Sales: ${new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+              </h3>
+              <p className="text-[9px] text-gray-400 font-bold uppercase">Transaction Feed</p>
             </div>
           </div>
         </div>
 
-        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-          {salesToday && salesToday.length > 0 ? (
-            salesToday.map(sale => (
+        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+          {salesOnDate && salesOnDate.length > 0 ? (
+            salesOnDate.map(sale => (
               <div key={sale.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
                 <div className="flex items-center gap-3">
                   <div className="bg-white p-2 rounded-lg text-gray-300 shadow-sm">
-                    <Calendar size={12} />
+                    <CalendarIcon size={12} />
                   </div>
                   <div>
                     <p className="text-xs font-black text-gray-800">#{String(sale.id).slice(-4)}</p>
@@ -265,7 +292,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
           ) : (
             <div className="py-12 text-center space-y-3 opacity-30">
               <History size={40} className="mx-auto" />
-              <p className="text-[9px] font-bold uppercase tracking-widest">No sales recorded yet</p>
+              <p className="text-[9px] font-bold uppercase tracking-widest">No sales on this date</p>
             </div>
           )}
         </div>

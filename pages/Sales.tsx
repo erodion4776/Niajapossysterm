@@ -5,7 +5,7 @@ import { db, Sale } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
 import { 
   History, Search, Calendar, Trash2, 
-  X, FileText, Smartphone, Receipt
+  X, FileText, Smartphone, Receipt, RefreshCw
 } from 'lucide-react';
 import { Role } from '../types.ts';
 
@@ -16,13 +16,27 @@ interface SalesProps {
 export const Sales: React.FC<SalesProps> = ({ role }) => {
   const isAdmin = role === 'Admin';
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterDate, setFilterDate] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
 
   const sales = useLiveQuery(async () => {
     let query = db.sales.orderBy('timestamp').reverse();
+    
+    // If filtering by date, we'll process the full array. 
+    // For very large datasets, a native Dexie where clause would be better.
     const results = await query.toArray();
+    
+    if (filterDate) {
+      const start = new Date(filterDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(filterDate);
+      end.setHours(23, 59, 59, 999);
+      
+      return results.filter(s => s.timestamp >= start.getTime() && s.timestamp <= end.getTime());
+    }
+    
     return results;
-  }, []);
+  }, [filterDate]);
 
   const filteredSales = sales?.filter(sale => {
     const matchesSearch = 
@@ -69,8 +83,8 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
         </div>
       </header>
 
-      {/* Search Bar */}
-      <div className="space-y-3">
+      {/* Search & Date Filter Bar */}
+      <div className="space-y-2">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input 
@@ -80,6 +94,26 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+        </div>
+        
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+            <input 
+              type="date"
+              className="w-full pl-12 pr-4 py-3 bg-white border border-gray-100 rounded-xl text-xs font-bold uppercase text-gray-700 shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+            />
+          </div>
+          {filterDate && (
+            <button 
+              onClick={() => setFilterDate('')}
+              className="px-4 bg-gray-100 text-gray-500 rounded-xl flex items-center justify-center hover:bg-gray-200 transition-colors"
+            >
+              <RefreshCw size={16} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -118,7 +152,9 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-gray-300">
               <FileText size={32} />
             </div>
-            <p className="text-gray-400 font-black uppercase text-xs tracking-widest">No transactions found</p>
+            <p className="text-gray-400 font-black uppercase text-xs tracking-widest">
+              {filterDate ? `No transactions on ${new Date(filterDate).toLocaleDateString()}` : "No transactions found"}
+            </p>
           </div>
         )}
       </div>
