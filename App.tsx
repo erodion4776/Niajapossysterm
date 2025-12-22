@@ -11,7 +11,7 @@ import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, History, ShieldAlert } from 'lucide-react';
 
-const TRIAL_PERIOD_DAYS = 3;
+const TRIAL_PERIOD_DAYS = 0;
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
 
 const App: React.FC = () => {
@@ -57,7 +57,7 @@ const App: React.FC = () => {
       return;
     }
 
-    // Trial Calculation (3 Days)
+    // Trial Calculation (0 Days)
     const installDateStr = localStorage.getItem('install_date');
     if (!installDateStr) return;
     
@@ -65,7 +65,7 @@ const App: React.FC = () => {
     const msUsed = Date.now() - installDate;
     const daysUsed = msUsed / (1000 * 60 * 60 * 24);
 
-    if (daysUsed > TRIAL_PERIOD_DAYS) {
+    if (daysUsed >= TRIAL_PERIOD_DAYS) {
       setIsLocked(true);
     }
   };
