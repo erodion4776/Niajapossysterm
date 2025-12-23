@@ -15,7 +15,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [copied, setCopied] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   
-  // OTP Flow States
+  // Trial Expiry Check
+  const isExpiredTrial = localStorage.getItem('is_trialing') === 'true';
+
+  // OTP Reveal State
   const [showOtpScreen, setShowOtpScreen] = useState(false);
   const [tempOtp, setTempOtp] = useState('');
 
@@ -34,15 +37,17 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     const isValid = await verifyActivationKey(requestCode, activationKey);
     
     if (isValid) {
-      // 1. Generate 6-digit OTP
+      // Success Handover
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       setTempOtp(otp);
 
-      // 2. Persistent storage for next phase
+      // Save flags to localStorage for the Switchboard
       localStorage.setItem('temp_otp', otp);
       localStorage.setItem('is_activated', 'true');
       localStorage.setItem('is_setup_pending', 'true');
+      localStorage.removeItem('is_trialing'); // Clear trial flag once activated
       
+      // Update DB activation setting
       await db.settings.put({ key: 'is_activated', value: true });
       
       setShowOtpScreen(true);
@@ -61,31 +66,31 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           <div className="absolute inset-0 bg-emerald-400/10 animate-ping rounded-[32px]"></div>
         </div>
         
-        <h1 className="text-3xl font-black mb-2 tracking-tight uppercase leading-tight">License<br/>Unlocked!</h1>
+        <h1 className="text-3xl font-black mb-2 tracking-tight uppercase leading-tight">App Activated!</h1>
         <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm leading-relaxed">
-          Your Temporary Admin PIN is shown below. You must use it once to set your permanent secret PIN.
+          Your Temporary Admin PIN is shown below. Write this down. You will use it once to set your permanent secret PIN.
         </p>
 
         <div className="w-full max-w-sm bg-white/5 border border-white/10 p-10 rounded-[48px] mb-8 relative overflow-hidden shadow-2xl">
           <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
-          <p className="text-emerald-500/40 text-[10px] font-black uppercase tracking-[0.4em] mb-4">Security OTP</p>
+          <p className="text-emerald-500/40 text-[10px] font-black uppercase tracking-[0.4em] mb-4">Admin Setup OTP</p>
           <div className="text-6xl font-mono font-black tracking-[0.2em] text-white py-2">
             {tempOtp}
           </div>
           <div className="mt-8 flex items-center justify-center gap-2 text-amber-400 bg-amber-400/10 py-3 px-6 rounded-2xl border border-amber-400/20">
             <AlertCircle size={16} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Write this down now!</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Store this safely!</span>
           </div>
         </div>
 
         <button 
           onClick={() => {
-            // Force reload to trigger App.tsx switchboard evaluation
+            // Force reload to re-evaluate the App switchboard
             window.location.reload();
           }}
           className="w-full max-w-sm bg-white text-emerald-950 font-black py-6 rounded-[28px] flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl uppercase tracking-widest text-xs"
         >
-          Go to PIN Setup <ArrowRight size={18} />
+          Create Secret PIN <ArrowRight size={18} />
         </button>
       </div>
     );
@@ -97,14 +102,18 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         <Lock size={40} className="text-emerald-400" />
       </div>
       
-      <h1 className="text-3xl font-black mb-2 tracking-tight uppercase">App Locked</h1>
+      <h1 className="text-3xl font-black mb-2 tracking-tight uppercase">
+        {isExpiredTrial ? 'Trial Expired' : 'Enter License'}
+      </h1>
       <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm font-medium">
-        License verification required. Send your Request Code to get an activation key.
+        {isExpiredTrial 
+          ? 'Your free trial has ended. Enter your activation key to unlock your inventory and sales data.' 
+          : 'License required for activation. Send your Request Code to get an activation key.'}
       </p>
 
       <div className="w-full max-w-sm space-y-6">
         <div className="bg-emerald-900/40 border border-emerald-800/60 p-6 rounded-[32px] space-y-3 shadow-inner">
-          <p className="text-emerald-500/60 text-[10px] font-black uppercase tracking-[0.2em]">Your Code</p>
+          <p className="text-emerald-500/60 text-[10px] font-black uppercase tracking-[0.2em]">Request Code</p>
           <div className="flex items-center justify-center gap-3">
             <span className="text-2xl font-mono font-black tracking-widest text-white">{requestCode}</span>
             <button onClick={handleCopy} className="p-2 bg-emerald-800/50 hover:bg-emerald-700/50 rounded-lg">
@@ -114,11 +123,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         </div>
 
         <a 
-          href={`https://api.whatsapp.com/send?phone=2347062228026&text=Hello,%20activate%20POS:%20${requestCode}`} 
+          href={`https://api.whatsapp.com/send?phone=2347062228026&text=Hello,%20activate%20POS%20NG:%20${requestCode}`} 
           target="_blank"
           className="w-full bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl uppercase tracking-widest text-xs"
         >
-          <MessageCircle size={24} /> Get Key on WhatsApp
+          <MessageCircle size={24} /> Get License Key
         </a>
 
         <div className="relative pt-4">
@@ -129,15 +138,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         <div className="space-y-3">
           <input 
             type="text" 
-            placeholder="PASTE ACTIVATION KEY"
-            className={`w-full bg-emerald-900/50 border ${error ? 'border-red-500' : 'border-emerald-700'} rounded-[24px] py-5 text-center font-mono tracking-widest focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all text-sm uppercase`}
+            placeholder="PASTE KEY HERE"
+            className={`w-full bg-emerald-900/50 border ${error ? 'border-red-500' : 'border-emerald-700'} rounded-[24px] py-5 text-center font-mono tracking-widest focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all text-sm uppercase shadow-inner`}
             value={activationKey}
             onChange={(e) => setActivationKey(e.target.value)}
           />
           <button onClick={handleActivate} disabled={isVerifying || !activationKey} className="w-full bg-white text-emerald-900 font-black py-5 rounded-[24px] hover:bg-emerald-50 active:scale-95 transition-all shadow-lg text-xs uppercase tracking-widest">
-            {isVerifying ? 'Checking...' : 'Activate Now'}
+            {isVerifying ? 'Verifying...' : 'Verify License'}
           </button>
-          {error && <p className="text-red-400 text-[10px] font-black uppercase tracking-widest animate-bounce mt-2">Invalid Activation Key</p>}
+          {error && <p className="text-red-400 text-[10px] font-black uppercase tracking-widest animate-bounce mt-2">Invalid Key Provided</p>}
         </div>
       </div>
     </div>
