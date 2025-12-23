@@ -1,8 +1,9 @@
+
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, SaleItem, Sale } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
-import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, FileText } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { Role } from '../types.ts';
 
 interface POSProps {
@@ -15,6 +16,7 @@ export const POS: React.FC<POSProps> = ({ role }) => {
   const [cart, setCart] = useState<SaleItem[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
+  const [isCartExpanded, setIsCartExpanded] = useState(false);
 
   const filteredItems = inventory?.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) && item.stock > 0
@@ -34,14 +36,15 @@ export const POS: React.FC<POSProps> = ({ role }) => {
         quantity: 1 
       }];
     });
+    // Auto-expand on first item if desired, but here we keep it collapsed to not block view
   };
 
-  // Fix: Changed id type from number to string | number to match SaleItem definition
   const removeFromCart = (id: string | number) => {
-    setCart(prev => prev.filter(i => i.id !== id));
+    const newCart = cart.filter(i => i.id !== id);
+    setCart(newCart);
+    if (newCart.length === 0) setIsCartExpanded(false);
   };
 
-  // Fix: Changed id type from number to string | number to match SaleItem definition
   const updateQuantity = (id: string | number, delta: number) => {
     setCart(prev => prev.map(i => {
       if (i.id === id) {
@@ -64,7 +67,7 @@ export const POS: React.FC<POSProps> = ({ role }) => {
       totalCost,
       timestamp: Date.now(),
       staff_id: role,
-      staff_name: role // Audit trail
+      staff_name: role 
     };
 
     try {
@@ -83,6 +86,7 @@ export const POS: React.FC<POSProps> = ({ role }) => {
       });
 
       setCart([]);
+      setIsCartExpanded(false);
       setShowSuccessModal(true);
     } catch (error: any) {
       alert('Checkout failed: ' + error.message);
@@ -90,8 +94,8 @@ export const POS: React.FC<POSProps> = ({ role }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#fcfcfc]">
-      <div className="p-4 space-y-4 flex-1 overflow-auto pb-64">
+    <div className="flex flex-col h-full bg-[#fcfcfc] relative">
+      <div className={`p-4 space-y-4 flex-1 overflow-auto transition-all ${cart.length > 0 ? 'pb-40' : 'pb-24'}`}>
         <header className="flex justify-between items-center">
           <h1 className="text-2xl font-black text-gray-800 tracking-tight">Quick POS</h1>
           <div className="bg-gray-100 px-3 py-1 rounded-full flex items-center gap-2">
@@ -139,65 +143,103 @@ export const POS: React.FC<POSProps> = ({ role }) => {
         </div>
       </div>
 
-      <div className="fixed bottom-16 inset-x-0 bg-white border-t-2 border-emerald-500 p-5 shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.1)] z-40 max-h-[60vh] flex flex-col rounded-t-[40px]">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-black flex items-center gap-2 text-gray-800">
-            <ShoppingCart className="text-emerald-600" /> 
-            Checkout
-          </h2>
-          <div className="text-right">
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Pay</p>
-            <span className="text-2xl font-black text-emerald-600 tracking-tighter">{formatNaira(total)}</span>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto space-y-3 mb-6 pr-1 custom-scrollbar">
-          {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-gray-300 gap-3">
-              <ShoppingCart size={48} strokeWidth={1} />
-              <p className="text-xs font-bold uppercase tracking-widest">Cart is empty</p>
-            </div>
-          ) : (
-            cart.map(item => (
-              <div key={item.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
-                <div className="flex-1">
-                  <h4 className="font-bold text-gray-800 text-sm leading-tight">{item.name}</h4>
-                  <p className="text-xs text-gray-400 font-bold mt-0.5">{formatNaira(item.price)}</p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-                    <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-emerald-50 text-gray-400 transition-colors"><Minus size={16}/></button>
-                    <span className="font-black px-2 text-center text-sm min-w-[24px]">{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:bg-emerald-50 text-gray-400 transition-colors"><Plus size={16}/></button>
-                  </div>
-                  <button onClick={() => removeFromCart(item.id)} className="text-red-300 hover:text-red-500 transition-colors">
-                    <Trash2 size={20}/>
-                  </button>
-                </div>
-              </div>
-            ))
+      {/* Expandable Bottom Sheet */}
+      {cart.length > 0 && (
+        <>
+          {/* Overlay to dim background when expanded */}
+          {isCartExpanded && (
+            <div 
+              className="fixed inset-0 bg-black/20 z-40 transition-opacity" 
+              onClick={() => setIsCartExpanded(false)}
+            />
           )}
-        </div>
+          
+          <div 
+            className={`fixed bottom-16 inset-x-0 bg-white border-t-2 border-emerald-500 shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.1)] z-[45] flex flex-col rounded-t-[40px] transition-all duration-300 ease-out ${isCartExpanded ? 'max-h-[85vh] h-auto p-6' : 'max-h-24 p-4'}`}
+          >
+            {/* Summary / Handle Bar */}
+            <button 
+              onClick={() => setIsCartExpanded(!isCartExpanded)}
+              className={`w-full flex flex-col items-center justify-center transition-all ${isCartExpanded ? 'mb-4' : ''}`}
+            >
+              <div className="w-12 h-1 bg-gray-200 rounded-full mb-3" />
+              <div className="w-full flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600 relative">
+                    <ShoppingCart size={20} />
+                    <span className="absolute -top-2 -right-2 bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-white">{cart.length}</span>
+                  </div>
+                  {!isCartExpanded && (
+                    <div className="text-left">
+                      <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">In Cart</p>
+                      <p className="text-lg font-black text-gray-800 leading-none">{formatNaira(total)}</p>
+                    </div>
+                  )}
+                </div>
+                {!isCartExpanded ? (
+                  <div className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-100">
+                    View Cart <ChevronUp size={14} />
+                  </div>
+                ) : (
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Grand Total</p>
+                    <span className="text-2xl font-black text-emerald-600 tracking-tighter">{formatNaira(total)}</span>
+                  </div>
+                )}
+              </div>
+            </button>
 
-        <button 
-          onClick={handleCheckout}
-          disabled={cart.length === 0}
-          className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-100 active:scale-[0.98] transition-all disabled:bg-gray-200 disabled:shadow-none uppercase tracking-widest flex items-center justify-center gap-2"
-        >
-          Confirm Payment <CheckCircle size={20} />
-        </button>
-      </div>
+            {/* Expanded Content */}
+            <div className={`overflow-hidden transition-all duration-300 flex flex-col ${isCartExpanded ? 'flex-1 opacity-100' : 'h-0 opacity-0 pointer-events-none'}`}>
+              <div className="flex-1 overflow-y-auto space-y-3 mb-6 pr-1 custom-scrollbar">
+                {cart.map(item => (
+                  <div key={item.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <div className="flex-1">
+                      <h4 className="font-bold text-gray-800 text-sm leading-tight">{item.name}</h4>
+                      <p className="text-xs text-gray-400 font-bold mt-0.5">{formatNaira(item.price)}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+                        <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-emerald-50 text-gray-400 transition-colors"><Minus size={16}/></button>
+                        <span className="font-black px-2 text-center text-sm min-w-[24px]">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:bg-emerald-50 text-gray-400 transition-colors"><Plus size={16}/></button>
+                      </div>
+                      <button onClick={() => removeFromCart(item.id)} className="text-red-300 hover:text-red-500 transition-colors">
+                        <Trash2 size={20}/>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => setIsCartExpanded(false)}
+                  className="bg-gray-100 text-gray-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all"
+                >
+                  Continue Shopping
+                </button>
+                <button 
+                  onClick={handleCheckout}
+                  className="bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-100 active:scale-[0.98] transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
+                >
+                  Confirm Pay <CheckCircle size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-6 text-center animate-bounce-in shadow-2xl my-auto">
+          <div className="bg-white w-full max-w-sm rounded-[40px] p-6 text-center animate-in zoom-in duration-300 shadow-2xl my-auto">
             <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
               <CheckCircle size={40} />
             </div>
             <h2 className="text-2xl font-black mb-1 text-gray-800 tracking-tight">Sale Successful!</h2>
             <p className="text-gray-400 text-sm font-medium mb-6">Stock updated and recorded.</p>
             
-            {/* Receipt Visual Preview */}
             <div className="bg-gray-50 rounded-2xl p-4 text-left border border-gray-200 mb-6 font-mono text-xs relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500 opacity-20"></div>
               <div className="flex justify-between items-start mb-2">
@@ -226,21 +268,18 @@ export const POS: React.FC<POSProps> = ({ role }) => {
                 <span>TOTAL</span>
                 <span>{formatNaira(lastSale?.total || 0)}</span>
               </div>
-              <div className="mt-2 text-center text-gray-400 text-[8px] uppercase tracking-widest">
-                Patronage Received!
-              </div>
             </div>
             
             <div className="space-y-3">
               <button 
                 onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)}
-                className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-lg shadow-emerald-100"
+                className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-lg"
               >
                 <MessageCircle size={20} /> Share via WhatsApp
               </button>
               <button 
                 onClick={() => setShowSuccessModal(false)}
-                className="w-full py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest hover:text-gray-800 transition-colors"
+                className="w-full py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest"
               >
                 Done
               </button>
