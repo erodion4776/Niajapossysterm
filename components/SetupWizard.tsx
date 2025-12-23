@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../db.ts';
 import { Key, ShieldCheck, CheckCircle2, AlertCircle, Smartphone, Lock, Eye, ArrowRight, ChevronLeft } from 'lucide-react';
 
@@ -12,11 +12,19 @@ type SetupStep = 'REVEAL' | 'VERIFY' | 'PIN';
 export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   const [step, setStep] = useState<SetupStep>('REVEAL');
   const [tempOtp, setTempOtp] = useState<string>('');
-  const [enteredOtp, setEnteredOtp] = useState('');
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
+  
+  // Discrete state for inputs
+  const [enteredOtpArr, setEnteredOtpArr] = useState(new Array(6).fill(''));
+  const [newPinArr, setNewPinArr] = useState(new Array(4).fill(''));
+  const [confirmPinArr, setConfirmPinArr] = useState(new Array(4).fill(''));
+  
   const [error, setError] = useState('');
   const [shopName, setShopName] = useState<string>('Your Shop');
+
+  // Refs for auto-focus
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const newPinRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const confirmPinRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     const otp = localStorage.getItem('temp_otp') || '';
@@ -25,8 +33,37 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     setShopName(name);
   }, []);
 
+  const handleInputChange = (
+    val: string, 
+    index: number, 
+    arr: string[], 
+    setArr: React.Dispatch<React.SetStateAction<string[]>>, 
+    refs: React.MutableRefObject<(HTMLInputElement | null)[]>,
+    length: number
+  ) => {
+    if (!/^\d*$/.test(val)) return;
+    const newArr = [...arr];
+    newArr[index] = val.slice(-1);
+    setArr(newArr);
+    if (val && index < length - 1) {
+      refs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (
+    e: React.KeyboardEvent, 
+    index: number, 
+    arr: string[], 
+    refs: React.MutableRefObject<(HTMLInputElement | null)[]>,
+  ) => {
+    if (e.key === 'Backspace' && !arr[index] && index > 0) {
+      refs.current[index - 1]?.focus();
+    }
+  };
+
   const handleVerifyOtp = () => {
-    if (enteredOtp === tempOtp) {
+    const combined = enteredOtpArr.join('');
+    if (combined === tempOtp) {
       setStep('PIN');
       setError('');
     } else {
@@ -37,6 +74,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   const handleSavePin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const newPin = newPinArr.join('');
+    const confirmPin = confirmPinArr.join('');
 
     if (newPin.length !== 4) {
       setError('PIN must be 4 digits');
@@ -65,11 +104,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[600] bg-emerald-950 flex flex-col items-center justify-center p-8 text-white text-center animate-in fade-in duration-500">
-      <div className="w-full max-w-sm space-y-8">
+    <div className="fixed inset-0 z-[600] bg-emerald-950 flex flex-col items-center justify-center p-6 text-white text-center animate-in fade-in duration-500 overflow-x-hidden">
+      <div className="w-full max-w-sm space-y-8 flex flex-col items-center">
         
         {step === 'REVEAL' && (
-          <div className="space-y-8 animate-in slide-in-from-bottom duration-500">
+          <div className="w-full space-y-8 animate-in slide-in-from-bottom duration-500">
             <div className="text-center">
               <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl">
                 <Eye size={40} />
@@ -100,7 +139,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         )}
 
         {step === 'VERIFY' && (
-          <div className="space-y-8 animate-in slide-in-from-right duration-500">
+          <div className="w-full space-y-8 animate-in slide-in-from-right duration-500">
              <button onClick={() => setStep('REVEAL')} className="flex items-center gap-2 text-emerald-500/60 text-[10px] font-black uppercase tracking-widest bg-emerald-900/40 px-4 py-2 rounded-full mx-auto">
               <ChevronLeft size={14} /> Back to Code
             </button>
@@ -113,8 +152,22 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
               <p className="text-emerald-500/60 text-[11px] font-medium leading-relaxed px-4">Enter the 6-digit code we just showed you.</p>
             </div>
 
-            <div className="space-y-6">
-              <input type="text" inputMode="numeric" maxLength={6} placeholder="6-DIGIT OTP" className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[28px] py-6 text-center text-3xl tracking-[0.4em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-inner uppercase" value={enteredOtp} onChange={(e) => setEnteredOtp(e.target.value)} />
+            <div className="space-y-6 flex flex-col items-center">
+              <div className="flex gap-2 justify-center w-full">
+                {enteredOtpArr.map((digit, idx) => (
+                  <input
+                    key={idx}
+                    ref={el => otpRefs.current[idx] = el}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    className="w-[45px] h-[50px] bg-emerald-900/30 border border-emerald-800/60 rounded-xl text-center text-xl font-black focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all shadow-inner uppercase"
+                    value={digit}
+                    onChange={e => handleInputChange(e.target.value, idx, enteredOtpArr, setEnteredOtpArr, otpRefs, 6)}
+                    onKeyDown={e => handleKeyDown(e, idx, enteredOtpArr, otpRefs)}
+                  />
+                ))}
+              </div>
               {error && <p className="text-red-400 text-[10px] font-black uppercase tracking-[0.2em] animate-bounce">{error}</p>}
               <button onClick={handleVerifyOtp} className="w-full bg-white text-emerald-950 font-black py-6 rounded-[28px] shadow-2xl active:scale-95 transition-all uppercase tracking-widest text-xs">Verify Code</button>
             </div>
@@ -122,7 +175,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         )}
 
         {step === 'PIN' && (
-          <div className="space-y-8 animate-in slide-in-from-right duration-500">
+          <div className="w-full space-y-8 animate-in slide-in-from-right duration-500">
             <div className="text-center">
               <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl">
                 <ShieldCheck size={40} />
@@ -131,13 +184,49 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
               <p className="text-emerald-500/60 text-[11px] font-medium leading-relaxed px-4">Create a 4-digit PIN that only you (the owner) will know.</p>
             </div>
 
-            <form onSubmit={handleSavePin} className="space-y-4">
-              <div className="space-y-4">
-                <input type="password" inputMode="numeric" maxLength={4} placeholder="NEW 4-DIGIT PIN" className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[28px] py-6 text-center text-3xl tracking-[0.6em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-inner" value={newPin} onChange={(e) => setNewPin(e.target.value)} />
-                <input type="password" inputMode="numeric" maxLength={4} placeholder="CONFIRM PIN" className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[28px] py-6 text-center text-3xl tracking-[0.6em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-inner" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} />
+            <form onSubmit={handleSavePin} className="space-y-6 flex flex-col items-center w-full">
+              <div className="space-y-6 w-full flex flex-col items-center">
+                <div className="flex flex-col items-center gap-2 w-full">
+                  <label className="text-[9px] font-black text-emerald-500/40 uppercase tracking-widest">New 4-Digit PIN</label>
+                  <div className="flex gap-2 justify-center">
+                    {newPinArr.map((digit, idx) => (
+                      <input
+                        key={idx}
+                        ref={el => newPinRefs.current[idx] = el}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={1}
+                        className="w-[45px] h-[50px] bg-emerald-900/30 border border-emerald-800/60 rounded-xl text-center text-xl font-black focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all shadow-inner"
+                        value={digit}
+                        onChange={e => handleInputChange(e.target.value, idx, newPinArr, setNewPinArr, newPinRefs, 4)}
+                        onKeyDown={e => handleKeyDown(e, idx, newPinArr, newPinRefs)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-2 w-full">
+                  <label className="text-[9px] font-black text-emerald-500/40 uppercase tracking-widest">Confirm PIN</label>
+                  <div className="flex gap-2 justify-center">
+                    {confirmPinArr.map((digit, idx) => (
+                      <input
+                        key={idx}
+                        ref={el => confirmPinRefs.current[idx] = el}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={1}
+                        className="w-[45px] h-[50px] bg-emerald-900/30 border border-emerald-800/60 rounded-xl text-center text-xl font-black focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all shadow-inner"
+                        value={digit}
+                        onChange={e => handleInputChange(e.target.value, idx, confirmPinArr, setConfirmPinArr, confirmPinRefs, 4)}
+                        onKeyDown={e => handleKeyDown(e, idx, confirmPinArr, confirmPinRefs)}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
+              
               {error && (
-                <div className="bg-red-500/20 border border-red-500/40 p-4 rounded-2xl flex items-center gap-3">
+                <div className="bg-red-500/20 border border-red-500/40 p-4 rounded-2xl flex items-center gap-3 w-full">
                   <AlertCircle className="text-red-400" size={18} />
                   <p className="text-red-300 text-[10px] font-black uppercase tracking-widest">{error}</p>
                 </div>
@@ -149,7 +238,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
           </div>
         )}
 
-        <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-start gap-3 text-left">
+        <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-start gap-3 text-left w-full">
           <Smartphone className="text-emerald-500 shrink-0" size={16} />
           <p className="text-[9px] text-emerald-100/40 font-bold leading-relaxed">
             <span className="text-emerald-400 block mb-0.5 uppercase tracking-wider">Note:</span>
