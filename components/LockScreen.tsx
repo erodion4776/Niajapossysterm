@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Lock, ShieldCheck, Key, Copy, Check, AlertCircle, ArrowRight, Smartphone } from 'lucide-react';
+import { MessageCircle, Lock, ShieldCheck, Key, Copy, Check, AlertCircle, ArrowRight } from 'lucide-react';
 import { getRequestCode, verifyActivationKey } from '../utils/security.ts';
 import { db } from '../db.ts';
 
@@ -14,7 +14,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [error, setError] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  const [saltMissing, setSaltMissing] = useState(false);
   
   // OTP States
   const [showOtpScreen, setShowOtpScreen] = useState(false);
@@ -22,13 +21,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
   useEffect(() => {
     getRequestCode().then(setRequestCode);
-    
-    // Check if salt is configured (for developer debugging)
-    const env = (import.meta as any).env;
-    if (!env?.VITE_APP_SALT) {
-      console.error("VITE_APP_SALT is missing in environment variables!");
-      setSaltMissing(true);
-    }
   }, []);
 
   const handleCopy = () => {
@@ -42,19 +34,20 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     const isValid = await verifyActivationKey(requestCode, activationKey);
     
     if (isValid) {
-      // 1. Generate 6-digit OTP
+      // 1. Generate 6-digit random OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       setTempOtp(otp);
 
-      // 2. Update Admin in DB with this OTP
+      // 2. Update Admin in DB with this OTP immediately
       const admin = await db.users.where('role').equals('Admin').first();
       if (admin && admin.id) {
         await db.users.update(admin.id, { pin: otp });
       }
 
-      // 3. Mark activation and setup pending
+      // 3. Mark activation and setup pending in localStorage
       localStorage.setItem('is_activated', 'true');
       localStorage.setItem('is_setup_pending', 'true');
+      localStorage.setItem('is_first_launch', 'true'); // Flag for setup logic
       await db.settings.put({ key: 'is_activated', value: true });
       
       setShowOtpScreen(true);
@@ -75,7 +68,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         
         <h1 className="text-3xl font-black mb-2 tracking-tight uppercase">App Activated!</h1>
         <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm leading-relaxed">
-          Security protocol initiated. Use this temporary code to set your permanent Admin PIN.
+          Your Temporary Admin PIN is generated. Write this down. You will use it once to set your permanent secret PIN.
         </p>
 
         <div className="w-full max-w-sm bg-white/5 border border-white/10 p-8 rounded-[40px] mb-8 relative overflow-hidden">
@@ -114,13 +107,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm">
         Activation required. Please send your Request Code to the developer.
       </p>
-
-      {saltMissing && window.location.hostname === 'localhost' && (
-        <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-2xl text-[10px] font-bold text-red-200 uppercase flex items-center gap-2">
-          <AlertCircle size={14} />
-          Developer: VITE_APP_SALT is not set!
-        </div>
-      )}
 
       <div className="w-full max-w-sm space-y-6">
         <div className="bg-emerald-900/40 border border-emerald-800/60 p-6 rounded-[32px] space-y-3 shadow-inner">
