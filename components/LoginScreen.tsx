@@ -98,7 +98,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
   if (isSettingUpPin) {
     return (
-      <div className="fixed inset-0 z-[250] bg-emerald-950 flex flex-col items-center justify-center p-8 text-white animate-in slide-in-from-bottom duration-500">
+      <div className="fixed inset-0 z-[250] bg-emerald-950 flex flex-col items-center justify-center p-8 text-white animate-in slide-in-from-bottom duration-500 text-center">
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center">
             <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl">
@@ -151,7 +151,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             </button>
           </form>
 
-          <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-start gap-3">
+          <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-start gap-3 text-left">
             <Smartphone className="text-emerald-500 shrink-0" size={16} />
             <p className="text-[9px] text-emerald-100/40 font-bold leading-relaxed">
               <span className="text-emerald-400 block mb-0.5 uppercase tracking-wider">Security:</span>
@@ -271,7 +271,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 <div className="absolute inset-0 bg-emerald-500/5 animate-pulse rounded-[32px]"></div>
               </div>
               <h2 className="text-2xl font-black tracking-tight leading-none">Welcome, {selectedUser.name}</h2>
-              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.2em] mt-3">
+              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.2em] mt-3 text-center">
                 {selectedUser.pin.length === 6 ? 'Enter 6-Digit Temporary Code' : 'Enter Secret 4-Digit PIN'}
               </p>
             </div>

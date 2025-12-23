@@ -47,6 +47,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       // 3. Mark activation and setup pending in localStorage
       localStorage.setItem('is_activated', 'true');
       localStorage.setItem('is_setup_pending', 'true');
+      localStorage.setItem('is_first_launch', 'true');
       await db.settings.put({ key: 'is_activated', value: true });
       
       setShowOtpScreen(true);
@@ -65,9 +66,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           <div className="absolute inset-0 bg-emerald-400/10 animate-ping rounded-[32px]"></div>
         </div>
         
-        <h1 className="text-3xl font-black mb-2 tracking-tight uppercase leading-tight">Activation<br/>Successful!</h1>
+        <h1 className="text-3xl font-black mb-2 tracking-tight uppercase leading-tight">App Activated!</h1>
         <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm leading-relaxed">
-          Your Temporary Admin PIN is generated. Write this down. You will use it once to set your permanent secret PIN.
+          Your Temporary Admin PIN is: <span className="text-white font-bold">{tempOtp}</span>. Write this down. You will use it once to set your permanent secret PIN.
         </p>
 
         <div className="w-full max-w-sm bg-white/5 border border-white/10 p-8 rounded-[40px] mb-8 relative overflow-hidden">
