@@ -1,13 +1,19 @@
 
-
 /**
  * Security Utility for NaijaShop POS
  * Handles device fingerprinting and offline activation verification.
  */
 
-// Use the salt from environment variable exclusively
-// Fix: Use process.env to resolve 'Property env does not exist on type ImportMeta' error.
-const APP_SALT = process.env.VITE_APP_SALT;
+// Access environment variables using Vite's standard import.meta.env
+// We use type casting to avoid TypeScript errors in environments without d.ts files
+const getSalt = (): string => {
+  const env = (import.meta as any).env;
+  const proc = (typeof process !== 'undefined') ? (process as any).env : {};
+  
+  return env?.VITE_APP_SALT || proc?.VITE_APP_SALT || '';
+};
+
+const APP_SALT = getSalt();
 
 /**
  * Generates a SHA-256 hash of a string.
@@ -20,8 +26,8 @@ async function hashString(message: string): Promise<string> {
 }
 
 /**
- * Generates a unique 8-character ID for this device.
- * Format: NG-XX-XXX (e.g., NG-88-XYZ)
+ * Generates a unique ID for this device.
+ * Format: NG-XX-XXX
  */
 export async function generateRequestCode(): Promise<string> {
   let uuid = localStorage.getItem('device_fingerprint');
@@ -30,7 +36,7 @@ export async function generateRequestCode(): Promise<string> {
     localStorage.setItem('device_fingerprint', uuid);
   }
 
-  // Combine factors to ensure uniqueness per device/browser fingerprint
+  // Consistent fingerprint source
   const fingerprintSource = `${navigator.userAgent}-${window.screen.width}x${window.screen.height}-${uuid}`;
   const hash = await hashString(fingerprintSource);
   
@@ -40,34 +46,34 @@ export async function generateRequestCode(): Promise<string> {
   return `NG-${part1}-${part2}`;
 }
 
-/**
- * Alias for getRequestCode to match component usage
- */
 export const getRequestCode = generateRequestCode;
 
 /**
- * Offline verification logic (unlockApp).
- * Hashes Request Code + Secret Salt and checks if it matches the enteredKey.
+ * Offline verification logic.
+ * Concatenates Request Code and Secret Salt, then hashes.
  */
 export async function verifyActivationKey(requestCode: string, enteredKey: string): Promise<boolean> {
-  if (!enteredKey || enteredKey.length < 10) return false;
+  if (!enteredKey || enteredKey.length < 5) return false;
   
-  // Check if SALT exists to prevent hashing undefined
-  if (!APP_SALT) {
-    console.error("Critical: VITE_APP_SALT is not defined in the environment.");
+  const salt = getSalt();
+  
+  if (!salt) {
+    console.warn("SECURITY WARNING: VITE_APP_SALT is not defined in environment variables. Key verification will fail.");
     return false;
   }
   
-  const combo = requestCode.trim() + APP_SALT;
+  // Logic must match keygen.html exactly: RequestCode + Salt
+  const combo = requestCode.trim().toUpperCase() + salt.trim();
   const secretHash = await hashString(combo);
   
-  // The activation key must match the first 10 characters of the secret hash
+  // Activation key is the first 10 characters of the secret hash
   const validKey = secretHash.substring(0, 10).toUpperCase();
+  
   return enteredKey.trim().toUpperCase() === validKey;
 }
 
 /**
- * Main unlock function as requested
+ * Main unlock function
  */
 export const unlockApp = async (enteredKey: string): Promise<boolean> => {
   const code = await generateRequestCode();
