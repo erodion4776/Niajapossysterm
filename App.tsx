@@ -15,7 +15,7 @@ import { SetupWizard } from './components/SetupWizard.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, History, ShieldAlert } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
-const TRIAL_DURATION = 3 * 24 * 60 * 60 * 1000; // 3 Days in MS
+const TRIAL_DURATION = 3 * 24 * 60 * 60 * 1000; // 3 Days
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
@@ -23,74 +23,55 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPirated, setIsPirated] = useState(false);
   
-  // 1. The 4 States of Truth (Switchboard)
   const [isAtLanding, setIsAtLanding] = useState(() => window.location.pathname === '/' || window.location.pathname === '');
   const [isActivated, setIsActivated] = useState(() => localStorage.getItem('is_activated') === 'true');
   const [isTrialing, setIsTrialing] = useState(() => localStorage.getItem('is_trialing') === 'true');
   const [isSetupPending, setIsSetupPending] = useState(() => localStorage.getItem('is_setup_pending') === 'true');
 
-  // Derived Truth: Trial Validity
   const trialStartDate = localStorage.getItem('trial_start_date');
   const isTrialValid = trialStartDate ? (Date.now() - parseInt(trialStartDate)) < TRIAL_DURATION : false;
 
   useEffect(() => {
     const startup = async () => {
-      // Domain Check (Piracy Guard)
       const hostname = window.location.hostname;
-      if (
-        hostname !== 'localhost' && 
-        hostname !== '127.0.0.1' && 
-        hostname !== ALLOWED_DOMAIN && 
-        !hostname.endsWith('.webcontainer.io')
-      ) {
+      if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== ALLOWED_DOMAIN && !hostname.endsWith('.webcontainer.io')) {
         setIsPirated(true);
       }
-
       await initTrialDate();
-      
-      // Sync DB activation state to localStorage if missing
       const dbActivated = await db.settings.get('is_activated');
       if (dbActivated?.value === true && !isActivated) {
         localStorage.setItem('is_activated', 'true');
         setIsActivated(true);
       }
-
       setIsInitialized(true);
     };
     startup();
 
-    const handleUrlChange = () => {
-      setIsAtLanding(window.location.pathname === '/' || window.location.pathname === '');
-    };
+    const handleUrlChange = () => setIsAtLanding(window.location.pathname === '/' || window.location.pathname === '');
     window.addEventListener('popstate', handleUrlChange);
     return () => window.removeEventListener('popstate', handleUrlChange);
   }, [isActivated]);
 
   const handleStartTrial = () => {
-    // 1. Setup Trial Keys
+    const randomOtp = Math.floor(100000 + Math.random() * 900000).toString();
     localStorage.setItem('is_trialing', 'true');
     localStorage.setItem('trial_start_date', Date.now().toString());
     localStorage.setItem('is_setup_pending', 'true');
-    localStorage.setItem('temp_otp', '123456'); // Default Trial OTP
+    localStorage.setItem('temp_otp', randomOtp);
     
-    // 2. Redirect to /app path
     window.history.pushState({}, '', '/app');
-    
-    // 3. Force state update
     setIsAtLanding(false);
     setIsTrialing(true);
     setIsSetupPending(true);
   };
 
-  const handleLogin = (user: User) => {
-    setCurrentUser(user);
-  };
+  const handleLogin = (user: User) => setCurrentUser(user);
 
   if (isPirated) {
     return (
       <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
         <ShieldAlert size={80} className="text-red-500 mb-6 animate-pulse" />
-        <h1 className="text-4xl font-black mb-4 uppercase leading-none">Security Alert</h1>
+        <h1 className="text-4xl font-black mb-4 uppercase leading-none">Access Denied</h1>
         <p className="text-red-200/60 max-w-sm font-medium">Unauthorized distribution detected.</p>
       </div>
     );
@@ -98,29 +79,12 @@ const App: React.FC = () => {
 
   if (!isInitialized) return null;
 
-  // 2. The Navigation Logic (The Switchboard Hierarchy)
-  
-  // Level 1: Marketing / Landing (Only if not in app and not active/trialing)
-  if (isAtLanding && !isActivated && !isTrialing) {
-    return <LandingPage onStartTrial={handleStartTrial} />;
-  }
+  // Central Router Switchboard
+  if (isAtLanding && !isActivated && !isTrialing) return <LandingPage onStartTrial={handleStartTrial} />;
+  if (!isActivated && (!isTrialing || !isTrialValid)) return <LockScreen onUnlock={() => window.location.reload()} />;
+  if (isSetupPending) return <SetupWizard onComplete={() => window.location.reload()} />;
+  if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
 
-  // Level 2: License Check (If not activated AND either no trial or trial expired)
-  if (!isActivated && (!isTrialing || !isTrialValid)) {
-    return <LockScreen onUnlock={() => window.location.reload()} />;
-  }
-
-  // Level 3: First Login OTP Setup (Bridge to daily use)
-  if (isSetupPending) {
-    return <SetupWizard onComplete={() => window.location.reload()} />;
-  }
-
-  // Level 4: Standard Authentication (PIN Login)
-  if (!currentUser) {
-    return <LoginScreen onLogin={handleLogin} />;
-  }
-
-  // Level 5: Daily Use (The POS App)
   const isAdmin = currentUser.role === 'Admin';
   const renderPage = () => {
     switch (currentPage) {
@@ -136,10 +100,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500">
-      <main className="flex-1 overflow-auto bg-[#f9fafb]">
-        {renderPage()}
-      </main>
-
+      <main className="flex-1 overflow-auto bg-[#f9fafb]">{renderPage()}</main>
       <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-200 flex justify-around items-center py-2 safe-bottom z-50 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.1)]">
         <button onClick={() => setCurrentPage(Page.DASHBOARD)} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
           <LayoutGrid size={22} /><span className="text-[9px] font-bold mt-1 uppercase tracking-wider">Home</span>
