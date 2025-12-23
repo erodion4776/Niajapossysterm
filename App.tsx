@@ -22,7 +22,9 @@ const App: React.FC = () => {
   const [isPirated, setIsPirated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isAppRoute, setIsAppRoute] = useState(() => window.location.pathname.startsWith('/app'));
+  const [isAppRoute, setIsAppRoute] = useState(() => 
+    window.location.pathname.startsWith('/app') || localStorage.getItem('is_activated') === 'true'
+  );
 
   useEffect(() => {
     const startup = async () => {
@@ -37,21 +39,22 @@ const App: React.FC = () => {
         setIsPirated(true);
       }
 
-      // 2. Init DB & Trial
+      // 2. Init DB & Trial tracking
       await initTrialDate();
       
-      // 3. Security Check
+      // 3. Perform Security Status Check
       await checkSecurityStatus();
       
       setIsInitialized(true);
     };
     startup();
 
-    const handlePopState = () => {
-      setIsAppRoute(window.location.pathname.startsWith('/app'));
+    // Navigation Listener
+    const handleUrlChange = () => {
+      setIsAppRoute(window.location.pathname.startsWith('/app') || localStorage.getItem('is_activated') === 'true');
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
   }, []);
 
   const checkSecurityStatus = async () => {
@@ -59,14 +62,12 @@ const App: React.FC = () => {
     const isActivated = localStorage.getItem('is_activated') === 'true' || dbActivated?.value === true;
     
     if (isActivated) {
-      // Sync states
       if (localStorage.getItem('is_activated') !== 'true') localStorage.setItem('is_activated', 'true');
       if (dbActivated?.value !== true) await db.settings.put({ key: 'is_activated', value: true });
       setIsLocked(false);
       return;
     }
 
-    // Trial Check
     const installDateStr = localStorage.getItem('install_date');
     if (!installDateStr) return;
     
@@ -82,6 +83,7 @@ const App: React.FC = () => {
   const handleStartTrial = () => {
     window.history.pushState({}, '', '/app');
     setIsAppRoute(true);
+    checkSecurityStatus();
   };
 
   const handleLogin = (user: User) => {
@@ -95,41 +97,41 @@ const App: React.FC = () => {
     setIsLocked(false);
   };
 
-  // 1. Piracy View
+  // 1. Anti-Piracy Guard
   if (isPirated) {
     return (
       <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
         <div className="bg-red-500/20 p-6 rounded-full mb-8 border border-red-500/30 animate-pulse">
           <ShieldAlert size={80} className="text-red-500" />
         </div>
-        <h1 className="text-4xl font-black mb-4 tracking-tighter uppercase">Piracy Warning</h1>
-        <p className="text-red-200/60 max-w-sm mb-8 font-medium">This application is running on an unauthorized domain.</p>
+        <h1 className="text-4xl font-black mb-4 tracking-tighter uppercase leading-none">Access<br/>Denied</h1>
+        <p className="text-red-200/60 max-w-sm mb-8 font-medium">Unauthorized Domain Detected</p>
         <div className="bg-white/5 border border-white/10 p-6 rounded-3xl text-sm font-mono mb-8">
-          Domain: <span className="text-red-400 font-bold">{window.location.hostname}</span>
+          {window.location.hostname}
         </div>
       </div>
     );
   }
 
-  // 2. Landing Page View (Strictly for root /)
+  // 2. Landing Page (Only if not in app or not activated)
   if (!isAppRoute && !localStorage.getItem('is_activated')) {
     return <LandingPage onStartTrial={handleStartTrial} />;
   }
 
-  // 3. App Security Check
+  // 3. Loading State
   if (!isInitialized) return null;
 
-  // 4. Lock Screen View
+  // 4. Trial Expiry / Activation Guard
   if (isLocked) {
     return <LockScreen onUnlock={handleUnlock} />;
   }
 
-  // 5. Auth View
+  // 5. Authentication Guard
   if (!currentUser) {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  // 6. Main App Shell
+  // 6. Private POS App Layout
   const isAdmin = currentUser.role === 'Admin';
 
   const renderPage = () => {
