@@ -7,6 +7,7 @@ import { Inventory } from './pages/Inventory.tsx';
 import { POS } from './pages/POS.tsx';
 import { Sales } from './pages/Sales.tsx';
 import { Settings } from './pages/Settings.tsx';
+import { FAQ } from './pages/FAQ.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, History, ShieldAlert } from 'lucide-react';
@@ -23,21 +24,17 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const startup = async () => {
-      // 1. Domain Security Lock
       const hostname = window.location.hostname;
       if (
         hostname !== 'localhost' && 
         hostname !== '127.0.0.1' && 
         hostname !== ALLOWED_DOMAIN && 
-        !hostname.endsWith('.webcontainer.io') // Allow development environments
+        !hostname.endsWith('.webcontainer.io')
       ) {
         setIsPirated(true);
       }
 
-      // 2. Initialize Database and Trial
       await initTrialDate();
-      
-      // 3. Verify Activation
       await checkActivationStatus();
       setIsInitialized(true);
     };
@@ -45,11 +42,9 @@ const App: React.FC = () => {
   }, []);
 
   const checkActivationStatus = async () => {
-    // Check IndexedDB and LocalStorage for cross-persistence
     const dbActivated = await db.settings.get('is_activated');
     const isActivated = localStorage.getItem('is_activated') === 'true' || dbActivated?.value === true;
     
-    // Sync activation status
     if (isActivated) {
       if (localStorage.getItem('is_activated') !== 'true') localStorage.setItem('is_activated', 'true');
       if (dbActivated?.value !== true) await db.settings.put({ key: 'is_activated', value: true });
@@ -57,7 +52,6 @@ const App: React.FC = () => {
       return;
     }
 
-    // Trial Calculation (0 Days)
     const installDateStr = localStorage.getItem('install_date');
     if (!installDateStr) return;
     
@@ -76,7 +70,6 @@ const App: React.FC = () => {
     localStorage.setItem('user_name', user.name);
   };
 
-  // Piracy Warning Screen
   if (isPirated) {
     return (
       <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
@@ -97,13 +90,11 @@ const App: React.FC = () => {
     );
   }
 
-  // Activation Overlay
   if (isLocked) {
     return <LockScreen onUnlock={() => setIsLocked(false)} />;
   }
 
   if (!isInitialized) return null;
-
   if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
 
   const isAdmin = currentUser.role === 'Admin';
@@ -119,7 +110,9 @@ const App: React.FC = () => {
       case Page.SALES:
         return <Sales role={currentUser.role} />;
       case Page.SETTINGS:
-        return <Settings role={currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} />;
+        return <Settings role={currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={setCurrentPage} />;
+      case Page.FAQ:
+        return <FAQ setPage={setCurrentPage} />;
       default:
         return <Dashboard setPage={setCurrentPage} role={currentUser.role} />;
     }
@@ -163,7 +156,7 @@ const App: React.FC = () => {
         {isAdmin && (
           <button 
             onClick={() => setCurrentPage(Page.SETTINGS)}
-            className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.SETTINGS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
+            className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}
           >
             <SettingsIcon size={22} />
             <span className="text-[9px] font-bold mt-1 uppercase">Admin</span>
