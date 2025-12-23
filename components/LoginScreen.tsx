@@ -26,7 +26,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
   const handleLogin = () => {
     if (selectedUser && selectedUser.pin === pin) {
-      // Check if this is the first-time setup for an Admin (using OTP)
+      // Check if this is the first-time setup for an Admin (using temporary OTP)
       const setupPending = localStorage.getItem('is_setup_pending') === 'true';
       if (selectedUser.role === 'Admin' && setupPending) {
         setIsSettingUpPin(true);
@@ -104,9 +104,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl">
               <Key size={40} />
             </div>
-            <h2 className="text-3xl font-black tracking-tight leading-none mb-3">Set Your Secret PIN</h2>
+            <h2 className="text-3xl font-black tracking-tight leading-none mb-3">Set Admin PIN</h2>
             <p className="text-emerald-500/60 text-xs font-medium leading-relaxed">
-              Create a permanent 4-digit PIN for your Admin account. PIN "0000" is not allowed.
+              Create a permanent 4-digit secret PIN for your Admin account. PIN "0000" is blocked.
             </p>
           </div>
 
@@ -128,7 +128,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                   type="password" 
                   inputMode="numeric"
                   maxLength={4}
-                  placeholder="CONFIRM NEW PIN"
+                  placeholder="CONFIRM PIN"
                   className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[28px] py-6 text-center text-3xl tracking-[0.6em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all placeholder:text-emerald-900/40 shadow-inner"
                   value={confirmPin}
                   onChange={(e) => setConfirmPin(e.target.value)}
@@ -147,15 +147,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               type="submit"
               className="w-full bg-emerald-500 text-emerald-950 font-black py-6 rounded-[28px] shadow-2xl active:scale-95 transition-all uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3"
             >
-              Confirm PIN & Enter <CheckCircle2 size={20} />
+              Secure & Enter Shop <CheckCircle2 size={20} />
             </button>
           </form>
 
           <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-start gap-3">
             <Smartphone className="text-emerald-500 shrink-0" size={16} />
             <p className="text-[9px] text-emerald-100/40 font-bold leading-relaxed">
-              <span className="text-emerald-400 block mb-0.5 uppercase tracking-wider">Note:</span>
-              This PIN is only stored on this phone. Ensure you choose a code you can remember easily.
+              <span className="text-emerald-400 block mb-0.5 uppercase tracking-wider">Security:</span>
+              This PIN is only stored on this phone. Do not forget it, as there is no "Forgot PIN" for offline data.
             </p>
           </div>
         </div>
@@ -209,7 +209,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-emerald-950/90"></div>
         
         <div className="relative z-10 text-center px-8 mt-16 animate-in fade-in zoom-in duration-700">
-          <h1 className="text-5xl font-black tracking-tighter mb-2 drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]">NaijaShop</h1>
+          <h1 className="text-5xl font-black tracking-tighter mb-2 drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)] uppercase">NaijaShop</h1>
           <div className="bg-emerald-500/20 backdrop-blur-md px-4 py-1 rounded-full border border-emerald-400/30 inline-block shadow-lg">
             <p className="text-emerald-400 font-black uppercase text-[10px] tracking-[0.3em]">Inventory & POS Manager</p>
           </div>
@@ -291,7 +291,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               {error && <p className="text-red-400 text-center font-black text-xs uppercase tracking-widest animate-bounce">{error}</p>}
               <button 
                 onClick={handleLogin}
-                className="w-full bg-emerald-500 text-emerald-950 font-black py-6 rounded-[32px] shadow-[0_20px_40px_-10px_rgba(16,185,129,0.3)] active:scale-95 transition-all uppercase tracking-[0.2em] text-sm"
+                className="w-full bg-emerald-50 text-emerald-950 font-black py-6 rounded-[32px] shadow-[0_20px_40px_-10px_rgba(16,185,129,0.3)] active:scale-95 transition-all uppercase tracking-[0.2em] text-sm"
               >
                 Unlock POS
               </button>

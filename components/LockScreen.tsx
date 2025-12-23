@@ -47,7 +47,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       // 3. Mark activation and setup pending in localStorage
       localStorage.setItem('is_activated', 'true');
       localStorage.setItem('is_setup_pending', 'true');
-      localStorage.setItem('is_first_launch', 'true'); // Flag for setup logic
       await db.settings.put({ key: 'is_activated', value: true });
       
       setShowOtpScreen(true);
@@ -66,7 +65,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           <div className="absolute inset-0 bg-emerald-400/10 animate-ping rounded-[32px]"></div>
         </div>
         
-        <h1 className="text-3xl font-black mb-2 tracking-tight uppercase">App Activated!</h1>
+        <h1 className="text-3xl font-black mb-2 tracking-tight uppercase leading-tight">Activation<br/>Successful!</h1>
         <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm leading-relaxed">
           Your Temporary Admin PIN is generated. Write this down. You will use it once to set your permanent secret PIN.
         </p>
@@ -79,7 +78,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           </div>
           <div className="mt-6 flex items-center justify-center gap-2 text-amber-400 bg-amber-400/10 py-2 px-4 rounded-full border border-amber-400/20">
             <AlertCircle size={14} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Write this down now</span>
+            <span className="text-[10px] font-black uppercase tracking-widest font-mono">DO NOT LOSE THIS CODE</span>
           </div>
         </div>
 
@@ -87,11 +86,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           onClick={onUnlock}
           className="w-full max-w-sm bg-white text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl uppercase tracking-widest text-xs"
         >
-          Continue to Login <ArrowRight size={18} />
+          Proceed to Login <ArrowRight size={18} />
         </button>
 
         <p className="mt-8 text-[9px] text-emerald-500/30 font-black uppercase tracking-[0.2em]">
-          Secured by NaijaShop Multi-Layer Shield
+          NaijaShop Security Layer v2.0
         </p>
       </div>
     );
@@ -103,7 +102,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         <Lock size={40} className="text-emerald-400" />
       </div>
       
-      <h1 className="text-3xl font-black mb-2 tracking-tight">App Locked</h1>
+      <h1 className="text-3xl font-black mb-2 tracking-tight uppercase">App Locked</h1>
       <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm">
         Activation required. Please send your Request Code to the developer.
       </p>
