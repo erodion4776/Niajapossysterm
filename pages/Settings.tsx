@@ -5,7 +5,7 @@ import { db } from '../db.ts';
 import { backupToWhatsApp, generateShopKey } from '../utils/whatsapp.ts';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
-  Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, ChevronUp, BookOpen
+  Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, ChevronUp, BookOpen, Loader2
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 
@@ -23,6 +23,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
   const [newUser, setNewUser] = useState({ name: '', pin: '', role: 'Staff' as Role });
   const [isGenerating, setIsGenerating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,10 +38,27 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
   }, [shopInfo]);
 
   const handleBackup = async () => {
-    const inventory = await db.inventory.toArray();
-    const sales = await db.sales.toArray();
-    const expenses = await db.expenses.toArray();
-    backupToWhatsApp({ inventory, sales, expenses, timestamp: Date.now() });
+    setIsBackingUp(true);
+    try {
+      const inventory = await db.inventory.toArray();
+      const sales = await db.sales.toArray();
+      const expenses = await db.expenses.toArray();
+      const usersList = await db.users.toArray();
+      
+      await backupToWhatsApp({ 
+        inventory, 
+        sales, 
+        expenses, 
+        users: usersList,
+        shopName,
+        shopInfo,
+        timestamp: Date.now() 
+      });
+    } catch (err) {
+      alert("Backup failed: " + (err as Error).message);
+    } finally {
+      setIsBackingUp(false);
+    }
   };
 
   const handleAddUser = async (e: React.FormEvent) => {
@@ -135,7 +153,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
                 <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest mt-0.5">How to Setup Staff Phones</p>
               </div>
             </div>
-            {isGuideOpen ? <ChevronUp size={20} className="text-emerald-400" /> : <ChevronDown size={20} className="text-emerald-400" />}
+            {isGuideOpen ? <ChevronDown size={20} className="text-emerald-400 rotate-180 transition-transform" /> : <ChevronDown size={20} className="text-emerald-400 transition-transform" />}
           </button>
           
           {isGuideOpen && (
@@ -182,7 +200,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </section>
       )}
 
-      {/* Existing Sections... */}
       {isAdmin && (
         <section className="bg-emerald-600 p-6 rounded-[32px] shadow-xl text-white space-y-4">
           <div className="flex items-center gap-3">
@@ -213,7 +230,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
             </div>
           </div>
           <button onClick={async () => { setIsGenerating(true); await generateShopKey(); setIsGenerating(false); }} className="w-full bg-emerald-500 text-emerald-950 font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">
-            Get Setup Key <Share2 size={16} />
+            {isGenerating ? 'Generating...' : 'Get Setup Key'} <Share2 size={16} />
           </button>
         </section>
       )}
@@ -263,11 +280,17 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
           <CloudUpload size={14} /> Backup & Share
         </h2>
-        <button onClick={handleBackup} className="w-full flex items-center justify-between p-5 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100 active:scale-95 transition-all">
+        <button 
+          onClick={handleBackup} 
+          disabled={isBackingUp}
+          className={`w-full flex items-center justify-between p-5 rounded-2xl border active:scale-95 transition-all ${isBackingUp ? 'bg-gray-50 border-gray-200 text-gray-400' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}
+        >
           <div className="flex items-center gap-4">
-            <div className="bg-white p-3 rounded-xl shadow-sm"><CloudUpload size={24} /></div>
+            <div className={`p-3 rounded-xl shadow-sm ${isBackingUp ? 'bg-gray-100' : 'bg-white'}`}>
+              {isBackingUp ? <Loader2 size={24} className="animate-spin" /> : <CloudUpload size={24} />}
+            </div>
             <div className="text-left">
-              <p className="font-black text-lg leading-none">WhatsApp Backup</p>
+              <p className="font-black text-lg leading-none">{isBackingUp ? 'Processing...' : 'WhatsApp Backup'}</p>
               <p className="text-[10px] font-bold uppercase opacity-60 mt-1">Daily Safety Export</p>
             </div>
           </div>

@@ -1,3 +1,4 @@
+
 import { Sale, db } from '../db.ts';
 
 export const formatNaira = (amount: number) => {
@@ -57,17 +58,13 @@ export const generateShopKey = async () => {
   };
 
   const jsonStr = JSON.stringify(payload);
-  // Using a more robust encoding for UTF-8
   const base64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => 
     String.fromCharCode(parseInt(p1, 16))
   ));
   
   const key = `SHOP-KEY-${base64}`;
-
   const message = `🚀 *Shop Setup Key for ${shopName}*\n\nCopy the text below and paste it into your Shop Manager app to sync inventory and staff.\n\n${key}`;
 
-  // If the key is very long, it might break URL limits (approx 2000 chars)
-  // We'll try to copy to clipboard regardless for reliability
   try {
     await navigator.clipboard.writeText(key);
     alert('Setup Key copied to clipboard! You can now paste it into WhatsApp.');
@@ -85,8 +82,6 @@ export const generateShopKey = async () => {
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
     }
   } else {
-    // For long keys, just direct them to WhatsApp with a trimmed message if needed
-    // or rely on the clipboard alert we just showed.
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message.substring(0, 1500))}`, '_blank');
   }
 };
@@ -96,7 +91,6 @@ export const decodeShopKey = (key: string) => {
   if (!trimmedKey.includes('SHOP-KEY-')) return null;
   
   try {
-    // Extract key even if surrounded by other text
     const match = trimmedKey.match(/SHOP-KEY-([A-Za-z0-9+/=]+)/);
     if (!match) return null;
     
@@ -112,21 +106,41 @@ export const decodeShopKey = (key: string) => {
   }
 };
 
-export const backupToWhatsApp = (data: any) => {
+/**
+ * Enhanced Backup Function
+ * Tries Native Share (best for WhatsApp), fallbacks to Direct Download (best for PC/Browsers)
+ */
+export const backupToWhatsApp = async (data: any) => {
   const jsonString = JSON.stringify(data, null, 2);
+  const dateStr = new Date().toISOString().split('T')[0];
+  const fileName = `naijashop_backup_${dateStr}.json`;
   const blob = new Blob([jsonString], { type: 'application/json' });
-  const file = new File([blob], `naijashop_backup_${new Date().toISOString().split('T')[0]}.json`, { type: 'application/json' });
+  const file = new File([blob], fileName, { type: 'application/json' });
 
-  if (navigator.share) {
-    navigator.share({
-      title: 'NaijaShop Database Backup',
-      text: 'My business data backup',
-      files: [file]
-    }).catch(err => console.error('Error sharing backup:', err));
-  } else {
-    const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
-    const message = `*${shopName} Backup Data*\n\n${jsonString.substring(0, 1000)}... (truncated)`;
-    const encodedMessage = encodeURIComponent(message);
-    window.open(`https://api.whatsapp.com/send?text=${encodedMessage}`, '_blank');
+  // 1. Try Mobile Share API (Direct to WhatsApp)
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        title: 'NaijaShop Database Backup',
+        text: `Backup data for ${localStorage.getItem('shop_name') || 'Business'}`,
+        files: [file]
+      });
+      return; // Success!
+    } catch (err) {
+      console.warn('Share was cancelled or failed, trying download fallback...', err);
+    }
   }
+
+  // 2. Fail-safe Fallback: Direct File Download
+  // This works everywhere, including Desktop browsers
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  alert("WhatsApp direct sharing is limited on this browser. \n\nYour backup file has been DOWNLOADED to your device instead. Please send this file to your WhatsApp manually to keep it safe.");
 };
