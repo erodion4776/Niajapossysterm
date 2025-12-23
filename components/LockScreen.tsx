@@ -38,15 +38,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       setTempOtp(otp);
 
-      // 2. Set OTP as the current Admin PIN in DB
-      const admin = await db.users.where('role').equals('Admin').first();
-      if (admin && admin.id) {
-        await db.users.update(admin.id, { pin: otp });
-      }
-
-      // 3. Mark activation and force PIN change flow
+      // 2. Persistent storage for next phase
+      localStorage.setItem('temp_otp', otp);
       localStorage.setItem('is_activated', 'true');
       localStorage.setItem('is_setup_pending', 'true');
+      
       await db.settings.put({ key: 'is_activated', value: true });
       
       setShowOtpScreen(true);
@@ -83,7 +79,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         </div>
 
         <button 
-          onClick={onUnlock}
+          onClick={() => {
+            // Force reload to trigger App.tsx switchboard evaluation
+            window.location.reload();
+          }}
           className="w-full max-w-sm bg-white text-emerald-950 font-black py-6 rounded-[28px] flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl uppercase tracking-widest text-xs"
         >
           Go to PIN Setup <ArrowRight size={18} />

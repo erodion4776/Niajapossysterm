@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData } from '../db.ts';
 import { decodeShopKey } from '../utils/whatsapp.ts';
-import { Lock, User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (user: any) => void;
@@ -18,53 +18,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [importKey, setImportKey] = useState('');
   const [importError, setImportError] = useState('');
 
-  // First Login / PIN Change States
-  const [isSettingUpPin, setIsSettingUpPin] = useState(false);
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
-  const [setupError, setSetupError] = useState('');
-
   const handleLogin = () => {
     if (selectedUser && selectedUser.pin === pin) {
-      const setupPending = localStorage.getItem('is_setup_pending') === 'true';
-      
-      // If Admin and flag is set, push to PIN change UI
-      if (selectedUser.role === 'Admin' && setupPending) {
-        setIsSettingUpPin(true);
-      } else {
-        onLogin(selectedUser);
-      }
+      onLogin(selectedUser);
     } else {
       setError('Incorrect PIN');
       setPin('');
       setTimeout(() => setError(''), 2000);
-    }
-  };
-
-  const handleSetPermanentPin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSetupError('');
-
-    if (newPin.length !== 4) {
-      setSetupError('PIN must be 4 digits');
-      return;
-    }
-    if (newPin === '0000') {
-      setSetupError('PIN "0000" is blocked for security');
-      return;
-    }
-    if (newPin !== confirmPin) {
-      setSetupError('PINs do not match');
-      return;
-    }
-
-    try {
-      await db.users.update(selectedUser.id, { pin: newPin });
-      localStorage.removeItem('is_setup_pending');
-      localStorage.setItem('is_first_launch', 'false');
-      onLogin({ ...selectedUser, pin: newPin });
-    } catch (err) {
-      setSetupError('Failed to save PIN');
     }
   };
 
@@ -90,48 +50,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     }
   };
 
-  if (isSettingUpPin) {
-    return (
-      <div className="fixed inset-0 z-[700] bg-emerald-950 flex flex-col items-center justify-center p-8 text-white text-center animate-in slide-in-from-bottom duration-500">
-        <div className="w-full max-w-sm space-y-8">
-          <div className="text-center">
-            <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl">
-              <Key size={40} />
-            </div>
-            <h2 className="text-3xl font-black tracking-tight mb-2 uppercase">Set Admin PIN</h2>
-            <p className="text-emerald-500/60 text-xs font-medium leading-relaxed px-4">
-              Create a permanent 4-digit secret PIN for your Admin account. PIN "0000" is blocked.
-            </p>
-          </div>
-
-          <form onSubmit={handleSetPermanentPin} className="space-y-4">
-            <input 
-              type="password" inputMode="numeric" maxLength={4} placeholder="NEW 4-DIGIT PIN"
-              className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[28px] py-6 text-center text-3xl tracking-[0.6em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-inner"
-              value={newPin} onChange={(e) => setNewPin(e.target.value)}
-            />
-            <input 
-              type="password" inputMode="numeric" maxLength={4} placeholder="CONFIRM NEW PIN"
-              className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[28px] py-6 text-center text-3xl tracking-[0.6em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-inner"
-              value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)}
-            />
-            
-            {setupError && (
-              <div className="bg-red-500/20 border border-red-500/40 p-4 rounded-2xl flex items-center gap-3 animate-bounce">
-                <AlertCircle className="text-red-400" size={18} />
-                <p className="text-red-300 text-[10px] font-black uppercase tracking-widest">{setupError}</p>
-              </div>
-            )}
-
-            <button type="submit" className="w-full bg-emerald-500 text-emerald-950 font-black py-6 rounded-[28px] shadow-2xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2">
-              Save & Enter Store <CheckCircle2 size={18} />
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
   if (showImport) {
     return (
       <div className="fixed inset-0 z-[550] bg-white flex flex-col p-6 overflow-y-auto">
@@ -154,7 +72,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <img src="https://i.ibb.co/CK8Xt78C/IMG-20251222-212138.png" alt="NaijaShop" className="absolute inset-0 w-full h-full object-cover opacity-80" />
         <div className="absolute inset-0 bg-gradient-to-t from-emerald-950 via-emerald-950/60 to-transparent"></div>
         <div className="relative z-10 text-center px-8 mt-16 animate-in fade-in zoom-in duration-700">
-          <h1 className="text-5xl font-black tracking-tighter mb-2 uppercase drop-shadow-2xl">NaijaShop</h1>
+          <h1 className="text-5xl font-black tracking-tighter mb-2 uppercase drop-shadow-2xl text-white">NaijaShop</h1>
           <div className="bg-emerald-500/20 backdrop-blur-md px-4 py-1.5 rounded-full border border-emerald-400/30 inline-block shadow-lg">
             <p className="text-emerald-400 font-black uppercase text-[10px] tracking-[0.4em]">Secure Terminal</p>
           </div>
@@ -189,13 +107,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             <div className="text-center">
               <div className="w-24 h-24 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl"><ShieldCheck size={40} /></div>
               <h2 className="text-2xl font-black">{selectedUser.name}</h2>
-              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.3em] mt-3">
-                {selectedUser.pin.length === 6 ? 'Enter 6-Digit Code' : 'Enter Secret PIN'}
-              </p>
+              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.3em] mt-3">Enter PIN to Unlock</p>
             </div>
             <div className="space-y-6">
               <input 
-                type="password" inputMode="numeric" maxLength={selectedUser.pin.length} placeholder={selectedUser.pin.length === 6 ? '••••••' : '••••'}
+                type="password" inputMode="numeric" maxLength={4} placeholder="••••"
                 className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[32px] py-8 text-center text-4xl tracking-[0.6em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-inner"
                 value={pin} onChange={(e) => setPin(e.target.value)} onKeyUp={(e) => e.key === 'Enter' && handleLogin()} autoFocus
               />

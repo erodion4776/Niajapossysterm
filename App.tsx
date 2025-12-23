@@ -11,20 +11,21 @@ import { FAQ } from './pages/FAQ.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
+import { SetupWizard } from './components/SetupWizard.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, History, ShieldAlert } from 'lucide-react';
 
-const TRIAL_PERIOD_DAYS = 3;
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
-  const [isLocked, setIsLocked] = useState(false);
-  const [isPirated, setIsPirated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isAppRoute, setIsAppRoute] = useState(() => 
-    window.location.pathname.startsWith('/app') || localStorage.getItem('is_activated') === 'true'
-  );
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isPirated, setIsPirated] = useState(false);
+  
+  // App States
+  const [isAtLanding, setIsAtLanding] = useState(() => window.location.pathname === '/' || window.location.pathname === '');
+  const [isActivated, setIsActivated] = useState(() => localStorage.getItem('is_activated') === 'true');
+  const [isSetupPending, setIsSetupPending] = useState(() => localStorage.getItem('is_setup_pending') === 'true');
 
   useEffect(() => {
     const startup = async () => {
@@ -39,101 +40,73 @@ const App: React.FC = () => {
         setIsPirated(true);
       }
 
-      // 2. Init DB & Trial tracking
+      // 2. Init DB & Trial
       await initTrialDate();
       
-      // 3. Perform Security Status Check
-      await checkSecurityStatus();
-      
+      // Sync DB activation state to localStorage
+      const dbActivated = await db.settings.get('is_activated');
+      if (dbActivated?.value === true && !isActivated) {
+        localStorage.setItem('is_activated', 'true');
+        setIsActivated(true);
+      }
+
       setIsInitialized(true);
     };
     startup();
 
     // Navigation Listener
     const handleUrlChange = () => {
-      setIsAppRoute(window.location.pathname.startsWith('/app') || localStorage.getItem('is_activated') === 'true');
+      setIsAtLanding(window.location.pathname === '/' || window.location.pathname === '');
     };
     window.addEventListener('popstate', handleUrlChange);
     return () => window.removeEventListener('popstate', handleUrlChange);
-  }, []);
-
-  const checkSecurityStatus = async () => {
-    const dbActivated = await db.settings.get('is_activated');
-    const isActivated = localStorage.getItem('is_activated') === 'true' || dbActivated?.value === true;
-    
-    if (isActivated) {
-      if (localStorage.getItem('is_activated') !== 'true') localStorage.setItem('is_activated', 'true');
-      if (dbActivated?.value !== true) await db.settings.put({ key: 'is_activated', value: true });
-      setIsLocked(false);
-      return;
-    }
-
-    const installDateStr = localStorage.getItem('install_date');
-    if (!installDateStr) return;
-    
-    const installDate = parseInt(installDateStr);
-    const msUsed = Date.now() - installDate;
-    const daysUsed = msUsed / (1000 * 60 * 60 * 24);
-
-    if (daysUsed >= TRIAL_PERIOD_DAYS) {
-      setIsLocked(true);
-    }
-  };
+  }, [isActivated]);
 
   const handleStartTrial = () => {
     window.history.pushState({}, '', '/app');
-    setIsAppRoute(true);
-    checkSecurityStatus();
+    setIsAtLanding(false);
   };
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    localStorage.setItem('user_role', user.role);
-    localStorage.setItem('user_name', user.name);
   };
 
-  const handleUnlock = async () => {
-    await checkSecurityStatus();
-    setIsLocked(false);
-  };
-
-  // 1. Anti-Piracy Guard
+  // 1. Piracy Guard
   if (isPirated) {
     return (
       <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
-        <div className="bg-red-500/20 p-6 rounded-full mb-8 border border-red-500/30 animate-pulse">
-          <ShieldAlert size={80} className="text-red-500" />
-        </div>
-        <h1 className="text-4xl font-black mb-4 tracking-tighter uppercase leading-none">Access<br/>Denied</h1>
-        <p className="text-red-200/60 max-w-sm mb-8 font-medium">Unauthorized Domain Detected</p>
-        <div className="bg-white/5 border border-white/10 p-6 rounded-3xl text-sm font-mono mb-8">
-          {window.location.hostname}
-        </div>
+        <ShieldAlert size={80} className="text-red-500 mb-6 animate-pulse" />
+        <h1 className="text-4xl font-black mb-4 uppercase leading-none">Access Denied</h1>
+        <p className="text-red-200/60 max-w-sm font-medium">Unauthorized Domain Detected</p>
       </div>
     );
   }
 
-  // 2. Landing Page (Only if not in app or not activated)
-  if (!isAppRoute && !localStorage.getItem('is_activated')) {
+  // State Switchboard logic
+  if (!isInitialized) return null;
+
+  // Level 1: Landing Page
+  if (isAtLanding && !isActivated) {
     return <LandingPage onStartTrial={handleStartTrial} />;
   }
 
-  // 3. Loading State
-  if (!isInitialized) return null;
-
-  // 4. Trial Expiry / Activation Guard
-  if (isLocked) {
-    return <LockScreen onUnlock={handleUnlock} />;
+  // Level 2: License Check
+  if (!isActivated) {
+    return <LockScreen onUnlock={() => window.location.reload()} />;
   }
 
-  // 5. Authentication Guard
+  // Level 3: PIN Setup Wizard
+  if (isSetupPending) {
+    return <SetupWizard onComplete={() => window.location.reload()} />;
+  }
+
+  // Level 4: Auth Screen
   if (!currentUser) {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  // 6. Private POS App Layout
+  // Level 5: Main Dashboard
   const isAdmin = currentUser.role === 'Admin';
-
   const renderPage = () => {
     switch (currentPage) {
       case Page.DASHBOARD: return <Dashboard setPage={setCurrentPage} role={currentUser.role} />;
