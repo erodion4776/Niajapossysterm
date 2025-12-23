@@ -12,7 +12,7 @@ import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, History, ShieldAlert } from 'lucide-react';
 
-const TRIAL_PERIOD_DAYS = 0;
+const TRIAL_PERIOD_DAYS = 3;
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
 
 const App: React.FC = () => {

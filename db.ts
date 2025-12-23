@@ -73,11 +73,19 @@ export const db = dexieDb;
  * Initializes basic shop data and trial tracking.
  */
 export async function initTrialDate() {
-  const trialStart = localStorage.getItem('install_date');
-  if (!trialStart) {
-    localStorage.setItem('install_date', Date.now().toString());
+  let installDateStr = localStorage.getItem('install_date');
+  if (!installDateStr) {
+    installDateStr = Date.now().toString();
+    localStorage.setItem('install_date', installDateStr);
   }
   
+  // Ensure trial_start is also in the database for components like TrialGuard
+  const trialStartValue = parseInt(installDateStr);
+  const dbTrialStart = await db.settings.get('trial_start');
+  if (!dbTrialStart) {
+    await db.settings.put({ key: 'trial_start', value: trialStartValue });
+  }
+
   // Request persistent storage from the browser
   if (navigator.storage && navigator.storage.persist) {
     await navigator.storage.persist();

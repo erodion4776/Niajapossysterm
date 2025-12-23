@@ -8,8 +8,8 @@ interface TrialGuardProps {
   children: (isExpired: boolean) => React.ReactNode;
 }
 
-// 5 minutes for testing, 24 hours for real (24 * 60 * 60 * 1000)
-const TRIAL_DURATION_MS = 5 * 60 * 1000; 
+// 3 days duration (3 * 24 * 60 * 60 * 1000)
+const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000; 
 
 export const TrialGuard: React.FC<TrialGuardProps> = ({ children }) => {
   const trialStart = useLiveQuery(() => db.settings.get('trial_start'));
