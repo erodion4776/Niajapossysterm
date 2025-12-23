@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData } from '../db';
 import { decodeShopKey } from '../utils/whatsapp';
-import { Lock, User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X } from 'lucide-react';
+import { Lock, User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (user: any) => void;
@@ -18,13 +18,51 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [importKey, setImportKey] = useState('');
   const [importError, setImportError] = useState('');
 
+  // Setup PIN States
+  const [isSettingUpPin, setIsSettingUpPin] = useState(false);
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [setupError, setSetupError] = useState('');
+
   const handleLogin = () => {
     if (selectedUser && selectedUser.pin === pin) {
-      onLogin(selectedUser);
+      // Check if this is the first-time setup for an Admin
+      const setupPending = localStorage.getItem('is_setup_pending') === 'true';
+      if (selectedUser.role === 'Admin' && setupPending) {
+        setIsSettingUpPin(true);
+      } else {
+        onLogin(selectedUser);
+      }
     } else {
       setError('Incorrect PIN');
       setPin('');
       setTimeout(() => setError(''), 2000);
+    }
+  };
+
+  const handleSetPermanentPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSetupError('');
+
+    if (newPin.length !== 4) {
+      setSetupError('PIN must be exactly 4 digits');
+      return;
+    }
+    if (newPin === '0000') {
+      setSetupError('PIN "0000" is blocked for security');
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setSetupError('PINs do not match');
+      return;
+    }
+
+    try {
+      await db.users.update(selectedUser.id, { pin: newPin });
+      localStorage.removeItem('is_setup_pending');
+      onLogin({ ...selectedUser, pin: newPin });
+    } catch (err) {
+      setSetupError('Failed to save PIN: ' + (err as Error).message);
     }
   };
 
@@ -56,6 +94,74 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       }
     }
   };
+
+  // 1. Setup Permanent PIN Screen
+  if (isSettingUpPin) {
+    return (
+      <div className="fixed inset-0 z-[250] bg-emerald-950 flex flex-col items-center justify-center p-8 text-white animate-in slide-in-from-bottom duration-500">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl">
+              <Key size={40} />
+            </div>
+            <h2 className="text-3xl font-black tracking-tight leading-none mb-3">Setup Admin PIN</h2>
+            <p className="text-emerald-500/60 text-xs font-medium leading-relaxed">
+              Create a permanent 4-digit secret PIN to replace your temporary activation code.
+            </p>
+          </div>
+
+          <form onSubmit={handleSetPermanentPin} className="space-y-6">
+            <div className="space-y-4">
+              <div className="relative">
+                <input 
+                  type="password" 
+                  inputMode="numeric"
+                  maxLength={4}
+                  placeholder="NEW PIN"
+                  className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[28px] py-6 text-center text-3xl tracking-[0.6em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all placeholder:text-emerald-900/40 shadow-inner"
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value)}
+                />
+              </div>
+              <div className="relative">
+                <input 
+                  type="password" 
+                  inputMode="numeric"
+                  maxLength={4}
+                  placeholder="CONFIRM PIN"
+                  className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[28px] py-6 text-center text-3xl tracking-[0.6em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all placeholder:text-emerald-900/40 shadow-inner"
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {setupError && (
+              <div className="bg-red-500/20 border border-red-500/40 p-4 rounded-2xl flex items-center gap-3 animate-bounce">
+                <AlertCircle className="text-red-400 shrink-0" size={18} />
+                <p className="text-red-300 text-[10px] font-black uppercase tracking-widest">{setupError}</p>
+              </div>
+            )}
+
+            <button 
+              type="submit"
+              className="w-full bg-emerald-500 text-emerald-950 font-black py-6 rounded-[28px] shadow-2xl active:scale-95 transition-all uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3"
+            >
+              Save & Secure <CheckCircle2 size={20} />
+            </button>
+          </form>
+
+          <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-start gap-3">
+            <Smartphone className="text-emerald-500 shrink-0" size={16} />
+            <p className="text-[9px] text-emerald-100/40 font-bold leading-relaxed">
+              <span className="text-emerald-400 block mb-0.5 uppercase tracking-wider">Security Rule:</span>
+              Your PIN is stored only on this phone. Do not use generic codes like 0000 or 1234.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (showImport) {
     return (
@@ -166,16 +272,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 <div className="absolute inset-0 bg-emerald-500/5 animate-pulse rounded-[32px]"></div>
               </div>
               <h2 className="text-2xl font-black tracking-tight leading-none">Welcome, {selectedUser.name}</h2>
-              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.2em] mt-3">Enter Secret 4-Digit PIN</p>
+              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.2em] mt-3">Enter {selectedUser.pin.length === 6 ? 'Temporary Code' : 'Secret 4-Digit PIN'}</p>
             </div>
 
             <div className="space-y-6">
               <input 
                 type="password" 
                 inputMode="numeric"
-                maxLength={4}
-                placeholder="••••"
-                className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[32px] py-8 text-center text-5xl tracking-[0.8em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all placeholder:text-emerald-900/20 shadow-inner"
+                maxLength={selectedUser.pin.length}
+                placeholder={selectedUser.pin.length === 6 ? '••••••' : '••••'}
+                className="w-full bg-emerald-900/30 border border-emerald-800/60 rounded-[32px] py-8 text-center text-4xl tracking-[0.6em] font-black focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all placeholder:text-emerald-900/20 shadow-inner"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
                 onKeyUp={(e) => e.key === 'Enter' && handleLogin()}

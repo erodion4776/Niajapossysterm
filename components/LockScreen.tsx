@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Lock, ShieldCheck, Key, Copy, Check, AlertCircle } from 'lucide-react';
+import { MessageCircle, Lock, ShieldCheck, Key, Copy, Check, AlertCircle, ArrowRight, Smartphone } from 'lucide-react';
 import { getRequestCode, verifyActivationKey } from '../utils/security.ts';
 import { db } from '../db.ts';
 
@@ -15,6 +15,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [copied, setCopied] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [saltMissing, setSaltMissing] = useState(false);
+  
+  // OTP States
+  const [showOtpScreen, setShowOtpScreen] = useState(false);
+  const [tempOtp, setTempOtp] = useState('');
 
   useEffect(() => {
     getRequestCode().then(setRequestCode);
@@ -38,15 +42,67 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     const isValid = await verifyActivationKey(requestCode, activationKey);
     
     if (isValid) {
+      // 1. Generate 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      setTempOtp(otp);
+
+      // 2. Update Admin in DB with this OTP
+      const admin = await db.users.where('role').equals('Admin').first();
+      if (admin && admin.id) {
+        await db.users.update(admin.id, { pin: otp });
+      }
+
+      // 3. Mark activation and setup pending
       localStorage.setItem('is_activated', 'true');
+      localStorage.setItem('is_setup_pending', 'true');
       await db.settings.put({ key: 'is_activated', value: true });
-      onUnlock();
+      
+      setShowOtpScreen(true);
     } else {
       setError(true);
       setTimeout(() => setError(false), 2000);
     }
     setIsVerifying(false);
   };
+
+  if (showOtpScreen) {
+    return (
+      <div className="fixed inset-0 z-[200] bg-emerald-950 flex flex-col items-center justify-center p-8 text-white text-center animate-in fade-in duration-500">
+        <div className="w-24 h-24 bg-emerald-500/20 rounded-[32px] flex items-center justify-center mb-8 border border-emerald-500/30 shadow-2xl relative">
+          <ShieldCheck size={48} className="text-emerald-400 z-10" />
+          <div className="absolute inset-0 bg-emerald-400/10 animate-ping rounded-[32px]"></div>
+        </div>
+        
+        <h1 className="text-3xl font-black mb-2 tracking-tight uppercase">App Activated!</h1>
+        <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm leading-relaxed">
+          Security protocol initiated. Use this temporary code to set your permanent Admin PIN.
+        </p>
+
+        <div className="w-full max-w-sm bg-white/5 border border-white/10 p-8 rounded-[40px] mb-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500/30"></div>
+          <p className="text-emerald-500/40 text-[10px] font-black uppercase tracking-[0.3em] mb-4">Temporary Admin PIN</p>
+          <div className="text-6xl font-mono font-black tracking-[0.2em] text-white">
+            {tempOtp}
+          </div>
+          <div className="mt-6 flex items-center justify-center gap-2 text-amber-400 bg-amber-400/10 py-2 px-4 rounded-full border border-amber-400/20">
+            <AlertCircle size={14} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Write this down now</span>
+          </div>
+        </div>
+
+        <button 
+          onClick={onUnlock}
+          className="w-full max-w-sm bg-white text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl uppercase tracking-widest text-xs"
+        >
+          Continue to Login <ArrowRight size={18} />
+        </button>
+
+        <p className="mt-8 text-[9px] text-emerald-500/30 font-black uppercase tracking-[0.2em]">
+          Secured by NaijaShop Multi-Layer Shield
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[200] bg-emerald-950 flex flex-col items-center justify-center p-6 text-white text-center overflow-y-auto">
