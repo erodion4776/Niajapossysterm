@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../db.ts';
-import { ShieldCheck, CheckCircle2, AlertCircle, ArrowRight, ChevronLeft, Sparkles } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, AlertCircle, ArrowRight, ChevronLeft, Sparkles, Lock } from 'lucide-react';
 
 interface SetupWizardProps {
   onComplete: () => void;
@@ -91,14 +91,14 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         await db.users.update(admin.id, { pin: newPin });
         
         // Finalize state
-        localStorage.removeItem('is_setup_pending');
+        localStorage.setItem('is_setup_pending', 'false');
         localStorage.removeItem('temp_otp');
         
         // Celebration!
         setStep('SUCCESS');
         setTimeout(() => {
           onComplete();
-        }, 2000);
+        }, 2500);
       }
     } catch (err) {
       setError('System Error: Could not save PIN');
@@ -132,13 +132,13 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
   if (step === 'SUCCESS') {
     return (
-      <div className="fixed inset-0 z-[1000] bg-emerald-600 flex flex-col items-center justify-center p-8 text-white text-center animate-in fade-in duration-500">
+      <div className="fixed inset-0 z-[1000] bg-emerald-600 flex flex-col items-center justify-center p-8 text-white text-center animate-in fade-in duration-700">
         <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mb-6 animate-bounce">
           <Sparkles size={48} className="text-white" />
         </div>
-        <h1 className="text-4xl font-black mb-4 uppercase tracking-tighter">Success!</h1>
-        <p className="text-xl font-bold opacity-90 max-w-xs">Setup Complete! Your shop is now live and secured.</p>
-        <div className="mt-12 flex gap-1">
+        <h1 className="text-4xl font-black mb-4 uppercase tracking-tighter drop-shadow-lg">Success!</h1>
+        <p className="text-xl font-bold opacity-90 max-w-xs drop-shadow-md">Setup Complete! Your shop is now live and secured.</p>
+        <div className="mt-12 flex gap-2">
           <div className="w-2 h-2 bg-white rounded-full animate-ping"></div>
           <div className="w-2 h-2 bg-white/50 rounded-full"></div>
           <div className="w-2 h-2 bg-white/20 rounded-full"></div>
@@ -148,18 +148,21 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-[600] bg-gray-100 flex flex-col items-center justify-center p-6 animate-in fade-in duration-500 overflow-x-hidden">
-      <div className="w-full max-w-sm bg-white rounded-[40px] shadow-2xl overflow-hidden border border-gray-200">
+    <div className="fixed inset-0 z-[600] bg-emerald-950 flex flex-col items-center justify-center p-4 animate-in fade-in duration-500 overflow-hidden">
+      {/* Immersive Background Gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-950 opacity-100"></div>
+      
+      <div className="w-full max-w-sm bg-white rounded-[40px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] overflow-hidden border border-white/10 relative z-10 animate-in zoom-in-95 duration-500">
         
-        {/* Image Header */}
-        <div className="h-40 w-full bg-gray-50 flex items-center justify-center border-b border-gray-100">
+        {/* Image Header with Light Background */}
+        <div className="h-40 w-full bg-gray-50 flex items-center justify-center border-b border-gray-100 overflow-hidden">
           <img 
             src={step === 'WELCOME' 
               ? "https://i.ibb.co/m5y9NjqV/1766529834120-019b4d61-d179-7e3d-aad7-4ae5252e707b.png"
               : "https://i.ibb.co/XxDDvb3k/gemini-3-pro-image-preview-nano-banana-pro-a-A-high-quality-3-D-is.png"
             } 
-            alt="Setup"
-            className="h-full w-full object-contain p-4"
+            alt="Setup Stage"
+            className="h-full w-full object-contain p-4 animate-in fade-in zoom-in duration-700"
           />
         </div>
 
@@ -173,7 +176,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                 <p className="text-gray-400 text-sm font-medium">Let's set up your secure shop manager.</p>
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl space-y-2">
+              <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl space-y-2 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-2 opacity-5 text-emerald-900 group-hover:scale-110 transition-transform">
+                  <Lock size={40} />
+                </div>
                 <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Your One-Time Setup Code</p>
                 <div className="text-4xl font-mono font-black text-emerald-900 tracking-[0.2em]">{tempOtp}</div>
               </div>
@@ -221,7 +227,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                 
                 <button 
                   onClick={() => setStep('WELCOME')}
-                  className="text-emerald-600 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 mx-auto pt-2"
+                  className="text-emerald-600 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 mx-auto pt-2 hover:bg-emerald-50 px-4 py-2 rounded-full transition-colors"
                 >
                   <ChevronLeft size={14} /> Go Back
                 </button>
@@ -249,7 +255,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                 </div>
 
                 {error && (
-                  <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3">
+                  <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top duration-300">
                     <AlertCircle className="text-red-500" size={16} />
                     <p className="text-red-600 text-[10px] font-black uppercase tracking-widest">{error}</p>
                   </div>
@@ -269,13 +275,17 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         </div>
         
         {/* Footnote */}
-        <div className="p-6 bg-gray-50 flex items-center gap-3">
+        <div className="p-6 bg-gray-50 flex items-center gap-3 border-t border-gray-100">
           <ShieldCheck className="text-emerald-500 shrink-0" size={20} />
           <p className="text-[9px] text-gray-400 font-bold leading-relaxed uppercase tracking-wider">
-            Enterprise Encryption Enabled
+            Military-Grade Encryption Enabled
           </p>
         </div>
       </div>
+      
+      {/* Decorative Gradient Glows */}
+      <div className="absolute top-1/4 -left-20 w-64 h-64 bg-emerald-500/20 rounded-full blur-[120px]"></div>
+      <div className="absolute bottom-1/4 -right-20 w-64 h-64 bg-emerald-400/20 rounded-full blur-[120px]"></div>
     </div>
   );
 };
