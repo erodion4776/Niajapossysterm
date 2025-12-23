@@ -8,6 +8,7 @@ import { POS } from './pages/POS.tsx';
 import { Sales } from './pages/Sales.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { FAQ } from './pages/FAQ.tsx';
+import { LandingPage } from './pages/LandingPage.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, History, ShieldAlert } from 'lucide-react';
@@ -21,6 +22,7 @@ const App: React.FC = () => {
   const [isPirated, setIsPirated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isAppRoute, setIsAppRoute] = useState(() => window.location.pathname.startsWith('/app'));
 
   useEffect(() => {
     const startup = async () => {
@@ -39,6 +41,13 @@ const App: React.FC = () => {
       setIsInitialized(true);
     };
     startup();
+
+    // Listen for back/forward navigation
+    const handlePopState = () => {
+      setIsAppRoute(window.location.pathname.startsWith('/app'));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const checkActivationStatus = async () => {
@@ -64,11 +73,21 @@ const App: React.FC = () => {
     }
   };
 
+  const handleStartTrial = () => {
+    window.history.pushState({}, '', '/app');
+    setIsAppRoute(true);
+  };
+
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     localStorage.setItem('user_role', user.role);
     localStorage.setItem('user_name', user.name);
   };
+
+  // If we are on the root route and haven't entered the app, show landing
+  if (!isAppRoute && !localStorage.getItem('is_activated')) {
+    return <LandingPage onStartTrial={handleStartTrial} />;
+  }
 
   if (isPirated) {
     return (
