@@ -1,9 +1,8 @@
-
 import React, { useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData } from '../db.ts';
 import { decodeShopKey } from '../utils/whatsapp.ts';
-import { User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X } from 'lucide-react';
+import { User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X, RefreshCw } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (user: any) => void;
@@ -17,6 +16,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [showImport, setShowImport] = useState(false);
   const [importKey, setImportKey] = useState('');
   const [importError, setImportError] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -32,23 +32,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     }
   };
 
+  // Fixed setArr to setPinArr to resolve "Cannot find name 'setArr'" error.
   const handleInputChange = (val: string, index: number) => {
     if (!/^\d*$/.test(val)) return;
     const newArr = [...pinArr];
     newArr[index] = val.slice(-1);
     setPinArr(newArr);
-    if (val && index < 3) {
-      pinRefs.current[index + 1]?.focus();
-    }
+    if (val && index < 3) pinRefs.current[index + 1]?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
-    if (e.key === 'Backspace' && !pinArr[index] && index > 0) {
-      pinRefs.current[index - 1]?.focus();
-    }
-    if (e.key === 'Enter' && pinArr.join('').length === 4) {
-      handleLogin();
-    }
+    if (e.key === 'Backspace' && !pinArr[index] && index > 0) pinRefs.current[index - 1]?.focus();
+    if (e.key === 'Enter' && pinArr.join('').length === 4) handleLogin();
   };
 
   const handleImportKey = async () => {
@@ -57,7 +52,43 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       setImportError('Invalid Shop Key.');
       return;
     }
+
+    // Handle Master Stock Update
+    if (data.type === 'STOCK_UPDATE') {
+      if (confirm(`Update stock levels from Admin? This will reset your current counts.`)) {
+        setIsProcessing(true);
+        try {
+          await db.transaction('rw', [db.inventory], async () => {
+            // Smart update: replace stock counts but preserve item IDs
+            for (const item of data.inventory) {
+              const existing = await db.inventory.where('name').equals(item.name).first();
+              if (existing) {
+                await db.inventory.update(existing.id!, { 
+                  stock: item.stock, 
+                  sellingPrice: item.sellingPrice,
+                  costPrice: item.costPrice 
+                });
+              } else {
+                const { id, ...rest } = item;
+                await db.inventory.add(rest);
+              }
+            }
+          });
+          alert('Stock Synced Successfully!');
+          setShowImport(false);
+          setImportKey('');
+        } catch (e) {
+          setImportError('Stock sync failed');
+        } finally {
+          setIsProcessing(false);
+        }
+      }
+      return;
+    }
+
+    // Handle Full Setup
     if (confirm(`Clone "${data.settings.shopName}" to this phone?`)) {
+      setIsProcessing(true);
       try {
         await clearAllData();
         await db.transaction('rw', [db.inventory, db.users], async () => {
@@ -69,22 +100,35 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         window.location.reload();
       } catch (e) {
         setImportError('Import failed');
+      } finally {
+        setIsProcessing(false);
       }
     }
   };
 
   if (showImport) {
     return (
-      <div className="fixed inset-0 z-[550] bg-white flex flex-col p-6 overflow-y-auto">
-        <button onClick={() => setShowImport(false)} className="self-end p-2 bg-gray-100 rounded-full mb-8"><X size={20} /></button>
+      <div className="fixed inset-0 z-[550] bg-white dark:bg-emerald-950 flex flex-col p-6 overflow-y-auto transition-colors duration-300">
+        <button onClick={() => setShowImport(false)} className="self-end p-2 bg-slate-100 dark:bg-emerald-900 rounded-full mb-8 dark:text-emerald-50"><X size={20} /></button>
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4"><Smartphone size={32} /></div>
-          <h2 className="text-2xl font-black text-gray-800 uppercase">Staff Sync</h2>
-          <p className="text-gray-400 text-sm mt-2">Paste the Setup Key from your Admin.</p>
+          <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mb-4"><RefreshCw size={32} className={isProcessing ? 'animate-spin' : ''} /></div>
+          <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Staff Sync</h2>
+          <p className="text-slate-400 dark:text-emerald-500/40 text-sm mt-2 font-medium">Paste the Sync Key from the Boss.</p>
         </div>
-        <textarea placeholder="Paste SHOP-KEY-..." className="w-full h-48 bg-gray-50 border border-gray-100 rounded-3xl p-5 text-xs font-mono mb-6 resize-none" value={importKey} onChange={(e) => setImportKey(e.target.value)} />
+        <textarea 
+          placeholder="Paste KEY here..." 
+          className="w-full h-48 bg-slate-50 dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-3xl p-5 text-xs font-mono mb-6 resize-none dark:text-emerald-50" 
+          value={importKey} 
+          onChange={(e) => setImportKey(e.target.value)} 
+        />
         {importError && <p className="text-red-500 text-xs font-bold mb-4 text-center">{importError}</p>}
-        <button onClick={handleImportKey} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs">Sync Shop Data</button>
+        <button 
+          onClick={handleImportKey} 
+          disabled={isProcessing || !importKey}
+          className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2"
+        >
+          {isProcessing ? 'Syncing...' : 'Update Records'} <ArrowRight size={16} />
+        </button>
       </div>
     );
   }
@@ -121,7 +165,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               ))}
             </div>
             <button onClick={() => setShowImport(true)} className="w-full bg-emerald-950/50 border border-emerald-800/40 text-emerald-400 font-black py-5 rounded-[28px] text-[10px] uppercase tracking-[0.2em] mt-4 shadow-inner">
-              New Staff Setup
+              Staff Sync / Update
             </button>
           </div>
         ) : (
@@ -143,8 +187,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     maxLength={1}
                     className="w-[45px] h-[50px] bg-emerald-900/30 border border-emerald-800/60 rounded-xl text-center text-xl font-black focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all shadow-inner"
                     value={digit}
-                    onChange={e => handleInputChange(e.target.value, idx)}
-                    onKeyDown={e => handleKeyDown(e, idx)}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (!/^\d*$/.test(val)) return;
+                      const newArr = [...pinArr];
+                      newArr[idx] = val.slice(-1);
+                      setPinArr(newArr);
+                      if (val && idx < 3) pinRefs.current[idx + 1]?.focus();
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Backspace' && !pinArr[idx] && idx > 0) pinRefs.current[idx - 1]?.focus();
+                    }}
                     autoFocus={idx === 0}
                   />
                 ))}

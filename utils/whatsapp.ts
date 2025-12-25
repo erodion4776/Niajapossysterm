@@ -42,6 +42,9 @@ export const shareReceiptToWhatsApp = (sale: Sale) => {
   window.open(`https://api.whatsapp.com/send?text=${encodedMessage}`, '_blank');
 };
 
+/**
+ * Generates a full shop setup key (Inventory + Staff Users)
+ */
 export const generateShopKey = async () => {
   const inventory = await db.inventory.toArray();
   const users = await db.users.toArray();
@@ -51,10 +54,7 @@ export const generateShopKey = async () => {
   const payload = {
     inventory,
     users,
-    settings: {
-      shopName,
-      shopInfo
-    }
+    settings: { shopName, shopInfo }
   };
 
   const jsonStr = JSON.stringify(payload);
@@ -74,10 +74,39 @@ export const generateShopKey = async () => {
 
   if (navigator.share && key.length < 1500) {
     try {
-      await navigator.share({
-        title: 'Staff Setup Key',
-        text: message
-      });
+      await navigator.share({ title: 'Staff Setup Key', text: message });
+    } catch (e) {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
+    }
+  } else {
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message.substring(0, 1500))}`, '_blank');
+  }
+};
+
+/**
+ * Generates a key for syncing MASTER stock back to staff after reconciliation.
+ */
+export const generateMasterStockKey = async () => {
+  const inventory = await db.inventory.toArray();
+  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+
+  const payload = {
+    inventory,
+    type: 'STOCK_UPDATE',
+    timestamp: Date.now()
+  };
+
+  const jsonStr = JSON.stringify(payload);
+  const base64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => 
+    String.fromCharCode(parseInt(p1, 16))
+  ));
+  
+  const key = `STOCK-SYNC-${base64}`;
+  const message = `📦 *Master Stock Update: ${shopName}*\n\nStaff: Use this key to reset your stock counts to match the Boss's records.\n\n${key}`;
+
+  if (navigator.share && key.length < 1500) {
+    try {
+      await navigator.share({ title: 'Stock Update Key', text: message });
     } catch (e) {
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
     }
@@ -88,10 +117,13 @@ export const generateShopKey = async () => {
 
 export const decodeShopKey = (key: string) => {
   const trimmedKey = key.trim();
-  if (!trimmedKey.includes('SHOP-KEY-')) return null;
+  const isSetup = trimmedKey.includes('SHOP-KEY-');
+  const isStock = trimmedKey.includes('STOCK-SYNC-');
+  
+  if (!isSetup && !isStock) return null;
   
   try {
-    const match = trimmedKey.match(/SHOP-KEY-([A-Za-z0-9+/=]+)/);
+    const match = trimmedKey.match(/(?:SHOP-KEY-|STOCK-SYNC-)([A-Za-z0-9+/=]+)/);
     if (!match) return null;
     
     const base64 = match[1];
@@ -113,23 +145,16 @@ export type BackupResult = {
   totalRecords?: number;
 };
 
-/**
- * Robust Backup Utility for Deep History with GZIP Compression
- * Captures all tables and compresses the payload using pako for size efficiency.
- */
 export const backupToWhatsApp = async (data: any): Promise<BackupResult> => {
   const shopName = data.shopName || 'NaijaShop';
   const timestamp = data.timestamp || Date.now();
   const dateStr = new Date(timestamp).toISOString().split('T')[0];
-  
-  // Use .json.gz to signify it's a compressed backup
   const fileName = `NAIJASHOP_SAFE_BACKUP_${dateStr}.json.gz`;
   
   const totalRecords = Object.values(data).reduce((acc: number, val: any) => {
     return acc + (Array.isArray(val) ? val.length : 0);
   }, 0) as number;
 
-  // Convert JSON to binary and compress
   const jsonString = JSON.stringify(data);
   const uint8Data = new TextEncoder().encode(jsonString);
   const compressed = pako.gzip(uint8Data);
@@ -142,23 +167,12 @@ export const backupToWhatsApp = async (data: any): Promise<BackupResult> => {
       const blob = new Blob([compressed], { type: 'application/gzip' });
       const file = new File([blob], fileName, { type: 'application/gzip' });
 
-      await navigator.share({
-        title: shareTitle,
-        text: shareText,
-        files: [file]
-      });
-      
+      await navigator.share({ title: shareTitle, text: shareText, files: [file] });
       await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
       return { success: true, method: 'FILE_SHARE', fileName, totalRecords };
     } catch (stage1Error) {
-      console.warn("File share failed, falling back to text share...");
       try {
-        // Text share fallback uses minified JSON (compression doesn't work for text share without base64 which is longer)
-        await navigator.share({
-          title: shareTitle,
-          text: `NaijaShop Backup Data: ${jsonString}`
-        });
-        
+        await navigator.share({ title: shareTitle, text: `NaijaShop Backup Data: ${jsonString}` });
         await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
         return { success: true, method: 'TEXT_SHARE', totalRecords };
       } catch (stage2Error) {
@@ -183,4 +197,50 @@ export const backupToWhatsApp = async (data: any): Promise<BackupResult> => {
   } catch (stage3Error) {
     return { success: false, method: 'DOWNLOAD' };
   }
+};
+
+/**
+ * Reconciliation Logic: Merges Staff Sales into Admin DB.
+ * 1. Checks for Duplicate Sales via UUID.
+ * 2. Subtracts Staff sales quantities from Admin inventory.
+ * 3. Records sales in Admin history.
+ */
+export const reconcileStaffSales = async (staffData: any) => {
+  const staffSales = staffData.sales || [];
+  if (staffSales.length === 0) return { success: true, merged: 0, skipped: 0 };
+
+  let mergedCount = 0;
+  let skippedCount = 0;
+
+  await db.transaction('rw', [db.inventory, db.sales], async () => {
+    for (const sale of staffSales) {
+      // 1. Anti-Duplicate Check
+      const existing = await db.sales.where('uuid').equals(sale.uuid).first();
+      if (existing) {
+        skippedCount++;
+        continue;
+      }
+
+      // 2. Deduction Logic (The Delta)
+      for (const item of sale.items) {
+        // Find by ID first, then fallback to name (most robust for sync)
+        let invItem = await db.inventory.get(item.id);
+        if (!invItem) {
+          invItem = await db.inventory.where('name').equals(item.name).first();
+        }
+
+        if (invItem) {
+          const newStock = Math.max(0, (invItem.stock || 0) - item.quantity);
+          await db.inventory.update(invItem.id!, { stock: newStock });
+        }
+      }
+
+      // 3. Add to Admin Sales Table
+      const { id, ...saleWithoutOldId } = sale; // Ensure we don't clash on local auto-increment
+      await db.sales.add(saleWithoutOldId);
+      mergedCount++;
+    }
+  });
+
+  return { success: true, merged: mergedCount, skipped: skippedCount };
 };

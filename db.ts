@@ -30,6 +30,7 @@ export interface SaleItem {
 
 export interface Sale {
   id?: string | number;
+  uuid: string; // Unique identifier for reconciliation
   items: SaleItem[];
   total: number;
   totalCost: number;
@@ -71,9 +72,9 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(9).stores({
+dexieDb.version(10).stores({
   inventory: '++id, name, sellingPrice, stock, category, barcode',
-  sales: '++id, timestamp, total, staff_id, staff_name',
+  sales: '++id, uuid, timestamp, total, staff_id, staff_name',
   settings: 'key',
   users: '++id, name, pin, role',
   expenses: '++id, date, amount',
@@ -92,19 +93,16 @@ export async function initTrialDate() {
     localStorage.setItem('install_date', installDateStr);
   }
   
-  // Ensure trial_start is also in the database for components like TrialGuard
   const trialStartValue = parseInt(installDateStr);
   const dbTrialStart = await db.settings.get('trial_start');
   if (!dbTrialStart) {
     await db.settings.put({ key: 'trial_start', value: trialStartValue });
   }
 
-  // Request persistent storage from the browser
   if (navigator.storage && navigator.storage.persist) {
     await navigator.storage.persist();
   }
 
-  // Create default Admin if none exists
   const adminCount = await db.users.where('role').equals('Admin').count();
   if (adminCount === 0) {
     await db.users.add({

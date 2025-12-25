@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, SaleItem, Sale, InventoryItem } from '../db.ts';
@@ -69,6 +68,7 @@ export const POS: React.FC<POSProps> = ({ role }) => {
     if (cart.length === 0) return;
 
     const sale: Sale = {
+      uuid: crypto.randomUUID(), // Vital for reconciliation
       items: [...cart],
       total,
       totalCost,
@@ -155,30 +155,30 @@ export const POS: React.FC<POSProps> = ({ role }) => {
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-[#fcfcfc] relative">
+    <div className="flex flex-col h-full bg-[#fcfcfc] dark:bg-emerald-950 relative transition-colors duration-300">
       <div className={`p-4 space-y-4 flex-1 overflow-auto transition-all ${cart.length > 0 ? 'pb-40' : 'pb-24'}`}>
         <header className="flex justify-between items-center">
-          <h1 className="text-2xl font-black text-gray-800 tracking-tight">Quick POS</h1>
+          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Quick POS</h1>
           <div className="flex items-center gap-3">
             <button 
               onClick={startScanner}
-              className="bg-emerald-600 text-white p-3 rounded-2xl shadow-lg shadow-emerald-200 active:scale-90 transition-all"
+              className="bg-emerald-600 text-white p-3 rounded-2xl shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40 active:scale-90 transition-all"
             >
               <Scan size={20} />
             </button>
-            <div className="bg-gray-100 px-3 py-1 rounded-full flex items-center gap-2">
+            <div className="bg-slate-100 dark:bg-emerald-900/40 px-3 py-1 rounded-full flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${role === 'Admin' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
-              <span className="text-[10px] font-bold text-gray-500 uppercase">{role}</span>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-emerald-400 uppercase">{role}</span>
             </div>
           </div>
         </header>
 
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
             placeholder="Search catalog or barcode..."
-            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-sm font-medium"
+            className="w-full pl-12 pr-4 py-4 bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-sm font-medium text-slate-900 dark:text-emerald-50"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -189,13 +189,13 @@ export const POS: React.FC<POSProps> = ({ role }) => {
             <button 
               key={item.id}
               onClick={() => addToCart(item)}
-              className="bg-white p-4 rounded-3xl border border-gray-50 text-left shadow-sm active:scale-95 active:bg-emerald-50 transition-all group"
+              className="bg-white dark:bg-emerald-900/40 p-4 rounded-3xl border border-slate-50 dark:border-emerald-800/20 text-left shadow-sm active:scale-95 active:bg-emerald-50 dark:active:bg-emerald-800/60 transition-all group"
             >
-              <h3 className="font-bold text-gray-800 line-clamp-2 leading-snug group-active:text-emerald-700">{item.name}</h3>
-              <p className="text-emerald-600 font-black mt-2 text-lg">{formatNaira(item.sellingPrice)}</p>
-              <div className="mt-2 pt-2 border-t border-gray-50 flex justify-between items-center">
-                <span className="text-[10px] text-gray-400 font-bold uppercase">Qty: {item.stock}</span>
-                <div className="bg-emerald-100 text-emerald-600 p-1 rounded-lg">
+              <h3 className="font-bold text-slate-800 dark:text-emerald-50 line-clamp-2 leading-snug group-active:text-emerald-700 dark:group-active:text-emerald-400">{item.name}</h3>
+              <p className="text-emerald-600 dark:text-emerald-400 font-black mt-2 text-lg">{formatNaira(item.sellingPrice)}</p>
+              <div className="mt-2 pt-2 border-t border-slate-50 dark:border-emerald-800/20 flex justify-between items-center">
+                <span className="text-[10px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Qty: {item.stock}</span>
+                <div className="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 p-1 rounded-lg">
                   <Plus size={14} />
                 </div>
               </div>
@@ -203,10 +203,10 @@ export const POS: React.FC<POSProps> = ({ role }) => {
           ))}
           {filteredItems.length === 0 && (
             <div className="col-span-2 text-center py-20">
-              <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-300">
+              <div className="bg-slate-100 dark:bg-emerald-900/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300 dark:text-emerald-800">
                 <Search size={32} />
               </div>
-              <p className="text-gray-400 font-bold uppercase text-xs">No items found</p>
+              <p className="text-slate-400 dark:text-emerald-700 font-bold uppercase text-xs">No items found</p>
             </div>
           )}
         </div>
@@ -230,7 +230,6 @@ export const POS: React.FC<POSProps> = ({ role }) => {
             
             <div className="w-full aspect-square relative rounded-[48px] overflow-hidden border-4 border-emerald-500/30 shadow-[0_0_80px_rgba(5,150,105,0.2)]">
               <div id={scannerContainerId} className="w-full h-full"></div>
-              {/* Scan Frame Overlay */}
               <div className="absolute inset-0 border-2 border-white/20 rounded-[44px] pointer-events-none"></div>
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-32 border-2 border-emerald-400 rounded-2xl pointer-events-none animate-pulse"></div>
             </div>
@@ -243,33 +242,31 @@ export const POS: React.FC<POSProps> = ({ role }) => {
       {/* Expandable Bottom Sheet */}
       {cart.length > 0 && (
         <>
-          {/* Overlay to dim background when expanded */}
           {isCartExpanded && (
             <div 
-              className="fixed inset-0 bg-black/20 z-40 transition-opacity" 
+              className="fixed inset-0 bg-black/20 dark:bg-black/60 z-40 transition-opacity" 
               onClick={() => setIsCartExpanded(false)}
             />
           )}
           
           <div 
-            className={`fixed bottom-16 inset-x-0 bg-white border-t-2 border-emerald-500 shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.1)] z-[45] flex flex-col rounded-t-[40px] transition-all duration-300 ease-out ${isCartExpanded ? 'max-h-[85vh] h-auto p-6' : 'max-h-24 p-4'}`}
+            className={`fixed bottom-16 inset-x-0 bg-white dark:bg-emerald-900 border-t-2 border-emerald-500 shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.1)] z-[45] flex flex-col rounded-t-[40px] transition-all duration-300 ease-out ${isCartExpanded ? 'max-h-[85vh] h-auto p-6' : 'max-h-24 p-4'}`}
           >
-            {/* Summary / Handle Bar */}
             <button 
               onClick={() => setIsCartExpanded(!isCartExpanded)}
               className={`w-full flex flex-col items-center justify-center transition-all ${isCartExpanded ? 'mb-4' : ''}`}
             >
-              <div className="w-12 h-1 bg-gray-200 rounded-full mb-3" />
+              <div className="w-12 h-1 bg-slate-200 dark:bg-emerald-800 rounded-full mb-3" />
               <div className="w-full flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600 relative">
+                  <div className="bg-emerald-100 dark:bg-emerald-500/20 p-2 rounded-xl text-emerald-600 dark:text-emerald-400 relative">
                     <ShoppingCart size={20} />
                     <span className="absolute -top-2 -right-2 bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-white">{cart.length}</span>
                   </div>
                   {!isCartExpanded && (
                     <div className="text-left">
-                      <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">In Cart</p>
-                      <p className="text-lg font-black text-gray-800 leading-none">{formatNaira(total)}</p>
+                      <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-black uppercase tracking-widest">In Cart</p>
+                      <p className="text-lg font-black text-slate-800 dark:text-emerald-50 leading-none">{formatNaira(total)}</p>
                     </div>
                   )}
                 </div>
@@ -279,27 +276,26 @@ export const POS: React.FC<POSProps> = ({ role }) => {
                   </div>
                 ) : (
                   <div className="text-right">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Grand Total</p>
-                    <span className="text-2xl font-black text-emerald-600 tracking-tighter">{formatNaira(total)}</span>
+                    <p className="text-[10px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase tracking-widest">Grand Total</p>
+                    <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">{formatNaira(total)}</span>
                   </div>
                 )}
               </div>
             </button>
 
-            {/* Expanded Content */}
             <div className={`overflow-hidden transition-all duration-300 flex flex-col ${isCartExpanded ? 'flex-1 opacity-100' : 'h-0 opacity-0 pointer-events-none'}`}>
               <div className="flex-1 overflow-y-auto space-y-3 mb-6 pr-1 custom-scrollbar">
                 {cart.map(item => (
-                  <div key={item.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                  <div key={item.id} className="flex justify-between items-center bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-slate-100 dark:border-emerald-800/20">
                     <div className="flex-1">
-                      <h4 className="font-bold text-gray-800 text-sm leading-tight">{item.name}</h4>
-                      <p className="text-xs text-gray-400 font-bold mt-0.5">{formatNaira(item.price)}</p>
+                      <h4 className="font-bold text-slate-800 dark:text-emerald-50 text-sm leading-tight">{item.name}</h4>
+                      <p className="text-xs text-slate-400 dark:text-emerald-500/40 font-bold mt-0.5">{formatNaira(item.price)}</p>
                     </div>
                     <div className="flex items-center gap-4">
-                      <div className="flex items-center bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-                        <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-emerald-50 text-gray-400 transition-colors"><Minus size={16}/></button>
-                        <span className="font-black px-2 text-center text-sm min-w-[24px]">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:bg-emerald-50 text-gray-400 transition-colors"><Plus size={16}/></button>
+                      <div className="flex items-center bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800/20 rounded-xl overflow-hidden shadow-sm">
+                        <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:bg-emerald-50 dark:hover:bg-emerald-800 text-slate-400 transition-colors"><Minus size={16}/></button>
+                        <span className="font-black px-2 text-center text-sm min-w-[24px] dark:text-emerald-50">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:bg-emerald-50 dark:hover:bg-emerald-800 text-slate-400 transition-colors"><Plus size={16}/></button>
                       </div>
                       <button onClick={() => removeFromCart(item.id)} className="text-red-300 hover:text-red-500 transition-colors">
                         <Trash2 size={20}/>
@@ -312,7 +308,7 @@ export const POS: React.FC<POSProps> = ({ role }) => {
               <div className="grid grid-cols-2 gap-3">
                 <button 
                   onClick={() => setIsCartExpanded(false)}
-                  className="bg-gray-100 text-gray-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all"
+                  className="bg-slate-100 dark:bg-emerald-800 text-slate-500 dark:text-emerald-300 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all"
                 >
                   Continue Shopping
                 </button>
@@ -330,29 +326,29 @@ export const POS: React.FC<POSProps> = ({ role }) => {
 
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-6 text-center animate-in zoom-in duration-300 shadow-2xl my-auto">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-6 text-center animate-in zoom-in duration-300 shadow-2xl my-auto border dark:border-emerald-800">
+            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
               <CheckCircle size={40} />
             </div>
-            <h2 className="text-2xl font-black mb-1 text-gray-800 tracking-tight">Sale Successful!</h2>
-            <p className="text-gray-400 text-sm font-medium mb-6">Stock updated and recorded.</p>
+            <h2 className="text-2xl font-black mb-1 text-slate-800 dark:text-emerald-50 tracking-tight">Sale Successful!</h2>
+            <p className="text-slate-400 dark:text-emerald-500/40 text-sm font-medium mb-6">Stock updated and recorded.</p>
             
-            <div className="bg-gray-50 rounded-2xl p-4 text-left border border-gray-200 mb-6 font-mono text-xs relative overflow-hidden">
+            <div className="bg-slate-50 dark:bg-emerald-950/40 rounded-2xl p-4 text-left border border-slate-200 dark:border-emerald-800/40 mb-6 font-mono text-xs relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500 opacity-20"></div>
               <div className="flex justify-between items-start mb-2">
                 <div>
-                  <h3 className="font-bold text-gray-800 text-[10px] uppercase">
+                  <h3 className="font-bold text-slate-800 dark:text-emerald-50 text-[10px] uppercase">
                     {localStorage.getItem('shop_name') || 'NaijaShop'}
                   </h3>
-                  <p className="text-gray-400 text-[8px]">{localStorage.getItem('shop_info') || 'Nigeria'}</p>
+                  <p className="text-slate-400 dark:text-emerald-500/60 text-[8px]">{localStorage.getItem('shop_info') || 'Nigeria'}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-gray-400 text-[8px]">{new Date(lastSale?.timestamp || 0).toLocaleDateString()}</p>
-                  <p className="text-gray-400 text-[8px]">#{(lastSale?.id || 0).toString().padStart(5, '0')}</p>
+                  <p className="text-slate-400 dark:text-emerald-500/60 text-[8px]">{new Date(lastSale?.timestamp || 0).toLocaleDateString()}</p>
+                  <p className="text-slate-400 dark:text-emerald-500/60 text-[8px]">#{(lastSale?.id || 0).toString().padStart(5, '0')}</p>
                 </div>
               </div>
-              <div className="border-t border-dashed border-gray-300 my-2"></div>
-              <div className="space-y-1">
+              <div className="border-t border-dashed border-slate-300 dark:border-emerald-800/40 my-2"></div>
+              <div className="space-y-1 text-slate-800 dark:text-emerald-50">
                 {lastSale?.items.map((item, idx) => (
                   <div key={idx} className="flex justify-between gap-2">
                     <span className="truncate">{item.name} x{item.quantity}</span>
@@ -360,8 +356,8 @@ export const POS: React.FC<POSProps> = ({ role }) => {
                   </div>
                 ))}
               </div>
-              <div className="border-t border-dashed border-gray-300 my-2"></div>
-              <div className="flex justify-between font-bold text-gray-800 text-sm">
+              <div className="border-t border-dashed border-slate-300 dark:border-emerald-800/40 my-2"></div>
+              <div className="flex justify-between font-bold text-slate-800 dark:text-emerald-50 text-sm">
                 <span>TOTAL</span>
                 <span>{formatNaira(lastSale?.total || 0)}</span>
               </div>
@@ -376,7 +372,7 @@ export const POS: React.FC<POSProps> = ({ role }) => {
               </button>
               <button 
                 onClick={() => setShowSuccessModal(false)}
-                className="w-full py-3 text-gray-400 font-bold uppercase text-[10px] tracking-widest"
+                className="w-full py-3 text-slate-400 dark:text-emerald-500/40 font-bold uppercase text-[10px] tracking-widest"
               >
                 Done
               </button>

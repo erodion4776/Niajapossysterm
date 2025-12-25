@@ -68,7 +68,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ setPage }) => {
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      // Corrected initialization to follow Gemini API guidelines exactly.
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: [...messages, userMessage].map(m => ({
