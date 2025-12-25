@@ -95,7 +95,8 @@ export const decodeShopKey = (key: string) => {
     if (!match) return null;
     
     const base64 = match[1];
-    const jsonStr = decodeURIComponent(Array.prototype.map.call(atob(base64), (c) => 
+    // Fix: correctly decode binary string to percent-encoded string and then to UTF-8
+    const jsonStr = decodeURIComponent(Array.prototype.map.call(atob(base64), (c: any) => 
       '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
     ).join(''));
     
@@ -108,39 +109,51 @@ export const decodeShopKey = (key: string) => {
 
 /**
  * Enhanced Backup Function
- * Tries Native Share (best for WhatsApp), fallbacks to Direct Download (best for PC/Browsers)
+ * Includes professional naming and share text as requested.
  */
 export const backupToWhatsApp = async (data: any) => {
+  const { shopName, timestamp } = data;
   const jsonString = JSON.stringify(data, null, 2);
-  const dateStr = new Date().toISOString().split('T')[0];
-  const fileName = `naijashop_backup_${dateStr}.json`;
+  const dateStr = new Date(timestamp || Date.now()).toISOString().split('T')[0];
+  
+  // Professional Naming: [ShopName]_Backup_[Date].json
+  const safeShopName = (shopName || 'NaijaShop').replace(/\s+/g, '_');
+  const fileName = `${safeShopName}_Backup_${dateStr}.json`;
+  
   const blob = new Blob([jsonString], { type: 'application/json' });
   const file = new File([blob], fileName, { type: 'application/json' });
 
-  // 1. Try Mobile Share API (Direct to WhatsApp)
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
+  // Professional Share Text
+  const shareText = `This is my Secure Shop Backup for ${dateStr}. Keep this file safe. To restore, just share this file back to the POS App.`;
+
+  try {
+    // 1. Try Mobile Share API (Direct to WhatsApp with metadata)
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
-        title: 'NaijaShop Database Backup',
-        text: `Backup data for ${localStorage.getItem('shop_name') || 'Business'}`,
+        title: `${shopName || 'Shop'} Database Backup`,
+        text: shareText,
         files: [file]
       });
-      return; // Success!
-    } catch (err) {
-      console.warn('Share was cancelled or failed, trying download fallback...', err);
+      // Update last backup timestamp on success
+      await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
+      return; 
     }
-  }
 
-  // 2. Fail-safe Fallback: Direct File Download
-  // This works everywhere, including Desktop browsers
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  
-  alert("WhatsApp direct sharing is limited on this browser. \n\nYour backup file has been DOWNLOADED to your device instead. Please send this file to your WhatsApp manually to keep it safe.");
+    // 2. Fail-safe Fallback: Direct File Download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    // Even if it downloads, we track it as a backup attempt
+    await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
+    alert("Backup saved to downloads. Please send this file to your WhatsApp manually for safekeeping.");
+  } catch (err) {
+    console.error('Backup failed', err);
+    throw err;
+  }
 };
