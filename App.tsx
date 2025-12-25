@@ -108,34 +108,34 @@ const App: React.FC = () => {
       
       <BackupReminder />
 
-      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-100 flex justify-between items-center px-1 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
-        <button onClick={() => setCurrentPage(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
-          <LayoutGrid size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Home</span>
+      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-100 flex justify-between items-center px-0.5 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
+        <button onClick={() => setCurrentPage(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <LayoutGrid size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Home</span>
         </button>
         
-        <button onClick={() => setCurrentPage(Page.POS)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
-          <ShoppingBag size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">POS</span>
+        <button onClick={() => setCurrentPage(Page.POS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <ShoppingBag size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">POS</span>
         </button>
 
-        <button onClick={() => setCurrentPage(Page.INVENTORY)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
-          <Package size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Stock</span>
+        <button onClick={() => setCurrentPage(Page.INVENTORY)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <Package size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Stock</span>
         </button>
 
-        <button onClick={() => setCurrentPage(Page.SALES)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
-          <Receipt size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Sales</span>
+        <button onClick={() => setCurrentPage(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Sales</span>
         </button>
         
-        <button onClick={() => setCurrentPage(Page.EXPENSES)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.EXPENSES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
-          <Wallet size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Spend</span>
+        <button onClick={() => setCurrentPage(Page.EXPENSES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.EXPENSES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <Wallet size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Spend</span>
+        </button>
+
+        <button onClick={() => setCurrentPage(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <Users size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Debts</span>
         </button>
         
-        {isAdmin ? (
-          <button onClick={() => setCurrentPage(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
-            <SettingsIcon size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Admin</span>
-          </button>
-        ) : (
-          <button onClick={() => setCurrentPage(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
-            <Users size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Debts</span>
+        {isAdmin && (
+          <button onClick={() => setCurrentPage(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+            <SettingsIcon size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Admin</span>
           </button>
         )}
       </nav>
