@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, SaleItem, Sale, InventoryItem } from '../db.ts';
+import { db, SaleItem, Sale, InventoryItem, User as DBUser } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
 import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, ChevronUp, Scan } from 'lucide-react';
-import { Role } from '../types.ts';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface POSProps {
-  role: Role;
+  user: DBUser;
 }
 
-export const POS: React.FC<POSProps> = ({ role }) => {
+export const POS: React.FC<POSProps> = ({ user }) => {
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<SaleItem[]>([]);
@@ -64,22 +63,34 @@ export const POS: React.FC<POSProps> = ({ role }) => {
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const totalCost = cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0);
 
+  const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback for non-secure contexts or older browsers
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
   const handleCheckout = async () => {
     if (cart.length === 0) return;
 
     const sale: Sale = {
-      uuid: crypto.randomUUID(), // Vital for reconciliation
+      uuid: generateUUID(),
       items: [...cart],
       total,
       totalCost,
       timestamp: Date.now(),
-      staff_id: role,
-      staff_name: role 
+      staff_id: String(user.id || user.role),
+      staff_name: user.name || user.role
     };
 
     try {
       await db.transaction('rw', [db.inventory, db.sales], async () => {
         for (const item of cart) {
+          if (!item.id) continue;
           const invItem = await db.inventory.get(item.id);
           if (invItem) {
             if (invItem.stock < item.quantity) {
@@ -96,7 +107,8 @@ export const POS: React.FC<POSProps> = ({ role }) => {
       setIsCartExpanded(false);
       setShowSuccessModal(true);
     } catch (error: any) {
-      alert('Checkout failed: ' + error.message);
+      console.error('Checkout error:', error);
+      alert('Checkout failed: ' + (error.message || 'Unknown database error'));
     }
   };
 
@@ -167,8 +179,8 @@ export const POS: React.FC<POSProps> = ({ role }) => {
               <Scan size={20} />
             </button>
             <div className="bg-slate-100 dark:bg-emerald-900/40 px-3 py-1 rounded-full flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${role === 'Admin' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
-              <span className="text-[10px] font-bold text-slate-500 dark:text-emerald-400 uppercase">{role}</span>
+              <span className={`w-2 h-2 rounded-full ${user.role === 'Admin' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-emerald-400 uppercase truncate max-w-[80px]">{user.name || user.role}</span>
             </div>
           </div>
         </header>

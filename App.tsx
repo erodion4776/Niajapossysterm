@@ -92,7 +92,7 @@ const AppContent: React.FC = () => {
     switch (currentPage) {
       case Page.DASHBOARD: return <Dashboard setPage={setCurrentPage} role={currentUser.role} />;
       case Page.INVENTORY: return <Inventory role={currentUser.role} />;
-      case Page.POS: return <POS role={currentUser.role} />;
+      case Page.POS: return <POS user={currentUser} />;
       case Page.SALES: return <Sales role={currentUser.role} />;
       case Page.DEBTS: return <Debts role={currentUser.role} />;
       case Page.EXPENSES: return <Expenses role={currentUser.role} setPage={setCurrentPage} />;
