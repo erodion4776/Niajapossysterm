@@ -1,4 +1,3 @@
-
 import Dexie, { Table } from 'dexie';
 
 export interface InventoryItem {
@@ -103,8 +102,11 @@ export async function initTrialDate() {
     await navigator.storage.persist();
   }
 
+  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
   const adminCount = await db.users.where('role').equals('Admin').count();
-  if (adminCount === 0) {
+  
+  // Only add default admin if it's NOT a staff device and no admin exists
+  if (adminCount === 0 && !isStaffDevice) {
     await db.users.add({
       name: 'Shop Owner',
       pin: '0000',

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData } from '../db.ts';
 import { decodeShopKey } from '../utils/whatsapp.ts';
@@ -20,6 +20,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
   const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
+  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+
+  // Filter users based on device type
+  const displayUsers = useMemo(() => {
+    if (!users) return [];
+    if (isStaffDevice) {
+      return users.filter(u => u.role === 'Staff');
+    }
+    return users;
+  }, [users, isStaffDevice]);
 
   const handleLogin = () => {
     const combinedPin = pinArr.join('');
@@ -169,7 +179,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <img src="https://i.ibb.co/CK8Xt78C/IMG-20251222-212138.png" alt="NaijaShop" className="absolute inset-0 w-full h-full object-cover opacity-80" />
         <div className="absolute inset-0 bg-gradient-to-t from-emerald-950 via-emerald-950/60 to-transparent"></div>
         <div className="relative z-10 text-center px-8 mt-16 animate-in fade-in zoom-in duration-700">
-          <h1 className="text-5xl font-black tracking-tighter mb-2 uppercase drop-shadow-2xl text-white">NaijaShop</h1>
+          <h1 className="text-4xl font-black tracking-tighter mb-2 uppercase drop-shadow-2xl text-white">
+            {shopName}
+          </h1>
           <div className="bg-emerald-500/20 backdrop-blur-md px-4 py-1.5 rounded-full border border-emerald-400/30 inline-block shadow-lg">
             <p className="text-emerald-400 font-black uppercase text-[10px] tracking-[0.4em]">
               {isStaffDevice ? 'Staff Terminal' : 'Boss Terminal'}
@@ -183,7 +195,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           <div className="w-full space-y-6 animate-in slide-in-from-bottom duration-500 flex flex-col items-center">
             <div className="text-center"><h2 className="text-[10px] font-black text-emerald-100/40 uppercase tracking-[0.3em]">Identify Your Account</h2></div>
             <div className="grid grid-cols-1 gap-4 w-full">
-              {users?.map(user => (
+              {displayUsers?.map(user => (
                 <button key={user.id} onClick={() => setSelectedUser(user)} className="bg-emerald-900/40 backdrop-blur-sm border border-emerald-800/50 p-6 rounded-[32px] flex items-center justify-between group active:scale-[0.97] transition-all shadow-xl">
                   <div className="flex items-center gap-4">
                     <div className="bg-emerald-500/20 p-3 rounded-2xl text-emerald-400 border border-emerald-400/20"><UserIcon size={24} /></div>
@@ -195,6 +207,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                   <ArrowRight size={20} className="text-emerald-700 group-hover:text-emerald-400 transition-colors" />
                 </button>
               ))}
+              {displayUsers.length === 0 && (
+                <div className="text-center py-10 opacity-40">
+                  <p className="text-xs font-bold uppercase tracking-widest">No users found.<br/>Please import Boss Key.</p>
+                </div>
+              )}
             </div>
             
             <div className="w-full space-y-3 mt-4">
