@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { db } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -8,8 +7,8 @@ interface TrialGuardProps {
   children: (isExpired: boolean) => React.ReactNode;
 }
 
-// 3 days duration (3 * 24 * 60 * 60 * 1000)
-const TRIAL_DURATION_MS = 3 * 24 * 60 * 60 * 1000; 
+// Set to 0 to disable free trial period
+const TRIAL_DURATION_MS = 0; 
 
 export const TrialGuard: React.FC<TrialGuardProps> = ({ children }) => {
   const trialStart = useLiveQuery(() => db.settings.get('trial_start'));
@@ -20,7 +19,7 @@ export const TrialGuard: React.FC<TrialGuardProps> = ({ children }) => {
       const checkExpiry = () => {
         const now = Date.now();
         const start = trialStart.value;
-        if (now - start > TRIAL_DURATION_MS) {
+        if (now - start >= TRIAL_DURATION_MS) {
           setIsExpired(true);
         }
       };
@@ -35,7 +34,7 @@ export const TrialGuard: React.FC<TrialGuardProps> = ({ children }) => {
     <div className="flex flex-col h-full overflow-hidden">
       {isExpired && (
         <div className="bg-red-600 text-white p-3 text-center text-sm font-semibold flex items-center justify-center gap-2 sticky top-0 z-50 animate-pulse">
-          <span>Trial Expired. Contact Developer to unlock.</span>
+          <span>Application Lock: Contact Developer to unlock.</span>
           <a 
             href="https://wa.me/2347062228026" 
             target="_blank" 

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Page, Role } from './types.ts';
 import { initTrialDate, User, db } from './db.ts';
@@ -7,6 +6,7 @@ import { Inventory } from './pages/Inventory.tsx';
 import { POS } from './pages/POS.tsx';
 import { Sales } from './pages/Sales.tsx';
 import { Debts } from './pages/Debts.tsx';
+import { Expenses } from './pages/Expenses.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { FAQ } from './pages/FAQ.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
@@ -14,10 +14,10 @@ import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { SetupWizard } from './components/SetupWizard.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
-import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, Receipt, ShieldAlert, Users } from 'lucide-react';
+import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, Receipt, ShieldAlert, Users, Wallet } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
-const TRIAL_DURATION = 3 * 24 * 60 * 60 * 1000; // 3 Days
+const TRIAL_DURATION = 0; // Trial duration set to 0
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
@@ -95,6 +95,7 @@ const App: React.FC = () => {
       case Page.POS: return <POS role={currentUser.role} />;
       case Page.SALES: return <Sales role={currentUser.role} />;
       case Page.DEBTS: return <Debts role={currentUser.role} />;
+      case Page.EXPENSES: return <Expenses role={currentUser.role} setPage={setCurrentPage} />;
       case Page.SETTINGS: return <Settings role={currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={setCurrentPage} />;
       case Page.FAQ: return <FAQ setPage={setCurrentPage} />;
       default: return <Dashboard setPage={setCurrentPage} role={currentUser.role} />;
@@ -105,10 +106,8 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500">
       <main className="flex-1 overflow-auto bg-[#f9fafb]">{renderPage()}</main>
       
-      {/* Background backup logic for after-hours protection */}
       <BackupReminder />
 
-      {/* Optimized Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-100 flex justify-between items-center px-2 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
         <button onClick={() => setCurrentPage(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
           <LayoutGrid size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Home</span>
@@ -122,8 +121,8 @@ const App: React.FC = () => {
           <Receipt size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Sales</span>
         </button>
         
-        <button onClick={() => setCurrentPage(Page.INVENTORY)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
-          <Package size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Stock</span>
+        <button onClick={() => setCurrentPage(Page.EXPENSES)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.EXPENSES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <Wallet size={20} /><span className="text-[8px] font-black mt-1 uppercase tracking-tighter">Spend</span>
         </button>
 
         <button onClick={() => setCurrentPage(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-2 rounded-2xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>

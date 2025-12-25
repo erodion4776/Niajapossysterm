@@ -1,4 +1,3 @@
-
 export enum Page {
   LOGIN = 'LOGIN',
   DASHBOARD = 'DASHBOARD',
@@ -7,7 +6,8 @@ export enum Page {
   SALES = 'SALES',
   SETTINGS = 'SETTINGS',
   FAQ = 'FAQ',
-  DEBTS = 'DEBTS'
+  DEBTS = 'DEBTS',
+  EXPENSES = 'EXPENSES'
 }
 
 export type Role = 'Admin' | 'Staff';
