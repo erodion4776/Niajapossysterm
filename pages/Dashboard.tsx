@@ -1,12 +1,19 @@
-
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
-// Added Users to the imports from lucide-react to fix the "Cannot find name 'Users'" error
 import { 
-  ShoppingCart, Package, AlertTriangle, TrendingUp,
-  Wallet, BarChart3, History, Calendar as CalendarIcon, ArrowUpRight, Star, Award,
+  ShoppingCart, 
+  Package, 
+  AlertTriangle, 
+  TrendingUp,
+  Wallet, 
+  BarChart3, 
+  History, 
+  Calendar as CalendarIcon, 
+  ArrowUpRight, 
+  Star, 
+  Award,
   Users
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
@@ -284,9 +291,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
               </div>
             ))
           ) : (
-            <div className="py-12 text-center space-y-3 opacity-30">
-              <History size={40} className="mx-auto" />
-              <p className="text-[9px] font-bold uppercase tracking-widest">No sales on this date</p>
+            <div className="py-12 text-center space-y-3 bg-emerald-50/20 p-8 rounded-[32px] border border-dashed border-emerald-100">
+              <History size={40} className="mx-auto text-emerald-200" />
+              <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400">No sales recorded for this date</p>
             </div>
           )}
         </div>
@@ -315,4 +322,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
             ))}
           </div>
         ) : (
-          <div className="bg-emerald-50/20 p-8 rounded-[32
+          <div className="bg-emerald-50/20 p-8 rounded-[32px] text-center border border-emerald-50 border-dashed">
+            <p className="text-emerald-800/40 font-black uppercase text-[9px] tracking-[0.2em]">All stock levels are optimal</p>
+          </div>
+        )}
+      </section>
+
+      <section className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="bg-blue-50 p-3 rounded-2xl text-blue-600">
+            <Users size={24} />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Debt Tracking</h3>
+            <p className="text-[9px] text-gray-400 font-bold uppercase">Customer Credit Book</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setPage(Page.DEBTS)}
+          className="bg-emerald-50 text-emerald-600 px-5 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+        >
+          View Book
+        </button>
+      </section>
+    </div>
+  );
+};
