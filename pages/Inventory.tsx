@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, InventoryItem } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
-import { Plus, Search, Package, Edit3, X, Lock, Trash2, ArrowUpCircle, TrendingUp, Wallet, BarChart3 } from 'lucide-react';
+import { Plus, Search, Package, Edit3, X, Lock, Trash2, ArrowUpCircle, TrendingUp, Wallet, BarChart3, Scan } from 'lucide-react';
 import { Role } from '../types.ts';
 
 interface InventoryProps {
@@ -22,7 +22,8 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
     costPrice: 0,
     sellingPrice: 0,
     stock: 0,
-    category: 'General'
+    category: 'General',
+    barcode: ''
   });
 
   // Financial Calculations for the Header
@@ -48,7 +49,7 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
         ...formData,
         dateAdded: new Date().toISOString()
       });
-      setFormData({ name: '', costPrice: 0, sellingPrice: 0, stock: 0, category: 'General' });
+      setFormData({ name: '', costPrice: 0, sellingPrice: 0, stock: 0, category: 'General', barcode: '' });
       setShowAddModal(false);
     } catch (err) {
       alert("Failed to add item: " + (err as Error).message);
@@ -65,7 +66,8 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
         costPrice: editingItem.costPrice,
         sellingPrice: editingItem.sellingPrice,
         stock: editingItem.stock,
-        category: editingItem.category
+        category: editingItem.category,
+        barcode: editingItem.barcode
       });
       setEditingItem(null);
     } catch (err) {
@@ -84,7 +86,8 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
   };
 
   const filteredItems = inventory?.filter(item => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (item.barcode && item.barcode.includes(searchTerm))
   ) || [];
 
   return (
@@ -143,7 +146,7 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
         <input 
           type="text" 
-          placeholder="Search products..."
+          placeholder="Search name or barcode..."
           className="w-full pl-14 pr-6 py-4 bg-white border border-gray-100 rounded-[24px] focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-sm transition-all text-gray-900 font-medium"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -181,7 +184,7 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
 
       {/* Add Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-2xl font-black text-gray-800">Add Product</h2>
@@ -192,6 +195,14 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Item Name</label>
                 <input required type="text" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-bold text-gray-900" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Barcode (Optional)</label>
+                <div className="relative">
+                  <Scan className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+                  <input type="text" className="w-full p-4 pl-12 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:outline-none font-bold text-gray-900" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} />
+                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -220,7 +231,7 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
 
       {/* Edit/Update Modal */}
       {editingItem && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-gray-800">Edit Item</h2>
@@ -231,6 +242,14 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Item Name</label>
                 <input required type="text" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Barcode (Optional)</label>
+                <div className="relative">
+                  <Scan className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+                  <input type="text" className="w-full p-4 pl-12 bg-gray-50 border border-gray-100 rounded-2xl font-bold" value={editingItem.barcode || ''} onChange={e => setEditingItem({...editingItem, barcode: e.target.value})} />
+                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">

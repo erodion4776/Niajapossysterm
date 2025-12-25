@@ -8,6 +8,7 @@ export interface InventoryItem {
   sellingPrice: number;
   stock: number;
   category: string;
+  barcode?: string;
   dateAdded?: string;
 }
 
@@ -70,8 +71,8 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(8).stores({
-  inventory: '++id, name, sellingPrice, stock, category',
+dexieDb.version(9).stores({
+  inventory: '++id, name, sellingPrice, stock, category, barcode',
   sales: '++id, timestamp, total, staff_id, staff_name',
   settings: 'key',
   users: '++id, name, pin, role',

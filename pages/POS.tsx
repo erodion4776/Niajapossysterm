@@ -1,10 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, SaleItem, Sale } from '../db.ts';
+import { db, SaleItem, Sale, InventoryItem } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
-import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, ChevronUp, Scan } from 'lucide-react';
 import { Role } from '../types.ts';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface POSProps {
   role: Role;
@@ -17,26 +18,32 @@ export const POS: React.FC<POSProps> = ({ role }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
+  
+  // Scanner States
+  const [isScanning, setIsScanning] = useState(false);
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerId = "reader";
 
   const filteredItems = inventory?.filter(item => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) && item.stock > 0
+    (item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+     (item.barcode && item.barcode.includes(searchTerm))) && 
+    item.stock > 0
   ) || [];
 
-  const addToCart = (item: any) => {
+  const addToCart = (item: InventoryItem) => {
     setCart(prev => {
       const existing = prev.find(i => i.id === item.id);
       if (existing) {
         return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
       }
       return [...prev, { 
-        id: item.id, 
+        id: item.id!, 
         name: item.name, 
         price: item.sellingPrice, 
         costPrice: item.costPrice, 
         quantity: 1 
       }];
     });
-    // Auto-expand on first item if desired, but here we keep it collapsed to not block view
   };
 
   const removeFromCart = (id: string | number) => {
@@ -93,14 +100,76 @@ export const POS: React.FC<POSProps> = ({ role }) => {
     }
   };
 
+  // Scanner Logic
+  const startScanner = async () => {
+    setIsScanning(true);
+    // Wait for DOM
+    setTimeout(async () => {
+      try {
+        const html5QrCode = new Html5Qrcode(scannerContainerId);
+        html5QrCodeRef.current = html5QrCode;
+        
+        const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+        
+        await html5QrCode.start(
+          { facingMode: "environment" }, 
+          config, 
+          async (decodedText) => {
+            // Success callback
+            const item = await db.inventory.where('barcode').equals(decodedText).first();
+            if (item) {
+              addToCart(item);
+              // Feedback sound or haptic would be good here
+              if (navigator.vibrate) navigator.vibrate(50);
+            } else {
+              console.log("No item found for barcode:", decodedText);
+            }
+          },
+          () => {} // error callback (optional)
+        );
+      } catch (err) {
+        console.error("Failed to start scanner", err);
+        setIsScanning(false);
+      }
+    }, 100);
+  };
+
+  const stopScanner = async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+        html5QrCodeRef.current = null;
+      } catch (e) {
+        console.error("Error stopping scanner", e);
+      }
+    }
+    setIsScanning(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (html5QrCodeRef.current) {
+        html5QrCodeRef.current.stop().catch(console.error);
+      }
+    };
+  }, []);
+
   return (
     <div className="flex flex-col h-full bg-[#fcfcfc] relative">
       <div className={`p-4 space-y-4 flex-1 overflow-auto transition-all ${cart.length > 0 ? 'pb-40' : 'pb-24'}`}>
         <header className="flex justify-between items-center">
           <h1 className="text-2xl font-black text-gray-800 tracking-tight">Quick POS</h1>
-          <div className="bg-gray-100 px-3 py-1 rounded-full flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${role === 'Admin' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
-            <span className="text-[10px] font-bold text-gray-500 uppercase">{role}</span>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={startScanner}
+              className="bg-emerald-600 text-white p-3 rounded-2xl shadow-lg shadow-emerald-200 active:scale-90 transition-all"
+            >
+              <Scan size={20} />
+            </button>
+            <div className="bg-gray-100 px-3 py-1 rounded-full flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${role === 'Admin' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+              <span className="text-[10px] font-bold text-gray-500 uppercase">{role}</span>
+            </div>
           </div>
         </header>
 
@@ -108,7 +177,7 @@ export const POS: React.FC<POSProps> = ({ role }) => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input 
             type="text" 
-            placeholder="Search catalog..."
+            placeholder="Search catalog or barcode..."
             className="w-full pl-12 pr-4 py-4 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-sm font-medium"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -142,6 +211,34 @@ export const POS: React.FC<POSProps> = ({ role }) => {
           )}
         </div>
       </div>
+
+      {/* Scanner Modal */}
+      {isScanning && (
+        <div className="fixed inset-0 bg-black z-[200] flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+          <button 
+            onClick={stopScanner}
+            className="absolute top-8 right-8 bg-white/10 p-4 rounded-full text-white backdrop-blur-md z-[210] active:scale-95"
+          >
+            <X size={24} />
+          </button>
+          
+          <div className="w-full max-w-sm space-y-8 flex flex-col items-center">
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Scanning...</h2>
+              <p className="text-white/60 text-xs font-bold uppercase tracking-widest">Place product barcode inside frame</p>
+            </div>
+            
+            <div className="w-full aspect-square relative rounded-[48px] overflow-hidden border-4 border-emerald-500/30 shadow-[0_0_80px_rgba(5,150,105,0.2)]">
+              <div id={scannerContainerId} className="w-full h-full"></div>
+              {/* Scan Frame Overlay */}
+              <div className="absolute inset-0 border-2 border-white/20 rounded-[44px] pointer-events-none"></div>
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-32 border-2 border-emerald-400 rounded-2xl pointer-events-none animate-pulse"></div>
+            </div>
+
+            <p className="text-emerald-400 text-[10px] font-black uppercase tracking-[0.4em] animate-pulse">Items added to cart automatically</p>
+          </div>
+        </div>
+      )}
 
       {/* Expandable Bottom Sheet */}
       {cart.length > 0 && (

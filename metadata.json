@@ -1,5 +1,7 @@
 {
   "name": "NaijaShop Offline POS",
   "description": "A high-performance, offline-first Inventory and POS Manager tailored for the Nigerian market with WhatsApp integration and trial management.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

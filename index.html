@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -19,6 +20,17 @@
       .safe-bottom {
         padding-bottom: env(safe-area-inset-bottom);
       }
+      /* Ensure scanner container looks good */
+      #reader {
+        border: none !important;
+      }
+      #reader__scan_region {
+        background: #000 !important;
+      }
+      #reader video {
+        border-radius: 24px !important;
+        object-fit: cover !important;
+      }
     </style>
     <script type="importmap">
 {
@@ -30,7 +42,8 @@
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "vite": "https://esm.sh/vite@^7.3.0",
-    "vite-plugin-pwa": "https://esm.sh/vite-plugin-pwa@^1.2.0"
+    "vite-plugin-pwa": "https://esm.sh/vite-plugin-pwa@^1.2.0",
+    "html5-qrcode": "https://esm.sh/html5-qrcode@^2.3.8"
   }
 }
 </script>
