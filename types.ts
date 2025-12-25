@@ -7,8 +7,7 @@ export enum Page {
   SETTINGS = 'SETTINGS',
   FAQ = 'FAQ',
   DEBTS = 'DEBTS',
-  EXPENSES = 'EXPENSES',
-  AI_ASSISTANT = 'AI_ASSISTANT'
+  EXPENSES = 'EXPENSES'
 }
 
 export type Role = 'Admin' | 'Staff';
