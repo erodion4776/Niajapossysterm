@@ -244,3 +244,50 @@ export const reconcileStaffSales = async (staffData: any) => {
 
   return { success: true, merged: mergedCount, skipped: skippedCount };
 };
+
+/**
+ * Exports current day's sales as a compressed report for staff to send to admin.
+ */
+export const exportStaffSalesReport = async (sales: Sale[]) => {
+  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+  const dateStr = new Date().toISOString().split('T')[0];
+  const fileName = `SALES_REPORT_${shopName}_${dateStr}.json.gz`;
+
+  const payload = {
+    sales,
+    shopName,
+    type: 'STAFF_REPORT',
+    timestamp: Date.now()
+  };
+
+  const jsonString = JSON.stringify(payload);
+  const uint8Data = new TextEncoder().encode(jsonString);
+  const compressed = pako.gzip(uint8Data);
+
+  if (navigator.share) {
+    try {
+      const blob = new Blob([compressed], { type: 'application/gzip' });
+      const file = new File([blob], fileName, { type: 'application/gzip' });
+      await navigator.share({
+        title: `Sales Report: ${shopName}`,
+        text: `Boss, here is my sales report for ${dateStr}. Please import for reconciliation.`,
+        files: [file]
+      });
+      return { success: true };
+    } catch (e) {
+      console.error('Share failed', e);
+    }
+  }
+
+  // Fallback download
+  const blob = new Blob([compressed], { type: 'application/gzip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return { success: true };
+};
