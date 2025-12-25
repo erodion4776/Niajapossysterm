@@ -102,11 +102,17 @@ export async function initTrialDate() {
     await navigator.storage.persist();
   }
 
-  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
-  const adminCount = await db.users.where('role').equals('Admin').count();
+  const deviceRole = localStorage.getItem('device_role');
+  const isStaffDevice = deviceRole === 'StaffDevice';
   
-  // Only add default admin if it's NOT a staff device and no admin exists
-  if (adminCount === 0 && !isStaffDevice) {
+  // If the user hasn't chosen a role yet, we wait.
+  // This prevents the default Admin from being created before the "I am a staff" choice is made.
+  if (!deviceRole) return;
+
+  const userCount = await db.users.count();
+  
+  // Only add default admin if it's explicitly an Owner device and no users exist
+  if (userCount === 0 && deviceRole === 'Owner') {
     await db.users.add({
       name: 'Shop Owner',
       pin: '0000',

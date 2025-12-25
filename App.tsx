@@ -43,7 +43,10 @@ const AppContent: React.FC = () => {
       if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== ALLOWED_DOMAIN && !hostname.endsWith('.webcontainer.io')) {
         setIsPirated(true);
       }
+      
+      // Attempt to initialize data if role is already known
       await initTrialDate();
+      
       const dbActivated = await db.settings.get('is_activated');
       if (dbActivated?.value === true && !isActivated) {
         localStorage.setItem('is_activated', 'true');
@@ -78,11 +81,17 @@ const AppContent: React.FC = () => {
       setIsAtLanding(false);
       setIsTrialing(true);
       setIsSetupPending(true);
+      
+      // Initialize the default Admin for Owner devices immediately
+      initTrialDate();
     } else {
+      // Staff setup skips trial/otp and goes to Login for key import
       window.history.pushState({}, '', '/app');
       setIsAtLanding(false);
       setIsTrialing(false);
       setIsSetupPending(false);
+      // initTrialDate will skip Admin creation because it's a StaffDevice
+      initTrialDate();
     }
   };
 
@@ -108,7 +117,7 @@ const AppContent: React.FC = () => {
     if (isSetupPending) return <SetupWizard onComplete={() => window.location.reload()} />;
   }
   
-  if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
+  if (!currentUser) return <LoginScreen onLogin={handleLogin} deviceRole={deviceRole || 'StaffDevice'} />;
 
   const isStaffDevice = deviceRole === 'StaffDevice';
   const isAdminUser = currentUser.role === 'Admin' && !isStaffDevice;

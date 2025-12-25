@@ -1,16 +1,18 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, clearAllData } from '../db.ts';
+import { db, clearAllData, User } from '../db.ts';
 import { decodeShopKey } from '../utils/whatsapp.ts';
 import { User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X, RefreshCw, LogIn } from 'lucide-react';
+import { DeviceRole } from '../types.ts';
 
 interface LoginScreenProps {
-  onLogin: (user: any) => void;
+  onLogin: (user: User) => void;
+  deviceRole: DeviceRole;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole }) => {
   const users = useLiveQuery(() => db.users.toArray());
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [pinArr, setPinArr] = useState(new Array(4).fill(''));
   const [error, setError] = useState('');
   const [showImport, setShowImport] = useState(false);
@@ -19,13 +21,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
+  const isStaffDevice = deviceRole === 'StaffDevice';
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
 
-  // Filter users based on device type
+  // Filter users based on device type - STRICK LOCKDOWN
   const displayUsers = useMemo(() => {
     if (!users) return [];
     if (isStaffDevice) {
+      // On a staff device, we ONLY show accounts with the 'Staff' role.
+      // This prevents the Boss Admin account from ever appearing or being used on this terminal.
       return users.filter(u => u.role === 'Staff');
     }
     return users;
@@ -59,7 +63,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const handleImportKey = async () => {
     const data = decodeShopKey(importKey);
     if (!data) {
-      setImportError('Invalid Key.');
+      setImportError('Invalid Key. Please check the code from Boss.');
       return;
     }
 
@@ -68,25 +72,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       if (confirm(`Accept invite to join "${data.shopName}" as ${data.staffName}?`)) {
         setIsProcessing(true);
         try {
+          // 1. Wipe everything to ensure no old Admin accounts or data remain
           await clearAllData();
+          
+          // 2. Setup the database for the specific staff member
           await db.transaction('rw', [db.inventory, db.users, db.settings], async () => {
             if (data.inventory.length > 0) await db.inventory.bulkAdd(data.inventory);
-            // Save the specific staff user
+            
+            // Add ONLY the staff user account provided in the key
             await db.users.add({
               name: data.staffName,
               pin: data.staffPin,
               role: 'Staff'
             });
+            
             await db.settings.put({ key: 'is_activated', value: true });
           });
           
+          // 3. Update device settings
           localStorage.setItem('shop_name', data.shopName);
           localStorage.setItem('shop_info', data.shopInfo);
           localStorage.setItem('is_activated', 'true');
           localStorage.setItem('device_role', 'StaffDevice');
+          
+          // 4. Reload to refresh the whole app state
           window.location.reload();
         } catch (e) {
-          setImportError('Invite setup failed');
+          setImportError('Invite setup failed: ' + (e as Error).message);
         } finally {
           setIsProcessing(false);
         }
@@ -153,21 +165,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="flex flex-col items-center text-center mb-8">
           <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mb-4"><RefreshCw size={32} className={isProcessing ? 'animate-spin' : ''} /></div>
           <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">System Setup</h2>
-          <p className="text-slate-400 dark:text-emerald-500/40 text-sm mt-2 font-medium">Paste the Code from the Boss.</p>
+          <p className="text-slate-400 dark:text-emerald-500/40 text-sm mt-2 font-medium">Paste the Code sent by the Boss.</p>
         </div>
         <textarea 
-          placeholder="Paste KEY here..." 
-          className="w-full h-48 bg-slate-50 dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-3xl p-5 text-xs font-mono mb-6 resize-none dark:text-emerald-50" 
+          placeholder="Paste INVITE-STAFF-... code here" 
+          className="w-full h-48 bg-slate-50 dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-3xl p-5 text-xs font-mono mb-6 resize-none dark:text-emerald-50 focus:ring-2 focus:ring-emerald-500 outline-none" 
           value={importKey} 
           onChange={(e) => setImportKey(e.target.value)} 
         />
-        {importError && <p className="text-red-500 text-xs font-bold mb-4 text-center">{importError}</p>}
+        {importError && <p className="text-red-500 text-xs font-bold mb-4 text-center bg-red-50 p-3 rounded-xl">{importError}</p>}
         <button 
           onClick={handleImportKey} 
           disabled={isProcessing || !importKey}
           className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2"
         >
-          {isProcessing ? 'Processing...' : 'Activate Device'} <ArrowRight size={16} />
+          {isProcessing ? 'Setting up Terminal...' : 'Activate Staff Account'} <ArrowRight size={16} />
         </button>
       </div>
     );
@@ -207,19 +219,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                   <ArrowRight size={20} className="text-emerald-700 group-hover:text-emerald-400 transition-colors" />
                 </button>
               ))}
-              {displayUsers.length === 0 && (
-                <div className="text-center py-10 opacity-40">
-                  <p className="text-xs font-bold uppercase tracking-widest">No users found.<br/>Please import Boss Key.</p>
+              
+              {isStaffDevice && displayUsers.length === 0 && (
+                <div className="text-center py-10 bg-emerald-900/20 rounded-[32px] border border-dashed border-emerald-800/40 w-full space-y-3">
+                  <Smartphone className="mx-auto text-emerald-800" size={32} />
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">Terminal Not Activated.<br/>Import Boss Key to begin.</p>
                 </div>
               )}
             </div>
             
             <div className="w-full space-y-3 mt-4">
               <button onClick={() => setShowImport(true)} className="w-full bg-emerald-950/50 border border-emerald-800/40 text-emerald-400 font-black py-5 rounded-[28px] text-[10px] uppercase tracking-[0.2em] shadow-inner flex items-center justify-center gap-2">
-                <LogIn size={14} /> Import Code / Sync
+                <LogIn size={14} /> {isStaffDevice && displayUsers.length === 0 ? 'Activate with Boss Key' : 'Import Code / Sync'}
               </button>
               
-              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full text-emerald-800 font-black text-[9px] uppercase tracking-[0.3em] py-2">
+              <button onClick={() => { if(confirm("This will completely reset the terminal. Continue?")) { localStorage.clear(); window.location.reload(); } }} className="w-full text-emerald-800 font-black text-[9px] uppercase tracking-[0.3em] py-2">
                 Reset System
               </button>
             </div>
@@ -230,7 +244,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             <div className="text-center">
               <div className="w-24 h-24 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl"><ShieldCheck size={40} /></div>
               <h2 className="text-2xl font-black">{selectedUser.name}</h2>
-              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.3em] mt-3">Enter PIN to Unlock</p>
+              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.3em] mt-3">Enter {selectedUser.role} PIN to Unlock</p>
             </div>
             <div className="space-y-6 flex flex-col items-center w-full">
               <div className="flex gap-2 justify-center w-full">
@@ -243,22 +257,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     maxLength={1}
                     className="w-[45px] h-[50px] bg-emerald-900/30 border border-emerald-800/60 rounded-xl text-center text-xl font-black focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all shadow-inner"
                     value={digit}
-                    onChange={e => {
-                      const val = e.target.value;
-                      if (!/^\d*$/.test(val)) return;
-                      const newArr = [...pinArr];
-                      newArr[idx] = val.slice(-1);
-                      setPinArr(newArr);
-                      if (val && idx < 3) pinRefs.current[idx + 1]?.focus();
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Backspace' && !pinArr[idx] && idx > 0) pinRefs.current[idx - 1]?.focus();
-                    }}
+                    onChange={e => handleInputChange(e.target.value, idx)}
+                    onKeyDown={e => handleKeyDown(e, idx)}
                     autoFocus={idx === 0}
                   />
                 ))}
               </div>
-              <button onClick={handleLogin} className="w-full bg-white text-emerald-950 font-black py-6 rounded-[32px] shadow-2xl active:scale-95 transition-all uppercase tracking-widest text-sm">Unlock POS</button>
+              <button onClick={handleLogin} className="w-full bg-white text-emerald-950 font-black py-6 rounded-[32px] shadow-2xl active:scale-95 transition-all uppercase tracking-widest text-sm">Unlock Terminal</button>
               {error && <p className="text-red-400 text-center font-black text-xs uppercase tracking-widest animate-bounce">{error}</p>}
             </div>
           </div>
