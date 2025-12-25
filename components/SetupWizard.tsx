@@ -98,7 +98,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         setStep('SUCCESS');
         setTimeout(() => {
           onComplete();
-        }, 2500);
+        }, 2000);
       }
     } catch (err) {
       setError('System Error: Could not save PIN');
@@ -152,6 +152,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       {/* Immersive Background Gradient */}
       <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-900 to-emerald-950 opacity-100"></div>
       
+      {/* Decorative Gradient Glows */}
+      <div className="absolute top-1/4 -left-20 w-64 h-64 bg-emerald-500/20 rounded-full blur-[120px]"></div>
+      <div className="absolute bottom-1/4 -right-20 w-64 h-64 bg-emerald-400/20 rounded-full blur-[120px]"></div>
+
       <div className="w-full max-w-sm bg-white rounded-[40px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] overflow-hidden border border-white/10 relative z-10 animate-in zoom-in-95 duration-500">
         
         {/* Image Header with Light Background */}
@@ -168,7 +172,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
         <div className="p-8 space-y-6 text-center">
           
-          {/* Step 0: Welcome */}
+          {/* Stage 0: Welcome */}
           {step === 'WELCOME' && (
             <div className="space-y-6 animate-in slide-in-from-bottom duration-500">
               <div className="space-y-2">
@@ -200,7 +204,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             </div>
           )}
 
-          {/* Step 1: Verify OTP */}
+          {/* Stage 1: Verify OTP */}
           {step === 'VERIFY' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-500">
               <div className="space-y-2 text-center">
@@ -235,7 +239,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             </div>
           )}
 
-          {/* Step 2: Create PIN */}
+          {/* Stage 2: Create PIN */}
           {step === 'PIN' && (
             <div className="space-y-6 animate-in slide-in-from-right duration-500">
               <div className="space-y-2 text-center">
@@ -282,10 +286,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
           </p>
         </div>
       </div>
-      
-      {/* Decorative Gradient Glows */}
-      <div className="absolute top-1/4 -left-20 w-64 h-64 bg-emerald-500/20 rounded-full blur-[120px]"></div>
-      <div className="absolute bottom-1/4 -right-20 w-64 h-64 bg-emerald-400/20 rounded-full blur-[120px]"></div>
     </div>
   );
 };
