@@ -1,4 +1,3 @@
-
 import { Sale, db } from '../db.ts';
 
 export const formatNaira = (amount: number) => {
@@ -95,7 +94,6 @@ export const decodeShopKey = (key: string) => {
     if (!match) return null;
     
     const base64 = match[1];
-    // Fix: correctly decode binary string to percent-encoded string and then to UTF-8
     const jsonStr = decodeURIComponent(Array.prototype.map.call(atob(base64), (c: any) => 
       '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
     ).join(''));
@@ -108,38 +106,65 @@ export const decodeShopKey = (key: string) => {
 };
 
 /**
- * Enhanced Backup Function
- * Includes professional naming and share text as requested.
+ * Robust Backup Utility with Triple-Fallback Logic
+ * Logic:
+ * 1. Immediate Strategy: Minimizes async work before navigator.share
+ * 2. Stage 1: Attempt to share as a File (.json)
+ * 3. Stage 2: Attempt to share as Text String (Prefix: "NaijaShop Backup Data: ")
+ * 4. Stage 3: Direct Browser Download (Final Safety Net)
  */
 export const backupToWhatsApp = async (data: any) => {
-  const { shopName, timestamp } = data;
+  const shopName = data.shopName || 'NaijaShop';
+  const timestamp = data.timestamp || Date.now();
+  const dateStr = new Date(timestamp).toISOString().split('T')[0];
+  const fileName = `${shopName.replace(/\s+/g, '_')}_Backup_${dateStr}.json`;
+  
+  // Prepare all data synchronously to maintain "User Gesture" as much as possible
   const jsonString = JSON.stringify(data, null, 2);
-  const dateStr = new Date(timestamp || Date.now()).toISOString().split('T')[0];
-  
-  // Professional Naming: [ShopName]_Backup_[Date].json
-  const safeShopName = (shopName || 'NaijaShop').replace(/\s+/g, '_');
-  const fileName = `${safeShopName}_Backup_${dateStr}.json`;
-  
-  const blob = new Blob([jsonString], { type: 'application/json' });
-  const file = new File([blob], fileName, { type: 'application/json' });
-
-  // Professional Share Text
+  const minifiedJson = JSON.stringify(data);
+  const shareTitle = `Shop Backup: ${shopName}`;
   const shareText = `This is my Secure Shop Backup for ${dateStr}. Keep this file safe. To restore, just share this file back to the POS App.`;
 
-  try {
-    // 1. Try Mobile Share API (Direct to WhatsApp with metadata)
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+  // Start Triple-Fallback Logic
+  if (navigator.share) {
+    try {
+      // --- STAGE 1: SHARE FILE ---
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const file = new File([blob], fileName, { type: 'application/json' });
+
+      // We use try/catch directly instead of navigator.canShare for maximum "immediacy"
       await navigator.share({
-        title: `${shopName || 'Shop'} Database Backup`,
+        title: shareTitle,
         text: shareText,
         files: [file]
       });
-      // Update last backup timestamp on success
+      
       await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-      return; 
-    }
+      return; // Success!
+    } catch (stage1Error) {
+      console.warn("Stage 1 (File Share) failed. Falling back to Stage 2 (Text Share)...", stage1Error);
 
-    // 2. Fail-safe Fallback: Direct File Download
+      try {
+        // --- STAGE 2: SHARE TEXT ---
+        // Some browsers (like Samsung Internet or older Safari) block file sharing but allow text.
+        // Format as requested: "NaijaShop Backup Data: [JSON String]"
+        await navigator.share({
+          title: shareTitle,
+          text: `NaijaShop Backup Data: ${minifiedJson}`
+        });
+        
+        await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
+        return; // Success!
+      } catch (stage2Error) {
+        console.error("Stage 2 (Text Share) also failed.", stage2Error);
+      }
+    }
+  }
+
+  // --- STAGE 3: DIRECT DOWNLOAD (FINAL FALLBACK) ---
+  // If navigator.share failed or doesn't exist, provide a local download link.
+  try {
+    const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -149,11 +174,10 @@ export const backupToWhatsApp = async (data: any) => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    // Even if it downloads, we track it as a backup attempt
     await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-    alert("Backup saved to downloads. Please send this file to your WhatsApp manually for safekeeping.");
-  } catch (err) {
-    console.error('Backup failed', err);
-    throw err;
+    alert("Safe sharing was restricted by your phone's browser settings. Your backup has been saved to your 'Downloads' folder instead. Please find the file and send it to your WhatsApp for safekeeping.");
+  } catch (stage3Error) {
+    console.error("Critical failure: Stage 3 download failed.", stage3Error);
+    alert("Backup failed completely. Please try again or contact support.");
   }
 };
