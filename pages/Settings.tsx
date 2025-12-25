@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
@@ -8,6 +7,7 @@ import {
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
+import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
 
 interface SettingsProps {
   role: Role;
@@ -25,6 +25,10 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
   const [isImporting, setIsImporting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  
+  const [showBackupSuccess, setShowBackupSuccess] = useState(false);
+  const [backupFileName, setBackupFileName] = useState('');
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const users = useLiveQuery(() => db.users.toArray());
@@ -46,7 +50,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
       const debts = await db.debts.toArray();
       const usersList = await db.users.toArray();
       
-      await backupToWhatsApp({ 
+      const result = await backupToWhatsApp({ 
         inventory, 
         sales, 
         expenses, 
@@ -56,6 +60,15 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         shopInfo,
         timestamp: Date.now() 
       });
+
+      if (result.success && result.method === 'DOWNLOAD') {
+        setBackupFileName(result.fileName || 'NaijaShop_Backup.json');
+        setShowBackupSuccess(true);
+      } else if (result.success) {
+        // WhatsApp share was successful (no modal needed usually, or just a small toast)
+      } else {
+        alert("Backup failed. Please try again.");
+      }
     } catch (err) {
       alert("Backup failed: " + (err as Error).message);
     } finally {
@@ -138,6 +151,13 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
           <HelpCircle size={18} /> Help Center
         </button>
       </header>
+
+      {/* Backup Success Modal */}
+      <BackupSuccessModal 
+        isOpen={showBackupSuccess} 
+        onClose={() => setShowBackupSuccess(false)} 
+        fileName={backupFileName} 
+      />
 
       {/* Master Setup Guide (Accordion) */}
       {isAdmin && (

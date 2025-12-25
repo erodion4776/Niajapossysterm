@@ -105,34 +105,35 @@ export const decodeShopKey = (key: string) => {
   }
 };
 
+export type BackupResult = {
+  success: boolean;
+  method: 'FILE_SHARE' | 'TEXT_SHARE' | 'DOWNLOAD';
+  fileName?: string;
+};
+
 /**
  * Robust Backup Utility with Triple-Fallback Logic
- * Logic:
- * 1. Immediate Strategy: Minimizes async work before navigator.share
- * 2. Stage 1: Attempt to share as a File (.json)
- * 3. Stage 2: Attempt to share as Text String (Prefix: "NaijaShop Backup Data: ")
- * 4. Stage 3: Direct Browser Download (Final Safety Net)
+ * Returns the method used so the UI can show specific success messages.
  */
-export const backupToWhatsApp = async (data: any) => {
+export const backupToWhatsApp = async (data: any): Promise<BackupResult> => {
   const shopName = data.shopName || 'NaijaShop';
   const timestamp = data.timestamp || Date.now();
   const dateStr = new Date(timestamp).toISOString().split('T')[0];
-  const fileName = `${shopName.replace(/\s+/g, '_')}_Backup_${dateStr}.json`;
   
-  // Prepare all data synchronously to maintain "User Gesture" as much as possible
+  // Specific requested filename format
+  const fileName = `NAIJASHOP_SAFE_BACKUP_${dateStr}.json`;
+  
   const jsonString = JSON.stringify(data, null, 2);
   const minifiedJson = JSON.stringify(data);
   const shareTitle = `Shop Backup: ${shopName}`;
   const shareText = `This is my Secure Shop Backup for ${dateStr}. Keep this file safe. To restore, just share this file back to the POS App.`;
 
-  // Start Triple-Fallback Logic
   if (navigator.share) {
     try {
-      // --- STAGE 1: SHARE FILE ---
+      // STAGE 1: SHARE FILE
       const blob = new Blob([jsonString], { type: 'application/json' });
       const file = new File([blob], fileName, { type: 'application/json' });
 
-      // We use try/catch directly instead of navigator.canShare for maximum "immediacy"
       await navigator.share({
         title: shareTitle,
         text: shareText,
@@ -140,29 +141,26 @@ export const backupToWhatsApp = async (data: any) => {
       });
       
       await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-      return; // Success!
+      return { success: true, method: 'FILE_SHARE', fileName };
     } catch (stage1Error) {
-      console.warn("Stage 1 (File Share) failed. Falling back to Stage 2 (Text Share)...", stage1Error);
+      console.warn("Stage 1 failed, attempting Stage 2...", stage1Error);
 
       try {
-        // --- STAGE 2: SHARE TEXT ---
-        // Some browsers (like Samsung Internet or older Safari) block file sharing but allow text.
-        // Format as requested: "NaijaShop Backup Data: [JSON String]"
+        // STAGE 2: SHARE TEXT
         await navigator.share({
           title: shareTitle,
           text: `NaijaShop Backup Data: ${minifiedJson}`
         });
         
         await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-        return; // Success!
+        return { success: true, method: 'TEXT_SHARE' };
       } catch (stage2Error) {
-        console.error("Stage 2 (Text Share) also failed.", stage2Error);
+        console.error("Stage 2 failed.", stage2Error);
       }
     }
   }
 
-  // --- STAGE 3: DIRECT DOWNLOAD (FINAL FALLBACK) ---
-  // If navigator.share failed or doesn't exist, provide a local download link.
+  // STAGE 3: DIRECT DOWNLOAD (FINAL FALLBACK)
   try {
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -175,9 +173,9 @@ export const backupToWhatsApp = async (data: any) => {
     URL.revokeObjectURL(url);
     
     await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-    alert("Safe sharing was restricted by your phone's browser settings. Your backup has been saved to your 'Downloads' folder instead. Please find the file and send it to your WhatsApp for safekeeping.");
+    return { success: true, method: 'DOWNLOAD', fileName };
   } catch (stage3Error) {
-    console.error("Critical failure: Stage 3 download failed.", stage3Error);
-    alert("Backup failed completely. Please try again or contact support.");
+    console.error("Stage 3 failed.", stage3Error);
+    return { success: false, method: 'DOWNLOAD' };
   }
 };
