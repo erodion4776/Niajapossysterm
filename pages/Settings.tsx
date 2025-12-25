@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db.ts';
+import { db, clearAllData } from '../db.ts';
 import { backupToWhatsApp, generateShopKey } from '../utils/whatsapp.ts';
+import pako from 'pako';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
-  Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2
+  Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -29,6 +30,8 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
   const [showBackupSuccess, setShowBackupSuccess] = useState(false);
   const [backupFileName, setBackupFileName] = useState('');
   
+  const [importStats, setImportStats] = useState<{sales: number, inventory: number, debts: number, expenses: number} | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const users = useLiveQuery(() => db.users.toArray());
@@ -49,6 +52,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
       const expenses = await db.expenses.toArray();
       const debts = await db.debts.toArray();
       const usersList = await db.users.toArray();
+      const settings = await db.settings.toArray();
       
       const result = await backupToWhatsApp({ 
         inventory, 
@@ -56,18 +60,15 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         expenses, 
         debts,
         users: usersList,
+        settings,
         shopName,
         shopInfo,
         timestamp: Date.now() 
       });
 
       if (result.success && result.method === 'DOWNLOAD') {
-        setBackupFileName(result.fileName || 'NaijaShop_Backup.json');
+        setBackupFileName(result.fileName || 'NaijaShop_Backup.json.gz');
         setShowBackupSuccess(true);
-      } else if (result.success) {
-        // WhatsApp share was successful (no modal needed usually, or just a small toast)
-      } else {
-        alert("Backup failed. Please try again.");
       }
     } catch (err) {
       alert("Backup failed: " + (err as Error).message);
@@ -87,54 +88,76 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
     setShowAddUser(false);
   };
 
-  const handleSmartImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTotalRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
+    
     reader.onload = async (event) => {
       try {
-        const json = JSON.parse(event.target?.result as string);
-        const productsData = json.products || json.inventory || json.items || [];
-        const salesData = json.sales || [];
-        
-        if (productsData.length === 0 && salesData.length === 0) {
-          alert('No compatible data found in this JSON file.');
-          return;
+        let jsonStr = '';
+        const result = event.target?.result;
+
+        if (!result) throw new Error("Could not read file");
+
+        // Check if file is GZIP (ends in .gz or starts with gzip magic bytes)
+        if (file.name.endsWith('.gz') || (result instanceof ArrayBuffer && new Uint8Array(result)[0] === 0x1f)) {
+          const decompressed = pako.ungzip(new Uint8Array(result as ArrayBuffer));
+          jsonStr = new TextDecoder().decode(decompressed);
+        } else if (typeof result === 'string') {
+          jsonStr = result;
+        } else {
+          jsonStr = new TextDecoder().decode(result as ArrayBuffer);
         }
 
-        if (confirm(`Found ${productsData.length} products and ${salesData.length} sales. Merge them?`)) {
+        const json = JSON.parse(jsonStr);
+        const inv = json.inventory || [];
+        const sls = json.sales || [];
+        const exp = json.expenses || [];
+        const dbt = json.debts || [];
+        const usr = json.users || [];
+        const setts = json.settings || [];
+
+        const totalRecords = inv.length + sls.length + exp.length + dbt.length + usr.length;
+
+        if (confirm(`⚠️ TOTAL SYSTEM RESTORE: This will delete everything currently on this phone and replace it with ${totalRecords} historical records. Are you sure?`)) {
           setIsImporting(true);
-          await db.transaction('rw', [db.inventory, db.sales], async () => {
-            const currentInventory = await db.inventory.toArray();
-            for (const item of productsData) {
-              const name = item.name || item.Name || "";
-              const existing = currentInventory.find(i => i.name.trim().toLowerCase() === name.trim().toLowerCase());
-              if (existing) {
-                await db.inventory.update(existing.id!, {
-                  stock: Number(item.stock || 0),
-                  sellingPrice: Number(item.price || item.sellingPrice || existing.sellingPrice),
-                  costPrice: Number(item.cost || item.costPrice || existing.costPrice)
-                });
-              } else {
-                await db.inventory.add({
-                  name,
-                  stock: Number(item.stock || 0),
-                  sellingPrice: Number(item.price || item.sellingPrice || 0),
-                  costPrice: Number(item.cost || item.costPrice || 0),
-                  category: item.category || 'General',
-                  dateAdded: item.dateAdded || new Date().toISOString()
-                });
-              }
-            }
+          
+          await clearAllData();
+          
+          await db.transaction('rw', [db.inventory, db.sales, db.expenses, db.debts, db.users, db.settings], async () => {
+            if (inv.length > 0) await db.inventory.bulkAdd(inv.map(({id, ...rest}: any) => rest));
+            if (sls.length > 0) await db.sales.bulkAdd(sls.map(({id, ...rest}: any) => rest));
+            if (exp.length > 0) await db.expenses.bulkAdd(exp.map(({id, ...rest}: any) => rest));
+            if (dbt.length > 0) await db.debts.bulkAdd(dbt.map(({id, ...rest}: any) => rest));
+            if (usr.length > 0) await db.users.bulkAdd(usr.map(({id, ...rest}: any) => rest));
+            if (setts.length > 0) await db.settings.bulkAdd(setts);
           });
-          alert('Import Success!');
-          window.location.reload();
+
+          setImportStats({
+            inventory: inv.length,
+            sales: sls.length,
+            debts: dbt.length,
+            expenses: exp.length
+          });
+          
+          const restoredName = json.shopName || localStorage.getItem('shop_name');
+          if (restoredName) localStorage.setItem('shop_name', restoredName);
         }
-      } catch (err) { alert('Error: ' + (err as Error).message); }
-      finally { setIsImporting(false); }
+      } catch (err) { 
+        alert('Restore failed. Ensure you selected a valid NaijaShop backup file. Error: ' + (err as Error).message); 
+      } finally { 
+        setIsImporting(false); 
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     };
-    reader.readAsText(file);
+
+    if (file.name.endsWith('.gz')) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   };
 
   return (
@@ -152,74 +175,50 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </button>
       </header>
 
-      {/* Backup Success Modal */}
-      <BackupSuccessModal 
-        isOpen={showBackupSuccess} 
-        onClose={() => setShowBackupSuccess(false)} 
-        fileName={backupFileName} 
-      />
+      {showBackupSuccess && (
+        <BackupSuccessModal 
+          isOpen={showBackupSuccess} 
+          onClose={() => setShowBackupSuccess(false)} 
+          fileName={backupFileName} 
+        />
+      )}
 
-      {/* Master Setup Guide (Accordion) */}
-      {isAdmin && (
-        <section className="bg-white border border-emerald-100 rounded-[32px] overflow-hidden shadow-sm">
-          <button 
-            onClick={() => setIsGuideOpen(!isGuideOpen)}
-            className="w-full flex items-center justify-between p-6 bg-emerald-50/50 hover:bg-emerald-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="bg-emerald-600 text-white p-2 rounded-xl">
-                <BookOpen size={20} />
+      {importStats && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in zoom-in duration-300">
+          <div className="bg-white rounded-[40px] p-8 w-full max-w-xs text-center space-y-6 shadow-2xl">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle2 size={32} />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-gray-800 uppercase tracking-tight">Restore Complete!</h2>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Deep History Restored</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                <p className="text-[8px] font-black text-gray-400 uppercase">Sales</p>
+                <p className="text-lg font-black text-emerald-600">{importStats.sales}</p>
               </div>
-              <div className="text-left">
-                <h2 className="text-sm font-black text-emerald-950 uppercase">Master Setup Guide</h2>
-                <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest mt-0.5">How to Setup Staff Phones</p>
+              <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                <p className="text-[8px] font-black text-gray-400 uppercase">Stock</p>
+                <p className="text-lg font-black text-blue-600">{importStats.inventory}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                <p className="text-[8px] font-black text-gray-400 uppercase">Debts</p>
+                <p className="text-lg font-black text-amber-600">{importStats.debts}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                <p className="text-[8px] font-black text-gray-400 uppercase">Costs</p>
+                <p className="text-lg font-black text-red-600">{importStats.expenses}</p>
               </div>
             </div>
-            {isGuideOpen ? <ChevronDown size={20} className="text-emerald-400 rotate-180 transition-transform" /> : <ChevronDown size={20} className="text-emerald-400 transition-transform" />}
-          </button>
-          
-          {isGuideOpen && (
-            <div className="p-6 space-y-6 animate-in slide-in-from-top duration-300">
-              <div className="space-y-4">
-                <div className="flex gap-4">
-                  <span className="w-6 h-6 bg-emerald-600 text-white rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-black">1</span>
-                  <div>
-                    <h3 className="text-xs font-black text-gray-800 uppercase mb-1">The Master Key</h3>
-                    <p className="text-xs text-gray-500 leading-relaxed font-medium">First, ensure this Admin phone is activated. Your Request Code is the "Master Identity" for this branch.</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <span className="w-6 h-6 bg-emerald-600 text-white rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-black">2</span>
-                  <div>
-                    <h3 className="text-xs font-black text-gray-800 uppercase mb-1">Exporting Data</h3>
-                    <p className="text-xs text-gray-500 leading-relaxed font-medium">Use "Get Setup Key" below. This creates a secure token containing your current inventory and staff logins.</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <span className="w-6 h-6 bg-emerald-600 text-white rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-black">3</span>
-                  <div>
-                    <h3 className="text-xs font-black text-gray-800 uppercase mb-1">Share via WhatsApp</h3>
-                    <p className="text-xs text-gray-500 leading-relaxed font-medium">Send the Setup Key to your staff's WhatsApp. It is encrypted and safe from outsiders.</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <span className="w-6 h-6 bg-emerald-600 text-white rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-black">4</span>
-                  <div>
-                    <h3 className="text-xs font-black text-gray-800 uppercase mb-1">The Staff Import</h3>
-                    <p className="text-xs text-gray-500 leading-relaxed font-medium">On the staff phone, they click "New Staff Setup" on login and paste your key. This clones your shop instantly.</p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3">
-                <ShieldCheck className="text-amber-600 flex-shrink-0" size={18} />
-                <p className="text-[10px] text-amber-800 font-bold leading-relaxed">
-                  <span className="uppercase text-amber-900 block mb-1">Safety Note:</span>
-                  Never share your Admin PIN. Staff can record sales, but only the Admin can see profits and delete records.
-                </p>
-              </div>
-            </div>
-          )}
-        </section>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg active:scale-95"
+            >
+              Restart & Login
+            </button>
+          </div>
+        </div>
       )}
 
       {isAdmin && (
@@ -229,13 +228,13 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
               <RefreshCw size={24} className={isImporting ? 'animate-spin' : ''} />
             </div>
             <div>
-              <h2 className="text-lg font-black leading-none uppercase">Smart Data Merge</h2>
-              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">Update Stock Levels</p>
+              <h2 className="text-lg font-black leading-none uppercase">Total System Restore</h2>
+              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">Import All Historical Records</p>
             </div>
           </div>
-          <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleSmartImport} />
+          <input type="file" accept=".json,.gz" className="hidden" ref={fileInputRef} onChange={handleTotalRestore} />
           <button onClick={() => fileInputRef.current?.click()} className="w-full bg-white text-emerald-900 font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">
-            Import JSON <Database size={16} />
+            {isImporting ? 'Securing history...' : 'Import Full Backup'} <Database size={16} />
           </button>
         </section>
       )}
@@ -300,7 +299,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
 
       <section className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
         <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-          <CloudUpload size={14} /> Backup & Share
+          <CloudUpload size={14} /> Deep History Backup
         </h2>
         <button 
           onClick={handleBackup} 
@@ -312,28 +311,12 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
               {isBackingUp ? <Loader2 size={24} className="animate-spin" /> : <CloudUpload size={24} />}
             </div>
             <div className="text-left">
-              <p className="font-black text-lg leading-none">{isBackingUp ? 'Processing...' : 'WhatsApp Backup'}</p>
-              <p className="text-[10px] font-bold uppercase opacity-60 mt-1">Daily Safety Export</p>
+              <p className="font-black text-lg leading-none">{isBackingUp ? 'Securing history...' : 'WhatsApp Backup'}</p>
+              <p className="text-[10px] font-bold uppercase opacity-60 mt-1">Total System Export</p>
             </div>
           </div>
         </button>
       </section>
-
-      {showAddUser && (
-        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-6 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl">
-            <h2 className="text-2xl font-black mb-6">Register Staff</h2>
-            <form onSubmit={handleAddUser} className="space-y-4">
-              <input required placeholder="Staff Name" className="w-full p-4 bg-gray-50 border rounded-2xl font-bold" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
-              <input required placeholder="PIN" maxLength={4} className="w-full p-4 bg-gray-50 border rounded-2xl font-bold text-center tracking-widest" value={newUser.pin} onChange={e => setNewUser({...newUser, pin: e.target.value})} />
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowAddUser(false)} className="flex-1 py-4 font-bold text-gray-400">Cancel</button>
-                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-4 rounded-2xl">Create</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

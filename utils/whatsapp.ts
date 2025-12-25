@@ -1,4 +1,5 @@
 import { Sale, db } from '../db.ts';
+import pako from 'pako';
 
 export const formatNaira = (amount: number) => {
   return new Intl.NumberFormat('en-NG', {
@@ -109,30 +110,37 @@ export type BackupResult = {
   success: boolean;
   method: 'FILE_SHARE' | 'TEXT_SHARE' | 'DOWNLOAD';
   fileName?: string;
+  totalRecords?: number;
 };
 
 /**
- * Robust Backup Utility with Triple-Fallback Logic
- * Returns the method used so the UI can show specific success messages.
+ * Robust Backup Utility for Deep History with GZIP Compression
+ * Captures all tables and compresses the payload using pako for size efficiency.
  */
 export const backupToWhatsApp = async (data: any): Promise<BackupResult> => {
   const shopName = data.shopName || 'NaijaShop';
   const timestamp = data.timestamp || Date.now();
   const dateStr = new Date(timestamp).toISOString().split('T')[0];
   
-  // Specific requested filename format
-  const fileName = `NAIJASHOP_SAFE_BACKUP_${dateStr}.json`;
+  // Use .json.gz to signify it's a compressed backup
+  const fileName = `NAIJASHOP_SAFE_BACKUP_${dateStr}.json.gz`;
   
-  const jsonString = JSON.stringify(data, null, 2);
-  const minifiedJson = JSON.stringify(data);
+  const totalRecords = Object.values(data).reduce((acc: number, val: any) => {
+    return acc + (Array.isArray(val) ? val.length : 0);
+  }, 0) as number;
+
+  // Convert JSON to binary and compress
+  const jsonString = JSON.stringify(data);
+  const uint8Data = new TextEncoder().encode(jsonString);
+  const compressed = pako.gzip(uint8Data);
+  
   const shareTitle = `Shop Backup: ${shopName}`;
-  const shareText = `This is my Secure Shop Backup for ${dateStr}. Keep this file safe. To restore, just share this file back to the POS App.`;
+  const shareText = `This is my Compressed Secure Shop Backup for ${dateStr}. Keep this file safe. It contains all history.`;
 
   if (navigator.share) {
     try {
-      // STAGE 1: SHARE FILE
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const file = new File([blob], fileName, { type: 'application/json' });
+      const blob = new Blob([compressed], { type: 'application/gzip' });
+      const file = new File([blob], fileName, { type: 'application/gzip' });
 
       await navigator.share({
         title: shareTitle,
@@ -141,28 +149,26 @@ export const backupToWhatsApp = async (data: any): Promise<BackupResult> => {
       });
       
       await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-      return { success: true, method: 'FILE_SHARE', fileName };
+      return { success: true, method: 'FILE_SHARE', fileName, totalRecords };
     } catch (stage1Error) {
-      console.warn("Stage 1 failed, attempting Stage 2...", stage1Error);
-
+      console.warn("File share failed, falling back to text share...");
       try {
-        // STAGE 2: SHARE TEXT
+        // Text share fallback uses minified JSON (compression doesn't work for text share without base64 which is longer)
         await navigator.share({
           title: shareTitle,
-          text: `NaijaShop Backup Data: ${minifiedJson}`
+          text: `NaijaShop Backup Data: ${jsonString}`
         });
         
         await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-        return { success: true, method: 'TEXT_SHARE' };
+        return { success: true, method: 'TEXT_SHARE', totalRecords };
       } catch (stage2Error) {
         console.error("Stage 2 failed.", stage2Error);
       }
     }
   }
 
-  // STAGE 3: DIRECT DOWNLOAD (FINAL FALLBACK)
   try {
-    const blob = new Blob([jsonString], { type: 'application/json' });
+    const blob = new Blob([compressed], { type: 'application/gzip' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -173,9 +179,8 @@ export const backupToWhatsApp = async (data: any): Promise<BackupResult> => {
     URL.revokeObjectURL(url);
     
     await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-    return { success: true, method: 'DOWNLOAD', fileName };
+    return { success: true, method: 'DOWNLOAD', fileName, totalRecords };
   } catch (stage3Error) {
-    console.error("Stage 3 failed.", stage3Error);
     return { success: false, method: 'DOWNLOAD' };
   }
 };
