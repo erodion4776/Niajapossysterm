@@ -6,7 +6,7 @@ import pako from 'pako';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
-  Moon, Sun
+  Moon, Sun, Key
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -28,7 +28,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
   const [isGenerating, setIsGenerating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
-  const [isGuideOpen, setIsGuideOpen] = useState(false);
   
   const [showBackupSuccess, setShowBackupSuccess] = useState(false);
   const [backupFileName, setBackupFileName] = useState('');
@@ -222,23 +221,51 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
       )}
 
       {isAdmin && (
-        <section className="bg-emerald-600 p-6 rounded-[32px] shadow-xl text-white space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2.5 rounded-2xl">
-              <RefreshCw size={24} className={isImporting ? 'animate-spin' : ''} />
+        <>
+          {/* Total System Restore */}
+          <section className="bg-emerald-600 p-6 rounded-[32px] shadow-xl text-white space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2.5 rounded-2xl">
+                <RefreshCw size={24} className={isImporting ? 'animate-spin' : ''} />
+              </div>
+              <div>
+                <h2 className="text-lg font-black leading-none uppercase">Total System Restore</h2>
+                <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">Import All Records</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-black leading-none uppercase">Total System Restore</h2>
-              <p className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mt-1">Import All Records</p>
+            <input type="file" accept=".json,.gz" className="hidden" ref={fileInputRef} onChange={handleTotalRestore} />
+            <button onClick={() => fileInputRef.current?.click()} className="w-full bg-white text-emerald-900 font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">
+              {isImporting ? 'Securing history...' : 'Import Full Backup'} <Database size={16} />
+            </button>
+          </section>
+
+          {/* Clone to Staff / Staff Key Section */}
+          <section className="bg-gray-900 p-6 rounded-[32px] shadow-xl text-white space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-emerald-500/20 p-2.5 rounded-2xl text-emerald-400">
+                <Smartphone size={24} />
+              </div>
+              <div>
+                <h2 className="text-lg font-black leading-none uppercase">Clone to Staff</h2>
+                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mt-1">Generate Access Key</p>
+              </div>
             </div>
-          </div>
-          <input type="file" accept=".json,.gz" className="hidden" ref={fileInputRef} onChange={handleTotalRestore} />
-          <button onClick={() => fileInputRef.current?.click()} className="w-full bg-white text-emerald-900 font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">
-            {isImporting ? 'Securing history...' : 'Import Full Backup'} <Database size={16} />
-          </button>
-        </section>
+            <button 
+              onClick={async () => { 
+                setIsGenerating(true); 
+                await generateShopKey(); 
+                setIsGenerating(false); 
+              }} 
+              disabled={isGenerating}
+              className="w-full bg-emerald-500 text-emerald-950 font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all disabled:opacity-50"
+            >
+              {isGenerating ? 'Generating...' : 'Get Staff Sync Key'} <Share2 size={16} />
+            </button>
+          </section>
+        </>
       )}
 
+      {/* Active Staff List */}
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-3xl border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-5">
         <div className="flex justify-between items-center">
           <h2 className="text-xs font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest flex items-center gap-2">
@@ -262,11 +289,15 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
                   <p className="text-[9px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase mt-1 tracking-wider">PIN: {u.pin} • {u.role}</p>
                 </div>
               </div>
+              {isAdmin && u.role !== 'Admin' && (
+                <button onClick={() => u.id && db.users.delete(u.id)} className="text-red-300 hover:text-red-500"><Trash2 size={16} /></button>
+              )}
             </div>
           ))}
         </div>
       </section>
 
+      {/* Shop Information */}
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-3xl border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-5">
         <h2 className="text-xs font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest flex items-center gap-2">
           <Store size={14} /> Shop Information
@@ -277,16 +308,39 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </div>
       </section>
 
+      {/* Deep History Backup */}
+      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-3xl border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-5">
+        <h2 className="text-xs font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest flex items-center gap-2">
+          <CloudUpload size={14} /> Deep History Backup
+        </h2>
+        <button 
+          onClick={handleBackup} 
+          disabled={isBackingUp}
+          className={`w-full flex items-center justify-between p-5 rounded-2xl border active:scale-95 transition-all ${isBackingUp ? 'bg-gray-50 dark:bg-emerald-950/20 border-gray-200 dark:border-emerald-800 text-gray-400' : 'bg-emerald-50 dark:bg-emerald-800/30 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800/40'}`}
+        >
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-xl shadow-sm ${isBackingUp ? 'bg-gray-100 dark:bg-emerald-900' : 'bg-white dark:bg-emerald-950'}`}>
+              {isBackingUp ? <Loader2 size={24} className="animate-spin" /> : <CloudUpload size={24} />}
+            </div>
+            <div className="text-left">
+              <p className="font-black text-lg leading-none">{isBackingUp ? 'Securing history...' : 'WhatsApp Backup'}</p>
+              <p className="text-[10px] font-bold uppercase opacity-60 mt-1">Total System Export</p>
+            </div>
+          </div>
+        </button>
+      </section>
+
+      {/* Add Staff Modal */}
       {showAddUser && (
         <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800">
-            <h2 className="text-2xl font-black mb-6 text-slate-800 dark:text-emerald-50">Register Staff</h2>
+            <h2 className="text-2xl font-black mb-6 text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Register Staff</h2>
             <form onSubmit={handleAddUser} className="space-y-4">
               <input required placeholder="Staff Name" className="w-full p-4 bg-slate-50 dark:bg-emerald-950/40 border dark:border-emerald-800/40 rounded-2xl font-bold dark:text-emerald-50" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
               <input required placeholder="PIN" maxLength={4} className="w-full p-4 bg-slate-50 dark:bg-emerald-950/40 border dark:border-emerald-800/40 rounded-2xl font-bold text-center tracking-widest dark:text-emerald-50" value={newUser.pin} onChange={e => setNewUser({...newUser, pin: e.target.value})} />
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddUser(false)} className="flex-1 py-4 font-bold text-slate-400">Cancel</button>
-                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-4 rounded-2xl">Create</button>
+                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-4 rounded-2xl uppercase tracking-widest text-[10px]">Create Account</button>
               </div>
             </form>
           </div>
