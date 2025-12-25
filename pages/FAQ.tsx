@@ -13,6 +13,10 @@ const FAQ_DATA = [
     a: "Yes! You only need internet once to activate the app. After that, you can sell in Airplane Mode. All data is saved directly on your phone's memory (IndexedDB)."
   },
   {
+    q: "Are there any monthly charges?",
+    a: "No. Once you pay the ₦5,000 activation fee, the app is yours forever. You never have to pay another kobo. No subscriptions, no data tax."
+  },
+  {
     q: "What happens if I lose my phone or it spoils?",
     a: "This is why the 'Backup to WhatsApp' button in Settings is vital. If you backup daily, you can simply install the app on a new phone, import your WhatsApp file, and all your records come back."
   },
