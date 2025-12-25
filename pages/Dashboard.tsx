@@ -1,10 +1,13 @@
+
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
+// Added Users to the imports from lucide-react to fix the "Cannot find name 'Users'" error
 import { 
   ShoppingCart, Package, AlertTriangle, TrendingUp,
-  Wallet, BarChart3, History, Calendar as CalendarIcon, ArrowUpRight, Star, Award
+  Wallet, BarChart3, History, Calendar as CalendarIcon, ArrowUpRight, Star, Award,
+  Users
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -168,18 +171,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
         <div className="grid grid-cols-2 gap-4">
           <button 
             onClick={() => setPage(Page.EXPENSES)}
-            className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left"
+            className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left active:scale-95 transition-all"
           >
             <p className="text-gray-400 text-[9px] font-black uppercase tracking-widest">Expenses ({isToday ? 'Today' : 'Date'})</p>
             <h2 className="text-xl font-black text-amber-600">{formatNaira(actualExpensesOnDate)}</h2>
             <Wallet className="absolute -right-2 -bottom-2 text-amber-50" size={56} />
           </button>
 
-          <div className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32">
+          <button 
+            onClick={() => setPage(Page.INVENTORY)}
+            className="bg-white border border-gray-100 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left active:scale-95 transition-all"
+          >
             <p className="text-gray-400 text-[9px] font-black uppercase tracking-widest">Store Value</p>
             <h2 className="text-xl font-black text-blue-600">{formatNaira(storeNetWorth)}</h2>
             <Package className="absolute -right-2 -bottom-2 text-blue-50" size={56} />
-          </div>
+          </button>
         </div>
       )}
 
@@ -301,7 +307,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
                 </div>
                 <button 
                   onClick={() => setPage(Page.INVENTORY)}
-                  className="bg-gray-50 text-gray-400 p-3 rounded-2xl hover:text-emerald-600 transition-colors"
+                  className="bg-gray-50 text-gray-400 p-3 rounded-2xl hover:text-emerald-600 transition-colors active:scale-95"
                 >
                   <Package size={20} />
                 </button>
@@ -309,11 +315,4 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
             ))}
           </div>
         ) : (
-          <div className="bg-emerald-50/20 p-8 rounded-[32px] text-center border border-emerald-50 border-dashed">
-            <p className="text-emerald-800/40 font-black uppercase text-[9px] tracking-[0.2em]">All stock levels are optimal</p>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-};
+          <div className="bg-emerald-50/20 p-8 rounded-[32
