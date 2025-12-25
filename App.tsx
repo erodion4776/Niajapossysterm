@@ -17,7 +17,7 @@ import { BackupReminder } from './components/BackupReminder.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, Receipt, ShieldAlert, Users, Wallet } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
-const TRIAL_DURATION = 0; // Trial duration set to 0
+const TRIAL_DURATION = 259200000; // 3 days in milliseconds
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);

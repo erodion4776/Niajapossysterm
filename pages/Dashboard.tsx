@@ -4,10 +4,9 @@ import { db } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
 import { 
   ShoppingCart, Package, AlertTriangle, TrendingUp,
-  Wallet, BarChart3, History, Calendar as CalendarIcon, ArrowUpRight, Star, Award, Sparkles, Loader2
+  Wallet, BarChart3, History, Calendar as CalendarIcon, ArrowUpRight, Star, Award
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
-import { GoogleGenAI } from "@google/genai";
 
 interface DashboardProps {
   setPage: (page: Page) => void;
@@ -17,8 +16,6 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
   const isAdmin = role === 'Admin';
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [isAnalysing, setIsAnalysing] = useState(false);
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
   
   const lowStockItems = useLiveQuery(() => db.inventory.where('stock').below(5).toArray());
   const inventory = useLiveQuery(() => db.inventory.toArray());
@@ -75,39 +72,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
     return inventory.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.stock || 0)), 0);
   }, [inventory]);
 
-  const generateAIInsights = async () => {
-    if (!isAdmin) return;
-    setIsAnalysing(true);
-    setAiInsight(null);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      const prompt = `
-        Act as a business consultant for a Nigerian shop owner. 
-        Current Stats for ${selectedDate}:
-        - Total Sales: ${formatNaira(totalSalesOnDate)}
-        - Net Profit: ${formatNaira(netProfitOnDate)}
-        - Total Expenses: ${formatNaira(actualExpensesOnDate)}
-        - Best Seller: ${bestSeller?.name || 'N/A'}
-        - Stock Valuation: ${formatNaira(storeNetWorth)}
-        - Low Stock Items: ${lowStockItems?.length || 0}
-        
-        Provide 3 concise, highly actionable tips in Pidgin or simple English to help the owner grow or manage better. 
-        Maximum 100 words.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-      });
-
-      setAiInsight(response.text || "No insights found. Keep selling!");
-    } catch (err) {
-      setAiInsight("AI failed to connect. Ensure you are online and activated.");
-    } finally {
-      setIsAnalysing(false);
-    }
-  };
-
   const chartData = React.useMemo(() => {
     if (!last7DaysSales) return [];
     const days = [];
@@ -148,33 +112,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
               {!isToday && <span className="text-[10px] font-black uppercase text-gray-400">{new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
             </div>
           </div>
-          <button 
-            onClick={generateAIInsights}
-            disabled={isAnalysing}
-            className="bg-emerald-600 p-2.5 rounded-2xl text-white shadow-lg shadow-emerald-200 active:scale-90 transition-all border border-emerald-50"
-          >
-            {isAnalysing ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} />}
-          </button>
         </div>
       </header>
-
-      {/* AI Insights Panel */}
-      {aiInsight && (
-        <section className="bg-white border-2 border-emerald-500/20 p-6 rounded-[32px] shadow-sm animate-in slide-in-from-top duration-500 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
-            <Sparkles size={64} className="text-emerald-500" />
-          </div>
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="text-xs font-black text-emerald-600 uppercase tracking-[0.2em] flex items-center gap-2">
-              <Sparkles size={14} /> AI Shop Consultant
-            </h3>
-            <button onClick={() => setAiInsight(null)} className="text-gray-300 hover:text-gray-500"><Loader2 size={14} className="rotate-45" /></button>
-          </div>
-          <p className="text-sm font-medium text-gray-700 leading-relaxed whitespace-pre-line">
-            {aiInsight}
-          </p>
-        </section>
-      )}
 
       {!isToday && (
         <div className="bg-amber-50 border border-amber-100 p-3 rounded-2xl flex items-center justify-between">

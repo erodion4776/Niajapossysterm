@@ -7,8 +7,8 @@ interface TrialGuardProps {
   children: (isExpired: boolean) => React.ReactNode;
 }
 
-// Set to 0 to disable free trial period
-const TRIAL_DURATION_MS = 0; 
+// Set to 3 days (3 * 24 * 60 * 60 * 1000)
+const TRIAL_DURATION_MS = 259200000; 
 
 export const TrialGuard: React.FC<TrialGuardProps> = ({ children }) => {
   const trialStart = useLiveQuery(() => db.settings.get('trial_start'));
