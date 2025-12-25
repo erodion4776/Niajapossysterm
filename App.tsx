@@ -6,13 +6,14 @@ import { Dashboard } from './pages/Dashboard.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { POS } from './pages/POS.tsx';
 import { Sales } from './pages/Sales.tsx';
+import { Debts } from './pages/Debts.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { FAQ } from './pages/FAQ.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { SetupWizard } from './components/SetupWizard.tsx';
-import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, History, ShieldAlert } from 'lucide-react';
+import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, History, ShieldAlert, Users } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
 const TRIAL_DURATION = 3 * 24 * 60 * 60 * 1000; // 3 Days
@@ -92,6 +93,7 @@ const App: React.FC = () => {
       case Page.INVENTORY: return <Inventory role={currentUser.role} />;
       case Page.POS: return <POS role={currentUser.role} />;
       case Page.SALES: return <Sales role={currentUser.role} />;
+      case Page.DEBTS: return <Debts role={currentUser.role} />;
       case Page.SETTINGS: return <Settings role={currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={setCurrentPage} />;
       case Page.FAQ: return <FAQ setPage={setCurrentPage} />;
       default: return <Dashboard setPage={setCurrentPage} role={currentUser.role} />;
@@ -108,14 +110,14 @@ const App: React.FC = () => {
         <button onClick={() => setCurrentPage(Page.POS)} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
           <ShoppingBag size={22} /><span className="text-[9px] font-bold mt-1 uppercase tracking-wider">POS</span>
         </button>
-        <button onClick={() => setCurrentPage(Page.SALES)} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
-          <History size={22} /><span className="text-[9px] font-bold mt-1 uppercase tracking-wider">Sales</span>
+        <button onClick={() => setCurrentPage(Page.DEBTS)} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <Users size={22} /><span className="text-[9px] font-bold mt-1 uppercase tracking-wider">Debts</span>
         </button>
         <button onClick={() => setCurrentPage(Page.INVENTORY)} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
           <Package size={22} /><span className="text-[9px] font-bold mt-1 uppercase tracking-wider">Stock</span>
         </button>
         {isAdmin && (
-          <button onClick={() => setCurrentPage(Page.SETTINGS)} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <button onClick={() => setCurrentPage(Page.SETTINGS)} className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ || currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
             <SettingsIcon size={22} /><span className="text-[9px] font-bold mt-1 uppercase tracking-wider">Admin</span>
           </button>
         )}

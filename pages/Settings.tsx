@@ -5,7 +5,7 @@ import { db } from '../db.ts';
 import { backupToWhatsApp, generateShopKey } from '../utils/whatsapp.ts';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
-  Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, ChevronUp, BookOpen, Loader2
+  Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, History, ArrowRight
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 
@@ -43,12 +43,14 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
       const inventory = await db.inventory.toArray();
       const sales = await db.sales.toArray();
       const expenses = await db.expenses.toArray();
+      const debts = await db.debts.toArray();
       const usersList = await db.users.toArray();
       
       await backupToWhatsApp({ 
         inventory, 
         sales, 
         expenses, 
+        debts,
         users: usersList,
         shopName,
         shopInfo,
@@ -136,6 +138,23 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
           <HelpCircle size={18} /> Help
         </button>
       </header>
+
+      {/* Sales History Shortcut */}
+      <button 
+        onClick={() => setPage(Page.SALES)}
+        className="w-full bg-white border border-gray-100 p-6 rounded-[32px] flex items-center justify-between shadow-sm active:scale-95 transition-all"
+      >
+        <div className="flex items-center gap-4">
+           <div className="bg-emerald-50 text-emerald-600 p-3 rounded-2xl">
+              <History size={24} />
+           </div>
+           <div className="text-left">
+              <h2 className="text-sm font-black text-gray-800 uppercase">Sales History</h2>
+              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">View all past transactions</p>
+           </div>
+        </div>
+        <ArrowRight size={20} className="text-gray-300" />
+      </button>
 
       {/* Master Setup Guide (Accordion) */}
       {isAdmin && (

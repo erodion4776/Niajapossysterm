@@ -44,6 +44,16 @@ export interface Expense {
   date: string | number;
 }
 
+export interface Debt {
+  id?: string | number;
+  customerName: string;
+  customerPhone: string;
+  amount: number;
+  timestamp: number;
+  status: 'Unpaid' | 'Paid';
+  note?: string;
+}
+
 export interface Setting {
   key: string;
   value: any;
@@ -55,16 +65,18 @@ export type NaijaShopDatabase = Dexie & {
   settings: Table<Setting>;
   users: Table<User>;
   expenses: Table<Expense>;
+  debts: Table<Debt>;
 };
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(7).stores({
+dexieDb.version(8).stores({
   inventory: '++id, name, sellingPrice, stock, category',
   sales: '++id, timestamp, total, staff_id, staff_name',
   settings: 'key',
   users: '++id, name, pin, role',
-  expenses: '++id, date, amount'
+  expenses: '++id, date, amount',
+  debts: '++id, customerName, customerPhone, status, timestamp'
 });
 
 export const db = dexieDb;
@@ -103,11 +115,12 @@ export async function initTrialDate() {
 }
 
 export async function clearAllData() {
-  await db.transaction('rw', [db.inventory, db.sales, db.settings, db.users, db.expenses], async () => {
+  await db.transaction('rw', [db.inventory, db.sales, db.settings, db.users, db.expenses, db.debts], async () => {
     await db.inventory.clear();
     await db.sales.clear();
     await db.settings.clear();
     await db.users.clear();
     await db.expenses.clear();
+    await db.debts.clear();
   });
 }
