@@ -6,7 +6,7 @@ import pako from 'pako';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
-  Moon, Sun, Key, Users
+  Moon, Sun, Key, Users, X
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -140,7 +140,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         let jsonStr = '';
         const result = event.target?.result;
 
-        if (file.name.endsWith('.gz') || (result instanceof ArrayBuffer && new Uint8Array(result)[0] === 0x1f)) {
+        if (file.name.endsWith('.gz') || (result instanceof ArrayBuffer && new Uint8Array(result as ArrayBuffer)[0] === 0x1f)) {
           const decompressed = pako.ungzip(new Uint8Array(result as ArrayBuffer));
           jsonStr = new TextDecoder().decode(decompressed);
         } else if (typeof result === 'string') {
@@ -340,7 +340,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
             className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${isBackingUp ? 'bg-gray-50 dark:bg-emerald-950/20 border-gray-200 dark:border-emerald-800 text-gray-400' : 'bg-emerald-50 dark:bg-emerald-800/30 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800/40'}`}
           >
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-white dark:bg-emerald-950 rounded-xl"><CloudUpload size={20} /></div>
+              <div className="p-2 bg-white dark:bg-emerald-900 rounded-xl"><CloudUpload size={20} /></div>
               <p className="text-xs font-black uppercase tracking-tight">WhatsApp Backup</p>
             </div>
             {isBackingUp && <Loader2 size={16} className="animate-spin" />}
@@ -348,12 +348,17 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </div>
       </section>
 
-      {/* Staff List & Shop Info preserved below */}
+      {/* Staff List & Shop Info */}
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-3xl border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-5">
         <div className="flex justify-between items-center">
-          <h2 className="text-xs font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest flex items-center gap-2"><UserIcon size={14} /> Active Staff</h2>
+          <h2 className="text-xs font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest flex items-center gap-2">
+            <UserIcon size={14} /> Active Staff
+          </h2>
           {isAdmin && (
-            <button onClick={() => setShowAddUser(true)} className="text-emerald-600 dark:text-emerald-400 font-bold text-[10px] uppercase flex items-center gap-1 bg-emerald-50 dark:bg-emerald-800/30 px-3 py-1.5 rounded-full">
+            <button 
+              onClick={() => setShowAddUser(true)} 
+              className="text-emerald-600 dark:text-emerald-400 font-bold text-[10px] uppercase flex items-center gap-1 bg-emerald-50 dark:bg-emerald-800/30 px-3 py-1.5 rounded-full"
+            >
               <Plus size={14} /> New Staff
             </button>
           )}
@@ -370,12 +375,86 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
                   <p className="text-[9px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase mt-1 tracking-wider">PIN: {u.pin} • {u.role}</p>
                 </div>
               </div>
+              {isAdmin && u.role !== 'Admin' && (
+                <button onClick={() => u.id && db.users.delete(u.id)} className="text-red-300 hover:text-red-500 transition-colors">
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
           ))}
         </div>
       </section>
-      
-      {/* Modals for Add Staff, Backup Success preserved */}
+
+      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-3xl border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-5">
+        <h2 className="text-xs font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest flex items-center gap-2">
+          <Store size={14} /> Shop Information
+        </h2>
+        <div className="space-y-4">
+          <input disabled={!isAdmin} type="text" placeholder="Business Name" className="w-full px-4 py-3.5 bg-slate-50 dark:bg-emerald-950/40 border border-slate-100 dark:border-emerald-800/20 rounded-2xl font-bold text-sm text-slate-800 dark:text-emerald-50" value={shopName} onChange={(e) => setShopName(e.target.value)} />
+          <input disabled={!isAdmin} type="text" placeholder="Address / Phone" className="w-full px-4 py-3.5 bg-slate-50 dark:bg-emerald-950/40 border border-slate-100 dark:border-emerald-800/20 rounded-2xl font-bold text-sm text-slate-800 dark:text-emerald-50" value={shopInfo} onChange={(e) => setShopInfo(e.target.value)} />
+        </div>
+      </section>
+
+      {/* Add Staff Modal */}
+      {showAddUser && (
+        <div className="fixed inset-0 z-[500] bg-black/60 flex items-center justify-center p-6 backdrop-blur-sm">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Register Staff</h2>
+              <button onClick={() => setShowAddUser(false)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleAddUser} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest ml-2">Staff Name</label>
+                <input required placeholder="Full Name" className="w-full p-4 bg-slate-50 dark:bg-emerald-950/40 border dark:border-emerald-800/40 rounded-2xl font-bold dark:text-emerald-50" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest ml-2">4-Digit PIN</label>
+                <input required placeholder="0000" maxLength={4} inputMode="numeric" className="w-full p-4 bg-slate-50 dark:bg-emerald-950/40 border dark:border-emerald-800/40 rounded-2xl font-bold text-center tracking-[1em] dark:text-emerald-50" value={newUser.pin} onChange={e => setNewUser({...newUser, pin: e.target.value})} />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setShowAddUser(false)} className="flex-1 py-4 font-bold text-slate-400 uppercase text-[10px] tracking-widest">Cancel</button>
+                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-200 dark:shadow-none">Create Account</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Backup Success Modal */}
+      {showBackupSuccess && (
+        <BackupSuccessModal 
+          isOpen={showBackupSuccess} 
+          onClose={() => setShowBackupSuccess(false)} 
+          fileName={backupFileName} 
+        />
+      )}
+
+      {/* Import Stats Modal */}
+      {importStats && (
+        <div className="fixed inset-0 z-[600] bg-black/60 backdrop-blur-md flex items-center justify-center p-6 animate-in zoom-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 rounded-[40px] p-8 w-full max-w-xs text-center space-y-6 shadow-2xl border border-emerald-800">
+            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle2 size={32} />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Restore Complete!</h2>
+              <p className="text-[10px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest mt-1">Deep History Restored</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-slate-50 dark:bg-emerald-950/40 p-3 rounded-2xl border border-slate-100 dark:border-emerald-800/20">
+                <p className="text-[8px] font-black text-slate-400 uppercase">Sales</p>
+                <p className="text-lg font-black text-emerald-600">{importStats.sales}</p>
+              </div>
+              <div className="bg-slate-50 dark:bg-emerald-950/40 p-3 rounded-2xl border border-slate-100 dark:border-emerald-800/20">
+                <p className="text-[8px] font-black text-slate-400 uppercase">Stock</p>
+                <p className="text-lg font-black text-blue-600">{importStats.inventory}</p>
+              </div>
+            </div>
+            <button onClick={() => window.location.reload()} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg active:scale-95">Restart & Login</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
