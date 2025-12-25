@@ -10,16 +10,33 @@
     <link rel="manifest" href="/manifest.json" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              emerald: {
+                950: '#022c22',
+              }
+            }
+          }
+        }
+      }
+    </script>
     <style>
       body {
         font-family: 'Inter', sans-serif;
         background-color: #f9fafb;
         -webkit-tap-highlight-color: transparent;
+        transition: background-color 0.3s ease, color 0.3s ease;
+      }
+      .dark body {
+        background-color: #022c22;
       }
       .safe-bottom {
         padding-bottom: env(safe-area-inset-bottom);
       }
-      /* Ensure scanner container looks good */
       #reader {
         border: none !important;
       }
@@ -36,6 +53,9 @@
       .custom-scrollbar::-webkit-scrollbar-thumb {
         background: #e5e7eb;
         border-radius: 10px;
+      }
+      .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #064e3b;
       }
     </style>
     <script type="importmap">
@@ -60,13 +80,11 @@
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
     <script>
-      // Register Service Worker inline for maximum reliability
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then((registration) => {
               console.log('SW Registered with scope:', registration.scope);
-              // Force checking for updates
               registration.update();
             })
             .catch((err) => {
@@ -74,7 +92,6 @@
             });
         });
 
-        // Handle controller change (SW update found and activated)
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (!refreshing) {

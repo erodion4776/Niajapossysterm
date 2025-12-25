@@ -14,12 +14,13 @@ import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { SetupWizard } from './components/SetupWizard.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
+import { ThemeProvider } from './ThemeContext.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, Receipt, ShieldAlert, Users, Wallet } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
 const TRIAL_DURATION = 259200000; // 3 days in milliseconds
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -81,7 +82,6 @@ const App: React.FC = () => {
 
   if (!isInitialized) return null;
 
-  // Central Router Switchboard
   if (isAtLanding && !isActivated && !isTrialing) return <LandingPage onStartTrial={handleStartTrial} />;
   if (!isActivated && (!isTrialing || !isTrialValid)) return <LockScreen onUnlock={() => window.location.reload()} />;
   if (isSetupPending) return <SetupWizard onComplete={() => window.location.reload()} />;
@@ -103,38 +103,38 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500">
-      <main className="flex-1 overflow-auto bg-[#f9fafb]">{renderPage()}</main>
+    <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500 transition-colors duration-300">
+      <main className="flex-1 overflow-auto">{renderPage()}</main>
       
       <BackupReminder />
 
-      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-100 flex justify-between items-center px-0.5 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
-        <button onClick={() => setCurrentPage(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/90 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-0.5 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)] transition-colors duration-300">
+        <button onClick={() => setCurrentPage(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <LayoutGrid size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Home</span>
         </button>
         
-        <button onClick={() => setCurrentPage(Page.POS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+        <button onClick={() => setCurrentPage(Page.POS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <ShoppingBag size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">POS</span>
         </button>
 
-        <button onClick={() => setCurrentPage(Page.INVENTORY)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+        <button onClick={() => setCurrentPage(Page.INVENTORY)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Package size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Stock</span>
         </button>
 
-        <button onClick={() => setCurrentPage(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+        <button onClick={() => setCurrentPage(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Sales</span>
         </button>
         
-        <button onClick={() => setCurrentPage(Page.EXPENSES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.EXPENSES ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+        <button onClick={() => setCurrentPage(Page.EXPENSES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.EXPENSES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Wallet size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Spend</span>
         </button>
 
-        <button onClick={() => setCurrentPage(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+        <button onClick={() => setCurrentPage(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Users size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Debts</span>
         </button>
         
         {isAdmin && (
-          <button onClick={() => setCurrentPage(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400'}`}>
+          <button onClick={() => setCurrentPage(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
             <SettingsIcon size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Admin</span>
           </button>
         )}
@@ -142,5 +142,11 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+const App: React.FC = () => (
+  <ThemeProvider>
+    <AppContent />
+  </ThemeProvider>
+);
 
 export default App;
