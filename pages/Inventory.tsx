@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, InventoryItem } from '../db.ts';
@@ -11,7 +10,9 @@ interface InventoryProps {
 }
 
 export const Inventory: React.FC<InventoryProps> = ({ role }) => {
-  const isAdmin = role === 'Admin';
+  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
+  const isAdmin = role === 'Admin' && !isStaffDevice;
+  
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -111,7 +112,7 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
         )}
       </header>
 
-      {/* Admin Financial Dashboard */}
+      {/* Admin Financial Dashboard - Hidden for Staff Devices */}
       {isAdmin && (
         <section className="bg-white border border-gray-100 rounded-[32px] p-6 shadow-sm space-y-4">
           <div className="flex items-center gap-2 mb-2">
@@ -157,8 +158,9 @@ export const Inventory: React.FC<InventoryProps> = ({ role }) => {
         {filteredItems.map(item => (
           <button 
             key={item.id} 
+            disabled={!isAdmin}
             onClick={() => isAdmin && setEditingItem(item)}
-            className="bg-white p-5 rounded-[32px] border border-gray-50 flex items-center gap-5 shadow-sm text-left active:scale-[0.98] transition-transform group"
+            className={`bg-white p-5 rounded-[32px] border border-gray-50 flex items-center gap-5 shadow-sm text-left transition-transform group ${isAdmin ? 'active:scale-[0.98]' : 'cursor-default'}`}
           >
             <div className={`p-4 rounded-[22px] transition-colors ${item.stock < 5 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
               <Package size={24} />

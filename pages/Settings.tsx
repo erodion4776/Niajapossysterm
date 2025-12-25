@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, clearAllData } from '../db.ts';
-import { backupToWhatsApp, generateShopKey, reconcileStaffSales, generateMasterStockKey } from '../utils/whatsapp.ts';
+import { db, clearAllData, User } from '../db.ts';
+import { backupToWhatsApp, generateShopKey, reconcileStaffSales, generateMasterStockKey, generateStaffInviteKey } from '../utils/whatsapp.ts';
 import pako from 'pako';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
-  Moon, Sun, Key, Users, X
+  Moon, Sun, Key, Users, X, Send
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -184,6 +184,12 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
 
     if (file.name.endsWith('.gz')) reader.readAsArrayBuffer(file);
     else reader.readAsText(file);
+  };
+
+  const handleSetupStaffPhone = async (user: User) => {
+    if (confirm(`Generate Invite Code for ${user.name}? This will include your current inventory and their secret PIN.`)) {
+      await generateStaffInviteKey(user);
+    }
   };
 
   return (
@@ -365,19 +371,30 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </div>
         <div className="space-y-3">
           {users?.map(u => (
-            <div key={u.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-950/40 rounded-2xl border border-slate-100 dark:border-emerald-800/20">
-              <div className="flex items-center gap-4">
-                <div className={`p-2.5 rounded-xl ${u.role === 'Admin' ? 'bg-emerald-100 dark:bg-emerald-800/40 text-emerald-600' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600'}`}>
-                  <UserIcon size={18} />
+            <div key={u.id} className="flex flex-col p-4 bg-slate-50 dark:bg-emerald-950/40 rounded-2xl border border-slate-100 dark:border-emerald-800/20 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className={`p-2.5 rounded-xl ${u.role === 'Admin' ? 'bg-emerald-100 dark:bg-emerald-800/40 text-emerald-600' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600'}`}>
+                    <UserIcon size={18} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-emerald-50 text-sm leading-none">{u.name}</p>
+                    <p className="text-[9px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase mt-1 tracking-wider">PIN: {u.pin} • {u.role}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-bold text-slate-800 dark:text-emerald-50 text-sm leading-none">{u.name}</p>
-                  <p className="text-[9px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase mt-1 tracking-wider">PIN: {u.pin} • {u.role}</p>
-                </div>
+                {isAdmin && u.role !== 'Admin' && (
+                  <button onClick={() => u.id && db.users.delete(u.id)} className="text-red-300 hover:text-red-500 transition-colors">
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
-              {isAdmin && u.role !== 'Admin' && (
-                <button onClick={() => u.id && db.users.delete(u.id)} className="text-red-300 hover:text-red-500 transition-colors">
-                  <Trash2 size={16} />
+              
+              {isAdmin && u.role === 'Staff' && (
+                <button 
+                  onClick={() => handleSetupStaffPhone(u)}
+                  className="w-full bg-white dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/40 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <Send size={14} /> Setup Staff Phone
                 </button>
               )}
             </div>

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData } from '../db.ts';
 import { decodeShopKey } from '../utils/whatsapp.ts';
-import { User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X, RefreshCw } from 'lucide-react';
+import { User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X, RefreshCw, LogIn } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (user: any) => void;
@@ -19,6 +19,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
 
   const handleLogin = () => {
     const combinedPin = pinArr.join('');
@@ -32,7 +33,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     }
   };
 
-  // Fixed setArr to setPinArr to resolve "Cannot find name 'setArr'" error.
   const handleInputChange = (val: string, index: number) => {
     if (!/^\d*$/.test(val)) return;
     const newArr = [...pinArr];
@@ -49,7 +49,38 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const handleImportKey = async () => {
     const data = decodeShopKey(importKey);
     if (!data) {
-      setImportError('Invalid Shop Key.');
+      setImportError('Invalid Key.');
+      return;
+    }
+
+    // Handle Staff Invite (Remote Setup)
+    if (data.type === 'STAFF_INVITE') {
+      if (confirm(`Accept invite to join "${data.shopName}" as ${data.staffName}?`)) {
+        setIsProcessing(true);
+        try {
+          await clearAllData();
+          await db.transaction('rw', [db.inventory, db.users, db.settings], async () => {
+            if (data.inventory.length > 0) await db.inventory.bulkAdd(data.inventory);
+            // Save the specific staff user
+            await db.users.add({
+              name: data.staffName,
+              pin: data.staffPin,
+              role: 'Staff'
+            });
+            await db.settings.put({ key: 'is_activated', value: true });
+          });
+          
+          localStorage.setItem('shop_name', data.shopName);
+          localStorage.setItem('shop_info', data.shopInfo);
+          localStorage.setItem('is_activated', 'true');
+          localStorage.setItem('device_role', 'StaffDevice');
+          window.location.reload();
+        } catch (e) {
+          setImportError('Invite setup failed');
+        } finally {
+          setIsProcessing(false);
+        }
+      }
       return;
     }
 
@@ -59,7 +90,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         setIsProcessing(true);
         try {
           await db.transaction('rw', [db.inventory], async () => {
-            // Smart update: replace stock counts but preserve item IDs
             for (const item of data.inventory) {
               const existing = await db.inventory.where('name').equals(item.name).first();
               if (existing) {
@@ -112,8 +142,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <button onClick={() => setShowImport(false)} className="self-end p-2 bg-slate-100 dark:bg-emerald-900 rounded-full mb-8 dark:text-emerald-50"><X size={20} /></button>
         <div className="flex flex-col items-center text-center mb-8">
           <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mb-4"><RefreshCw size={32} className={isProcessing ? 'animate-spin' : ''} /></div>
-          <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Staff Sync</h2>
-          <p className="text-slate-400 dark:text-emerald-500/40 text-sm mt-2 font-medium">Paste the Sync Key from the Boss.</p>
+          <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">System Setup</h2>
+          <p className="text-slate-400 dark:text-emerald-500/40 text-sm mt-2 font-medium">Paste the Code from the Boss.</p>
         </div>
         <textarea 
           placeholder="Paste KEY here..." 
@@ -127,7 +157,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           disabled={isProcessing || !importKey}
           className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2"
         >
-          {isProcessing ? 'Syncing...' : 'Update Records'} <ArrowRight size={16} />
+          {isProcessing ? 'Processing...' : 'Activate Device'} <ArrowRight size={16} />
         </button>
       </div>
     );
@@ -141,7 +171,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         <div className="relative z-10 text-center px-8 mt-16 animate-in fade-in zoom-in duration-700">
           <h1 className="text-5xl font-black tracking-tighter mb-2 uppercase drop-shadow-2xl text-white">NaijaShop</h1>
           <div className="bg-emerald-500/20 backdrop-blur-md px-4 py-1.5 rounded-full border border-emerald-400/30 inline-block shadow-lg">
-            <p className="text-emerald-400 font-black uppercase text-[10px] tracking-[0.4em]">Secure Terminal</p>
+            <p className="text-emerald-400 font-black uppercase text-[10px] tracking-[0.4em]">
+              {isStaffDevice ? 'Staff Terminal' : 'Boss Terminal'}
+            </p>
           </div>
         </div>
       </div>
@@ -164,9 +196,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 </button>
               ))}
             </div>
-            <button onClick={() => setShowImport(true)} className="w-full bg-emerald-950/50 border border-emerald-800/40 text-emerald-400 font-black py-5 rounded-[28px] text-[10px] uppercase tracking-[0.2em] mt-4 shadow-inner">
-              Staff Sync / Update
-            </button>
+            
+            <div className="w-full space-y-3 mt-4">
+              <button onClick={() => setShowImport(true)} className="w-full bg-emerald-950/50 border border-emerald-800/40 text-emerald-400 font-black py-5 rounded-[28px] text-[10px] uppercase tracking-[0.2em] shadow-inner flex items-center justify-center gap-2">
+                <LogIn size={14} /> Import Code / Sync
+              </button>
+              
+              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full text-emerald-800 font-black text-[9px] uppercase tracking-[0.3em] py-2">
+                Reset System
+              </button>
+            </div>
           </div>
         ) : (
           <div className="w-full space-y-8 animate-in slide-in-from-bottom duration-500 flex flex-col items-center">

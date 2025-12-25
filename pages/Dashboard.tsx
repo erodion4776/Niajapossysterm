@@ -24,7 +24,8 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
-  const isAdmin = role === 'Admin';
+  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
+  const isAdmin = role === 'Admin' && !isStaffDevice;
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
   const lowStockItems = useLiveQuery(() => db.inventory.where('stock').below(5).toArray());

@@ -1,4 +1,4 @@
-import { Sale, db } from '../db.ts';
+import { Sale, db, User } from '../db.ts';
 import pako from 'pako';
 
 export const formatNaira = (amount: number) => {
@@ -84,6 +84,43 @@ export const generateShopKey = async () => {
 };
 
 /**
+ * Generates an invite key for a specific staff member.
+ */
+export const generateStaffInviteKey = async (user: User) => {
+  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+  const shopInfo = localStorage.getItem('shop_info') || '';
+  const inventory = await db.inventory.toArray();
+
+  const payload = {
+    type: 'STAFF_INVITE',
+    shopName,
+    shopInfo,
+    staffName: user.name,
+    staffPin: user.pin,
+    inventory: inventory.map(i => ({ name: i.name, sellingPrice: i.sellingPrice, costPrice: i.costPrice, stock: i.stock, category: i.category, barcode: i.barcode })),
+    timestamp: Date.now()
+  };
+
+  const jsonStr = JSON.stringify(payload);
+  const base64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => 
+    String.fromCharCode(parseInt(p1, 16))
+  ));
+  
+  const key = `INVITE-STAFF-${base64}`;
+  const message = `👋 *NaijaShop Invite for ${user.name}*\n\nBoss has authorized you to use NaijaShop on this phone. Copy the code below and paste it into the "I am a Staff Member" screen on your phone.\n\n${key}`;
+
+  if (navigator.share && key.length < 1500) {
+    try {
+      await navigator.share({ title: 'Staff Invite Code', text: message });
+    } catch (e) {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
+    }
+  } else {
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message.substring(0, 1500))}`, '_blank');
+  }
+};
+
+/**
  * Generates a key for syncing MASTER stock back to staff after reconciliation.
  */
 export const generateMasterStockKey = async () => {
@@ -119,11 +156,12 @@ export const decodeShopKey = (key: string) => {
   const trimmedKey = key.trim();
   const isSetup = trimmedKey.includes('SHOP-KEY-');
   const isStock = trimmedKey.includes('STOCK-SYNC-');
+  const isInvite = trimmedKey.includes('INVITE-STAFF-');
   
-  if (!isSetup && !isStock) return null;
+  if (!isSetup && !isStock && !isInvite) return null;
   
   try {
-    const match = trimmedKey.match(/(?:SHOP-KEY-|STOCK-SYNC-)([A-Za-z0-9+/=]+)/);
+    const match = trimmedKey.match(/(?:SHOP-KEY-|STOCK-SYNC-|INVITE-STAFF-)([A-Za-z0-9+/=]+)/);
     if (!match) return null;
     
     const base64 = match[1];

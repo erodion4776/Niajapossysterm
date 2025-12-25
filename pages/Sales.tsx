@@ -14,7 +14,9 @@ interface SalesProps {
 }
 
 export const Sales: React.FC<SalesProps> = ({ role }) => {
-  const isAdmin = role === 'Admin';
+  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
+  const isAdmin = role === 'Admin' && !isStaffDevice;
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
