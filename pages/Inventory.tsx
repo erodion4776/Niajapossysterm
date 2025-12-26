@@ -294,14 +294,33 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
                 </div>
               </div>
 
+              {/* Price Fields Group */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Cost Price (₦)</label>
-                  <input required type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} />
+                  <input 
+                    required 
+                    type="number" 
+                    step="0.01"
+                    inputMode="decimal"
+                    placeholder="What you paid"
+                    className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" 
+                    value={formData.costPrice || ''} 
+                    onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} 
+                  />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Selling Price (₦)</label>
-                  <input required type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={formData.sellingPrice || ''} onChange={e => setFormData({...formData, sellingPrice: Number(e.target.value)})} />
+                  <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-2">Selling Price (₦)</label>
+                  <input 
+                    required 
+                    type="number" 
+                    step="0.01"
+                    inputMode="decimal"
+                    placeholder="What customer pays"
+                    className="w-full p-4 bg-emerald-50/30 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" 
+                    value={formData.sellingPrice || ''} 
+                    onChange={e => setFormData({...formData, sellingPrice: Number(e.target.value)})} 
+                  />
                 </div>
               </div>
 
@@ -356,14 +375,31 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
                 <input required type="text" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
               </div>
 
+              {/* Price Fields Group (Edit) */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Cost Price</label>
-                  <input required type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={editingItem.costPrice} onChange={e => setEditingItem({...editingItem, costPrice: Number(e.target.value)})} />
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Cost Price (₦)</label>
+                  <input 
+                    required 
+                    type="number" 
+                    step="0.01"
+                    inputMode="decimal"
+                    className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" 
+                    value={editingItem.costPrice} 
+                    onChange={e => setEditingItem({...editingItem, costPrice: Number(e.target.value)})} 
+                  />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2">Selling Price</label>
-                  <input required type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={editingItem.sellingPrice} onChange={e => setEditingItem({...editingItem, sellingPrice: Number(e.target.value)})} />
+                  <label className="text-[10px] font-black text-emerald-600 uppercase ml-2">Selling Price (₦)</label>
+                  <input 
+                    required 
+                    type="number" 
+                    step="0.01"
+                    inputMode="decimal"
+                    className="w-full p-4 bg-emerald-50/30 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" 
+                    value={editingItem.sellingPrice} 
+                    onChange={e => setEditingItem({...editingItem, sellingPrice: Number(e.target.value)})} 
+                  />
                 </div>
               </div>
 

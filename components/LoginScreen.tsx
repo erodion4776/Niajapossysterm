@@ -52,7 +52,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
     if (!/^\d*$/.test(val)) return;
     const newArr = [...pinArr];
     newArr[index] = val.slice(-1);
-    setArr(newArr);
+    // Use the correct state setter name 'setPinArr'
+    setPinArr(newArr);
     if (val && index < 3) pinRefs.current[index + 1]?.focus();
   };
 
@@ -252,7 +253,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
                 {pinArr.map((digit, idx) => (
                   <input
                     key={idx}
-                    // Fix: Ensure ref callback doesn't return the element to satisfy TypeScript Ref type
                     ref={el => { pinRefs.current[idx] = el; }}
                     type="password"
                     inputMode="numeric"
