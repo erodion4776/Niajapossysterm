@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../db.ts';
 import { ShieldCheck, CheckCircle2, AlertCircle, ArrowRight, ChevronLeft, Sparkles, Lock } from 'lucide-react';
@@ -144,7 +145,8 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       {arr.map((digit, idx) => (
         <input
           key={idx}
-          ref={el => refs.current[idx] = el}
+          // Fix: Ensure ref callback doesn't return the element to satisfy TypeScript Ref type
+          ref={el => { refs.current[idx] = el; }}
           type={isPassword ? "password" : "text"}
           inputMode="numeric"
           pattern="\d*"

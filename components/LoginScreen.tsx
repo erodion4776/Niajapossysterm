@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData, User } from '../db.ts';
@@ -51,7 +52,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
     if (!/^\d*$/.test(val)) return;
     const newArr = [...pinArr];
     newArr[index] = val.slice(-1);
-    setPinArr(newArr);
+    setArr(newArr);
     if (val && index < 3) pinRefs.current[index + 1]?.focus();
   };
 
@@ -251,7 +252,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
                 {pinArr.map((digit, idx) => (
                   <input
                     key={idx}
-                    ref={el => pinRefs.current[idx] = el}
+                    // Fix: Ensure ref callback doesn't return the element to satisfy TypeScript Ref type
+                    ref={el => { pinRefs.current[idx] = el; }}
                     type="password"
                     inputMode="numeric"
                     maxLength={1}
