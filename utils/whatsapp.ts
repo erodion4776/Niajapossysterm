@@ -52,7 +52,7 @@ export const generateShopKey = async () => {
   const shopInfo = localStorage.getItem('shop_info') || '';
 
   const payload = {
-    inventory,
+    inventory: inventory.map(({image, ...rest}) => rest), // Don't include images in setup keys (too big)
     users,
     settings: { shopName, shopInfo }
   };
@@ -63,11 +63,11 @@ export const generateShopKey = async () => {
   ));
   
   const key = `SHOP-KEY-${base64}`;
-  const message = `🚀 *Shop Setup Key for ${shopName}*\n\nCopy the text below and paste it into your Shop Manager app to sync inventory and staff.\n\n${key}`;
+  const message = `🚀 *Shop Setup Key for ${shopName}*\n\nCopy the text below and paste it into your Shop Manager app.\n\n${key}`;
 
   try {
     await navigator.clipboard.writeText(key);
-    alert('Setup Key copied to clipboard! You can now paste it into WhatsApp.');
+    alert('Setup Key copied to clipboard!');
   } catch (err) {
     console.error('Clipboard failed', err);
   }
@@ -107,7 +107,7 @@ export const generateStaffInviteKey = async (user: User) => {
   ));
   
   const key = `INVITE-STAFF-${base64}`;
-  const message = `👋 *NaijaShop Invite for ${user.name}*\n\nBoss has authorized you to use NaijaShop on this phone. Copy the code below and paste it into the "I am a Staff Member" screen on your phone.\n\n${key}`;
+  const message = `👋 *NaijaShop Invite for ${user.name}*\n\nBoss has authorized you. Copy the code below and paste it into the staff login screen.\n\n${key}`;
 
   if (navigator.share && key.length < 1500) {
     try {
@@ -121,14 +121,14 @@ export const generateStaffInviteKey = async (user: User) => {
 };
 
 /**
- * Generates a key for syncing MASTER stock back to staff after reconciliation.
+ * Generates a key for syncing MASTER stock back to staff.
  */
 export const generateMasterStockKey = async () => {
   const inventory = await db.inventory.toArray();
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
 
   const payload = {
-    inventory,
+    inventory: inventory.map(({image, ...rest}) => rest),
     type: 'STOCK_UPDATE',
     timestamp: Date.now()
   };
@@ -139,7 +139,7 @@ export const generateMasterStockKey = async () => {
   ));
   
   const key = `STOCK-SYNC-${base64}`;
-  const message = `📦 *Master Stock Update: ${shopName}*\n\nStaff: Use this key to reset your stock counts to match the Boss's records.\n\n${key}`;
+  const message = `📦 *Master Stock Update: ${shopName}*\n\n${key}`;
 
   if (navigator.share && key.length < 1500) {
     try {
@@ -181,41 +181,50 @@ export type BackupResult = {
   method: 'FILE_SHARE' | 'TEXT_SHARE' | 'DOWNLOAD';
   fileName?: string;
   totalRecords?: number;
+  isLarge?: boolean;
 };
 
-export const backupToWhatsApp = async (data: any): Promise<BackupResult> => {
+export const backupToWhatsApp = async (data: any, excludePhotos = false): Promise<BackupResult> => {
+  const finalData = excludePhotos ? {
+    ...data,
+    inventory: data.inventory.map(({image, ...rest}: any) => rest),
+    categories: data.categories.map(({image, ...rest}: any) => rest)
+  } : data;
+
+  const jsonString = JSON.stringify(finalData);
+  const sizeMB = jsonString.length / (1024 * 1024);
+  const isLarge = sizeMB > 30;
+
+  if (isLarge && !excludePhotos) {
+    if (confirm(`⚠️ LARGE BACKUP: Your backup is ${Math.round(sizeMB)}MB because of product photos. This might be hard to send on slow network. Backup without photos instead?`)) {
+      return backupToWhatsApp(data, true);
+    }
+  }
+
   const shopName = data.shopName || 'NaijaShop';
   const timestamp = data.timestamp || Date.now();
   const dateStr = new Date(timestamp).toISOString().split('T')[0];
-  const fileName = `NAIJASHOP_SAFE_BACKUP_${dateStr}.json.gz`;
+  const fileName = `NAIJASHOP_BACKUP_${excludePhotos ? 'LITE_' : ''}${dateStr}.json.gz`;
   
-  const totalRecords = Object.values(data).reduce((acc: number, val: any) => {
+  const totalRecords = Object.values(finalData).reduce((acc: number, val: any) => {
     return acc + (Array.isArray(val) ? val.length : 0);
   }, 0) as number;
 
-  const jsonString = JSON.stringify(data);
   const uint8Data = new TextEncoder().encode(jsonString);
   const compressed = pako.gzip(uint8Data);
   
   const shareTitle = `Shop Backup: ${shopName}`;
-  const shareText = `This is my Compressed Secure Shop Backup for ${dateStr}. Keep this file safe. It contains all history.`;
+  const shareText = `Compressed Secure Shop Backup for ${dateStr}. ${excludePhotos ? '(Text Only)' : '(Includes Photos)'}`;
 
   if (navigator.share) {
     try {
       const blob = new Blob([compressed], { type: 'application/gzip' });
       const file = new File([blob], fileName, { type: 'application/gzip' });
-
       await navigator.share({ title: shareTitle, text: shareText, files: [file] });
       await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-      return { success: true, method: 'FILE_SHARE', fileName, totalRecords };
+      return { success: true, method: 'FILE_SHARE', fileName, totalRecords, isLarge };
     } catch (stage1Error) {
-      try {
-        await navigator.share({ title: shareTitle, text: `NaijaShop Backup Data: ${jsonString}` });
-        await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-        return { success: true, method: 'TEXT_SHARE', totalRecords };
-      } catch (stage2Error) {
-        console.error("Stage 2 failed.", stage2Error);
-      }
+      console.warn("Share files failed, falling back to text...");
     }
   }
 
@@ -231,17 +240,14 @@ export const backupToWhatsApp = async (data: any): Promise<BackupResult> => {
     URL.revokeObjectURL(url);
     
     await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-    return { success: true, method: 'DOWNLOAD', fileName, totalRecords };
+    return { success: true, method: 'DOWNLOAD', fileName, totalRecords, isLarge };
   } catch (stage3Error) {
     return { success: false, method: 'DOWNLOAD' };
   }
 };
 
 /**
- * Reconciliation Logic: Merges Staff Sales into Admin DB.
- * 1. Checks for Duplicate Sales via UUID.
- * 2. Subtracts Staff sales quantities from Admin inventory.
- * 3. Records sales in Admin history.
+ * Reconciliation Logic
  */
 export const reconcileStaffSales = async (staffData: any) => {
   const staffSales = staffData.sales || [];
@@ -252,20 +258,15 @@ export const reconcileStaffSales = async (staffData: any) => {
 
   await db.transaction('rw', [db.inventory, db.sales], async () => {
     for (const sale of staffSales) {
-      // 1. Anti-Duplicate Check
       const existing = await db.sales.where('uuid').equals(sale.uuid).first();
       if (existing) {
         skippedCount++;
         continue;
       }
 
-      // 2. Deduction Logic (The Delta)
       for (const item of sale.items) {
-        // Find by ID first, then fallback to name (most robust for sync)
         let invItem = await db.inventory.get(item.id);
-        if (!invItem) {
-          invItem = await db.inventory.where('name').equals(item.name).first();
-        }
+        if (!invItem) invItem = await db.inventory.where('name').equals(item.name).first();
 
         if (invItem) {
           const newStock = Math.max(0, (invItem.stock || 0) - item.quantity);
@@ -273,8 +274,7 @@ export const reconcileStaffSales = async (staffData: any) => {
         }
       }
 
-      // 3. Add to Admin Sales Table
-      const { id, ...saleWithoutOldId } = sale; // Ensure we don't clash on local auto-increment
+      const { id, ...saleWithoutOldId } = sale;
       await db.sales.add(saleWithoutOldId);
       mergedCount++;
     }
@@ -291,13 +291,7 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
   const dateStr = new Date().toISOString().split('T')[0];
   const fileName = `SALES_REPORT_${shopName}_${dateStr}.json.gz`;
 
-  const payload = {
-    sales,
-    shopName,
-    type: 'STAFF_REPORT',
-    timestamp: Date.now()
-  };
-
+  const payload = { sales, shopName, type: 'STAFF_REPORT', timestamp: Date.now() };
   const jsonString = JSON.stringify(payload);
   const uint8Data = new TextEncoder().encode(jsonString);
   const compressed = pako.gzip(uint8Data);
@@ -308,7 +302,7 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
       const file = new File([blob], fileName, { type: 'application/gzip' });
       await navigator.share({
         title: `Sales Report: ${shopName}`,
-        text: `Boss, here is my sales report for ${dateStr}. Please import for reconciliation.`,
+        text: `Boss, here is my sales report for ${dateStr}.`,
         files: [file]
       });
       return { success: true };
@@ -317,7 +311,6 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
     }
   }
 
-  // Fallback download
   const blob = new Blob([compressed], { type: 'application/gzip' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

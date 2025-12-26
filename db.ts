@@ -1,16 +1,23 @@
 import Dexie, { Table } from 'dexie';
 
+export interface Category {
+  id?: string | number;
+  name: string;
+  image?: string; // New: Category visual
+}
+
 export interface InventoryItem {
   id?: string | number;
   name: string;
   costPrice: number;
   sellingPrice: number;
   stock: number;
-  minStock?: number; // New: Minimum stock threshold
-  expiryDate?: string; // New: ISO date string for expiration
+  minStock?: number;
+  expiryDate?: string;
   category: string;
   barcode?: string;
   dateAdded?: string;
+  image?: string; // New: Product photo (Base64 compressed)
 }
 
 export interface User {
@@ -31,7 +38,7 @@ export interface SaleItem {
 
 export interface Sale {
   id?: string | number;
-  uuid: string; // Unique identifier for reconciliation
+  uuid: string;
   items: SaleItem[];
   total: number;
   totalCost: number;
@@ -64,6 +71,7 @@ export interface Setting {
 
 export type NaijaShopDatabase = Dexie & {
   inventory: Table<InventoryItem>;
+  categories: Table<Category>;
   sales: Table<Sale>;
   settings: Table<Setting>;
   users: Table<User>;
@@ -73,9 +81,9 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-// Incremented version to 11 to update schema
-dexieDb.version(11).stores({
+dexieDb.version(12).stores({
   inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock',
+  categories: '++id, name',
   sales: '++id, uuid, timestamp, total, staff_id, staff_name',
   settings: 'key',
   users: '++id, name, pin, role',
@@ -85,9 +93,6 @@ dexieDb.version(11).stores({
 
 export const db = dexieDb;
 
-/**
- * Initializes basic shop data and trial tracking.
- */
 export async function initTrialDate() {
   let installDateStr = localStorage.getItem('install_date');
   if (!installDateStr) {
@@ -106,12 +111,9 @@ export async function initTrialDate() {
   }
 
   const deviceRole = localStorage.getItem('device_role');
-  const isStaffDevice = deviceRole === 'StaffDevice';
-  
   if (!deviceRole) return;
 
   const userCount = await db.users.count();
-  
   if (userCount === 0 && deviceRole === 'Owner') {
     await db.users.add({
       name: 'Shop Owner',
@@ -119,11 +121,23 @@ export async function initTrialDate() {
       role: 'Admin'
     });
   }
+
+  // Seed default categories if empty
+  const catCount = await db.categories.count();
+  if (catCount === 0) {
+    await db.categories.bulkAdd([
+      { name: 'General' },
+      { name: 'Drinks' },
+      { name: 'Food' },
+      { name: 'Medicine' }
+    ]);
+  }
 }
 
 export async function clearAllData() {
-  await db.transaction('rw', [db.inventory, db.sales, db.settings, db.users, db.expenses, db.debts], async () => {
+  await db.transaction('rw', [db.inventory, db.categories, db.sales, db.settings, db.users, db.expenses, db.debts], async () => {
     await db.inventory.clear();
+    await db.categories.clear();
     await db.sales.clear();
     await db.settings.clear();
     await db.users.clear();
