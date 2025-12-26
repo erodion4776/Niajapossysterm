@@ -13,7 +13,7 @@ import { LandingPage } from './pages/LandingPage.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { RoleSelection } from './components/RoleSelection.tsx';
-import { SetupWizard } from './components/SetupWizard.tsx';
+import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
 import { ThemeProvider } from './ThemeContext.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, Receipt, ShieldAlert, Users, Wallet } from 'lucide-react';
@@ -145,7 +145,7 @@ const AppContent: React.FC = () => {
   
   if (deviceRole === 'Owner') {
     if (!isActivated && (!isTrialing || !isTrialValid)) return <LockScreen onUnlock={() => window.location.reload()} />;
-    if (isSetupPending) return <SetupWizard onComplete={() => window.location.reload()} />;
+    if (isSetupPending) return <Onboarding onComplete={() => window.location.reload()} />;
   }
   
   if (!currentUser) return <LoginScreen onLogin={handleLogin} deviceRole={deviceRole || 'StaffDevice'} />;
