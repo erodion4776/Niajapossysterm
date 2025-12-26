@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Page, Role, DeviceRole } from './types.ts';
 import { initTrialDate, User, db } from './db.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
@@ -27,7 +27,7 @@ const AppContent: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPirated, setIsPirated] = useState(false);
   
-  // Param used to filter inventory when coming from alerts
+  // Inventory filter state synced with URL params
   const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock' | 'expiring'>('all');
 
   const [isAtLanding, setIsAtLanding] = useState(() => window.location.pathname === '/' || window.location.pathname === '');
@@ -40,6 +40,41 @@ const AppContent: React.FC = () => {
   const trialStartDate = localStorage.getItem('trial_start_date');
   const isTrialValid = trialStartDate ? (Date.now() - parseInt(trialStartDate)) < TRIAL_DURATION : false;
 
+  // Sync state from URL
+  const syncStateFromUrl = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pageParam = params.get('page')?.toUpperCase();
+    const filterParam = params.get('filter');
+
+    if (pageParam && Object.values(Page).includes(pageParam as Page)) {
+      setCurrentPage(pageParam as Page);
+    }
+    
+    if (filterParam === 'expiring' || filterParam === 'low-stock') {
+      setInventoryFilter(filterParam as any);
+    } else {
+      setInventoryFilter('all');
+    }
+
+    setIsAtLanding(window.location.pathname === '/' || window.location.pathname === '');
+  }, []);
+
+  // Update URL based on state
+  const navigateTo = useCallback((page: Page, filter?: string) => {
+    setCurrentPage(page);
+    const url = new URL(window.location.href);
+    url.pathname = '/app';
+    url.searchParams.set('page', page.toLowerCase());
+    if (filter && filter !== 'all') {
+      url.searchParams.set('filter', filter);
+      setInventoryFilter(filter as any);
+    } else {
+      url.searchParams.delete('filter');
+      setInventoryFilter('all');
+    }
+    window.history.pushState({}, '', url.toString());
+  }, []);
+
   useEffect(() => {
     const startup = async () => {
       const hostname = window.location.hostname;
@@ -48,6 +83,7 @@ const AppContent: React.FC = () => {
       }
       
       await initTrialDate();
+      syncStateFromUrl();
       
       const dbActivated = await db.settings.get('is_activated');
       if (dbActivated?.value === true && !isActivated) {
@@ -58,10 +94,9 @@ const AppContent: React.FC = () => {
     };
     startup();
 
-    const handleUrlChange = () => setIsAtLanding(window.location.pathname === '/' || window.location.pathname === '');
-    window.addEventListener('popstate', handleUrlChange);
-    return () => window.removeEventListener('popstate', handleUrlChange);
-  }, [isActivated]);
+    window.addEventListener('popstate', syncStateFromUrl);
+    return () => window.removeEventListener('popstate', syncStateFromUrl);
+  }, [isActivated, syncStateFromUrl]);
 
   const handleStartTrial = () => {
     setShowRoleSelection(true);
@@ -79,18 +114,15 @@ const AppContent: React.FC = () => {
       localStorage.setItem('is_setup_pending', 'true');
       localStorage.setItem('temp_otp', randomOtp);
       
-      window.history.pushState({}, '', '/app');
+      navigateTo(Page.DASHBOARD);
       setIsAtLanding(false);
       setIsTrialing(true);
       setIsSetupPending(true);
-      
-      initTrialDate();
     } else {
-      window.history.pushState({}, '', '/app');
+      navigateTo(Page.LOGIN);
       setIsAtLanding(false);
       setIsTrialing(false);
       setIsSetupPending(false);
-      initTrialDate();
     }
   };
 
@@ -125,26 +157,23 @@ const AppContent: React.FC = () => {
     switch (currentPage) {
       case Page.DASHBOARD: 
         return <Dashboard 
-          setPage={setCurrentPage} 
+          setPage={(p) => navigateTo(p)} 
           role={isStaffDevice ? 'Staff' : currentUser.role} 
-          onInventoryFilter={(f) => {
-            setInventoryFilter(f);
-            setCurrentPage(Page.INVENTORY);
-          }}
+          onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)}
         />;
       case Page.INVENTORY: 
         return <Inventory 
           role={isStaffDevice ? 'Staff' : currentUser.role} 
           initialFilter={inventoryFilter} 
-          clearInitialFilter={() => setInventoryFilter('all')}
+          clearInitialFilter={() => navigateTo(Page.INVENTORY, 'all')}
         />;
       case Page.POS: return <POS user={currentUser} />;
       case Page.SALES: return <Sales role={isStaffDevice ? 'Staff' : currentUser.role} />;
       case Page.DEBTS: return <Debts role={isStaffDevice ? 'Staff' : currentUser.role} />;
-      case Page.EXPENSES: return <Expenses role={isStaffDevice ? 'Staff' : currentUser.role} setPage={setCurrentPage} />;
-      case Page.SETTINGS: return <Settings role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={setCurrentPage} />;
-      case Page.FAQ: return <FAQ setPage={setCurrentPage} />;
-      default: return <Dashboard setPage={setCurrentPage} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={setInventoryFilter} />;
+      case Page.EXPENSES: return <Expenses role={isStaffDevice ? 'Staff' : currentUser.role} setPage={(p) => navigateTo(p)} />;
+      case Page.SETTINGS: return <Settings role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={(p) => navigateTo(p)} />;
+      case Page.FAQ: return <FAQ setPage={(p) => navigateTo(p)} />;
+      default: return <Dashboard setPage={(p) => navigateTo(p)} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
     }
   };
 
@@ -155,32 +184,32 @@ const AppContent: React.FC = () => {
       {!isStaffDevice && <BackupReminder />}
 
       <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/90 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-0.5 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)] transition-colors duration-300">
-        <button onClick={() => { setInventoryFilter('all'); setCurrentPage(Page.DASHBOARD); }} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+        <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <LayoutGrid size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Home</span>
         </button>
         
-        <button onClick={() => setCurrentPage(Page.POS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+        <button onClick={() => navigateTo(Page.POS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <ShoppingBag size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">POS</span>
         </button>
 
-        <button onClick={() => { setInventoryFilter('all'); setCurrentPage(Page.INVENTORY); }} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+        <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Package size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Stock</span>
         </button>
 
-        <button onClick={() => setCurrentPage(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+        <button onClick={() => navigateTo(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Sales</span>
         </button>
 
-        <button onClick={() => setCurrentPage(Page.EXPENSES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.EXPENSES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+        <button onClick={() => navigateTo(Page.EXPENSES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.EXPENSES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Wallet size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Spend</span>
         </button>
 
-        <button onClick={() => setCurrentPage(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+        <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Users size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Debts</span>
         </button>
         
         {isAdminUser && (
-          <button onClick={() => setCurrentPage(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+          <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
             <SettingsIcon size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Admin</span>
           </button>
         )}
