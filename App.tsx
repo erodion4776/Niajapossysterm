@@ -27,6 +27,9 @@ const AppContent: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPirated, setIsPirated] = useState(false);
   
+  // Param used to filter inventory when coming from alerts
+  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock' | 'expiring'>('all');
+
   const [isAtLanding, setIsAtLanding] = useState(() => window.location.pathname === '/' || window.location.pathname === '');
   const [isActivated, setIsActivated] = useState(() => localStorage.getItem('is_activated') === 'true');
   const [isTrialing, setIsTrialing] = useState(() => localStorage.getItem('is_trialing') === 'true');
@@ -44,7 +47,6 @@ const AppContent: React.FC = () => {
         setIsPirated(true);
       }
       
-      // Attempt to initialize data if role is already known
       await initTrialDate();
       
       const dbActivated = await db.settings.get('is_activated');
@@ -82,15 +84,12 @@ const AppContent: React.FC = () => {
       setIsTrialing(true);
       setIsSetupPending(true);
       
-      // Initialize the default Admin for Owner devices immediately
       initTrialDate();
     } else {
-      // Staff setup skips trial/otp and goes to Login for key import
       window.history.pushState({}, '', '/app');
       setIsAtLanding(false);
       setIsTrialing(false);
       setIsSetupPending(false);
-      // initTrialDate will skip Admin creation because it's a StaffDevice
       initTrialDate();
     }
   };
@@ -124,15 +123,28 @@ const AppContent: React.FC = () => {
 
   const renderPage = () => {
     switch (currentPage) {
-      case Page.DASHBOARD: return <Dashboard setPage={setCurrentPage} role={isStaffDevice ? 'Staff' : currentUser.role} />;
-      case Page.INVENTORY: return <Inventory role={isStaffDevice ? 'Staff' : currentUser.role} />;
+      case Page.DASHBOARD: 
+        return <Dashboard 
+          setPage={setCurrentPage} 
+          role={isStaffDevice ? 'Staff' : currentUser.role} 
+          onInventoryFilter={(f) => {
+            setInventoryFilter(f);
+            setCurrentPage(Page.INVENTORY);
+          }}
+        />;
+      case Page.INVENTORY: 
+        return <Inventory 
+          role={isStaffDevice ? 'Staff' : currentUser.role} 
+          initialFilter={inventoryFilter} 
+          clearInitialFilter={() => setInventoryFilter('all')}
+        />;
       case Page.POS: return <POS user={currentUser} />;
       case Page.SALES: return <Sales role={isStaffDevice ? 'Staff' : currentUser.role} />;
       case Page.DEBTS: return <Debts role={isStaffDevice ? 'Staff' : currentUser.role} />;
       case Page.EXPENSES: return <Expenses role={isStaffDevice ? 'Staff' : currentUser.role} setPage={setCurrentPage} />;
       case Page.SETTINGS: return <Settings role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={setCurrentPage} />;
       case Page.FAQ: return <FAQ setPage={setCurrentPage} />;
-      default: return <Dashboard setPage={setCurrentPage} role={isStaffDevice ? 'Staff' : currentUser.role} />;
+      default: return <Dashboard setPage={setCurrentPage} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={setInventoryFilter} />;
     }
   };
 
@@ -143,7 +155,7 @@ const AppContent: React.FC = () => {
       {!isStaffDevice && <BackupReminder />}
 
       <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/90 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-0.5 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)] transition-colors duration-300">
-        <button onClick={() => setCurrentPage(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+        <button onClick={() => { setInventoryFilter('all'); setCurrentPage(Page.DASHBOARD); }} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <LayoutGrid size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Home</span>
         </button>
         
@@ -151,7 +163,7 @@ const AppContent: React.FC = () => {
           <ShoppingBag size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">POS</span>
         </button>
 
-        <button onClick={() => setCurrentPage(Page.INVENTORY)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+        <button onClick={() => { setInventoryFilter('all'); setCurrentPage(Page.INVENTORY); }} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Package size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Stock</span>
         </button>
 

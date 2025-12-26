@@ -6,6 +6,8 @@ export interface InventoryItem {
   costPrice: number;
   sellingPrice: number;
   stock: number;
+  minStock?: number; // New: Minimum stock threshold
+  expiryDate?: string; // New: ISO date string for expiration
   category: string;
   barcode?: string;
   dateAdded?: string;
@@ -71,8 +73,9 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(10).stores({
-  inventory: '++id, name, sellingPrice, stock, category, barcode',
+// Incremented version to 11 to update schema
+dexieDb.version(11).stores({
+  inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock',
   sales: '++id, uuid, timestamp, total, staff_id, staff_name',
   settings: 'key',
   users: '++id, name, pin, role',
@@ -105,13 +108,10 @@ export async function initTrialDate() {
   const deviceRole = localStorage.getItem('device_role');
   const isStaffDevice = deviceRole === 'StaffDevice';
   
-  // If the user hasn't chosen a role yet, we wait.
-  // This prevents the default Admin from being created before the "I am a staff" choice is made.
   if (!deviceRole) return;
 
   const userCount = await db.users.count();
   
-  // Only add default admin if it's explicitly an Owner device and no users exist
   if (userCount === 0 && deviceRole === 'Owner') {
     await db.users.add({
       name: 'Shop Owner',

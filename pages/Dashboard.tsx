@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
@@ -14,24 +14,57 @@ import {
   ArrowUpRight, 
   Star, 
   Award,
-  Users
+  Users,
+  Bell,
+  ChevronRight,
+  ShieldAlert
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
 interface DashboardProps {
   setPage: (page: Page) => void;
   role: Role;
+  onInventoryFilter: (filter: 'all' | 'low-stock' | 'expiring') => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventoryFilter }) => {
   const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
   const isAdmin = role === 'Admin' && !isStaffDevice;
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showAlerts, setShowAlerts] = useState(true);
   
-  const lowStockItems = useLiveQuery(() => db.inventory.where('stock').below(5).toArray());
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const allSales = useLiveQuery(() => db.sales.toArray());
   
+  // Alert Logic
+  const alerts = useMemo(() => {
+    if (!inventory) return { expiring: 0, lowStock: 0 };
+    
+    const now = new Date();
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(now.getDate() + 7);
+
+    let expiring = 0;
+    let lowStock = 0;
+
+    inventory.forEach(item => {
+      // Expiry Check
+      if (item.expiryDate) {
+        const exp = new Date(item.expiryDate);
+        if (exp >= now && exp <= sevenDaysFromNow) {
+          expiring++;
+        }
+      }
+      // Low Stock Check
+      const threshold = item.minStock || 5;
+      if (item.stock <= threshold) {
+        lowStock++;
+      }
+    });
+
+    return { expiring, lowStock };
+  }, [inventory]);
+
   const queryStart = new Date(selectedDate);
   queryStart.setHours(0, 0, 0, 0);
   const queryEnd = new Date(selectedDate);
@@ -63,7 +96,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
 
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
 
-  const bestSeller = React.useMemo(() => {
+  const bestSeller = useMemo(() => {
     if (!allSales) return null;
     const itemMap: Record<string, { name: string, quantity: number }> = {};
     allSales.forEach(sale => {
@@ -78,12 +111,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
     return sorted[0] || null;
   }, [allSales]);
 
-  const storeNetWorth = React.useMemo(() => {
+  const storeNetWorth = useMemo(() => {
     if (!inventory) return 0;
     return inventory.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.stock || 0)), 0);
   }, [inventory]);
 
-  const chartData = React.useMemo(() => {
+  const chartData = useMemo(() => {
     if (!last7DaysSales) return [];
     const days = [];
     for (let i = 6; i >= 0; i--) {
@@ -125,6 +158,53 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
           </div>
         </div>
       </header>
+
+      {/* PHARMACY GRADE ALERT SYSTEM */}
+      {(alerts.expiring > 0 || alerts.lowStock > 0) && showAlerts && (
+        <section className="bg-white dark:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800/40 rounded-[32px] overflow-hidden shadow-xl animate-in slide-in-from-top duration-500">
+          <div className="p-5 border-b border-emerald-50 dark:border-emerald-800/40 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+              <h2 className="text-[11px] font-black text-slate-800 dark:text-emerald-50 uppercase tracking-widest">Critical Alerts</h2>
+            </div>
+            <button onClick={() => setShowAlerts(false)} className="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-red-500 transition-colors">Dismiss</button>
+          </div>
+          
+          <div className="flex flex-col">
+            {alerts.expiring > 0 && (
+              <button 
+                onClick={() => onInventoryFilter('expiring')}
+                className="flex items-center gap-4 p-5 bg-red-50 dark:bg-red-950/20 border-b border-white dark:border-emerald-800/20 text-left active:scale-[0.98] transition-all"
+              >
+                <div className="bg-red-500 text-white p-2.5 rounded-2xl shadow-lg shadow-red-200 dark:shadow-none">
+                  <ShieldAlert size={20} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-black text-red-700 dark:text-red-400 uppercase tracking-tight">{alerts.expiring} Items Expiring Soon</p>
+                  <p className="text-[9px] font-bold text-red-500/60 uppercase mt-0.5">Expiring within 7 days • Prevent 100% loss</p>
+                </div>
+                <ChevronRight size={18} className="text-red-300" />
+              </button>
+            )}
+
+            {alerts.lowStock > 0 && (
+              <button 
+                onClick={() => onInventoryFilter('low-stock')}
+                className="flex items-center gap-4 p-5 bg-orange-50 dark:bg-orange-950/20 text-left active:scale-[0.98] transition-all"
+              >
+                <div className="bg-orange-500 text-white p-2.5 rounded-2xl shadow-lg shadow-orange-200 dark:shadow-none">
+                  <Package size={20} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-black text-orange-700 dark:text-orange-400 uppercase tracking-tight">{alerts.lowStock} Items Low In Stock</p>
+                  <p className="text-[9px] font-bold text-orange-500/60 uppercase mt-0.5">Below threshold • Restock now to sell</p>
+                </div>
+                <ChevronRight size={18} className="text-orange-300" />
+              </button>
+            )}
+          </div>
+        </section>
+      )}
 
       {!isToday && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 p-3 rounded-2xl flex items-center justify-between">
@@ -170,7 +250,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role }) => {
           </button>
 
           <button 
-            onClick={() => setPage(Page.INVENTORY)}
+            onClick={() => { onInventoryFilter('all'); setPage(Page.INVENTORY); }}
             className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left active:scale-95 transition-all"
           >
             <p className="text-slate-400 dark:text-emerald-500/40 text-[9px] font-black uppercase tracking-widest">Store Value</p>
