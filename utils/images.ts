@@ -1,5 +1,6 @@
+
 /**
- * Processes a File or Blob, resizes it to 400px width, 
+ * Processes a File or Blob, resizes it to 500px width, 
  * and compresses it to a lightweight Base64 string.
  */
 export async function processImage(file: File | Blob): Promise<string> {
@@ -11,7 +12,7 @@ export async function processImage(file: File | Blob): Promise<string> {
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 400;
+        const MAX_WIDTH = 500; // Standardized to 500px
         let width = img.width;
         let height = img.height;
 
@@ -29,10 +30,11 @@ export async function processImage(file: File | Blob): Promise<string> {
           return;
         }
 
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Output as low-quality WebP for maximum compression
-        // Fallback to JPEG if WebP not supported
+        // Output as 60% quality for lightweight storage
         const dataUrl = canvas.toDataURL('image/webp', 0.6);
         const finalUrl = dataUrl.includes('image/webp') 
           ? dataUrl 
