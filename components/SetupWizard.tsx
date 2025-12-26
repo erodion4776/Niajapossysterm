@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../db.ts';
 import { ShieldCheck, CheckCircle2, AlertCircle, ArrowRight, ChevronLeft, Sparkles, Lock } from 'lucide-react';
@@ -21,7 +20,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   
   const [error, setError] = useState('');
 
-  // Refs for auto-focus
+  // Refs for auto-focus control
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
   const confirmPinRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -33,6 +32,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     setShopName(name);
   }, []);
 
+  // Handle step change focus
+  useEffect(() => {
+    if (step === 'VERIFY') otpRefs.current[0]?.focus();
+    if (step === 'PIN') pinRefs.current[0]?.focus();
+  }, [step]);
+
   const handleInputChange = (
     val: string, 
     index: number, 
@@ -42,11 +47,14 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     length: number
   ) => {
     if (!/^\d*$/.test(val)) return;
+    
     const newArr = [...arr];
+    // Take the last character typed
     newArr[index] = val.slice(-1);
     setArr(newArr);
-    
-    // Auto-advance
+    setError('');
+
+    // Auto-advance if we have a value
     if (val && index < length - 1) {
       refs.current[index + 1]?.focus();
     }
@@ -56,10 +64,22 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     e: React.KeyboardEvent, 
     index: number, 
     arr: string[], 
+    setArr: React.Dispatch<React.SetStateAction<string[]>>,
     refs: React.MutableRefObject<(HTMLInputElement | null)[]>,
   ) => {
-    if (e.key === 'Backspace' && !arr[index] && index > 0) {
-      refs.current[index - 1]?.focus();
+    if (e.key === 'Backspace') {
+      if (!arr[index] && index > 0) {
+        // Cell is empty, move focus back and clear previous
+        const newArr = [...arr];
+        newArr[index - 1] = '';
+        setArr(newArr);
+        refs.current[index - 1]?.focus();
+      } else {
+        // Cell has value, clear it
+        const newArr = [...arr];
+        newArr[index] = '';
+        setArr(newArr);
+      }
     }
   };
 
@@ -68,7 +88,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       setStep('PIN');
       setError('');
     } else {
-      setError('Invalid code. Check Stage 0 again.');
+      setError('Incorrect verification code.');
     }
   };
 
@@ -77,31 +97,39 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     const confirmPin = confirmPinArr.join('');
 
     if (newPin.length !== 4) {
-      setError('PIN must be 4 digits');
+      setError('Admin PIN must be 4 digits');
       return;
     }
     if (newPin !== confirmPin) {
-      setError('PINs do not match');
+      setError('PINs do not match. Try again.');
       return;
     }
 
     try {
-      const admin = await db.users.where('role').equals('Admin').first();
+      // Find Admin user or create if somehow missing
+      let admin = await db.users.where('role').equals('Admin').first();
+      
       if (admin && admin.id) {
         await db.users.update(admin.id, { pin: newPin });
-        
-        // Finalize state
-        localStorage.setItem('is_setup_pending', 'false');
-        localStorage.removeItem('temp_otp');
-        
-        // Celebration!
-        setStep('SUCCESS');
-        setTimeout(() => {
-          onComplete();
-        }, 2500);
+      } else {
+        // Fail-safe: Create the admin account if it doesn't exist
+        await db.users.add({
+          name: 'Shop Owner',
+          pin: newPin,
+          role: 'Admin'
+        });
       }
+      
+      // Finalize setup state
+      localStorage.setItem('is_setup_pending', 'false');
+      localStorage.removeItem('temp_otp');
+      
+      setStep('SUCCESS');
+      setTimeout(() => {
+        onComplete();
+      }, 2500);
     } catch (err) {
-      setError('System Error: Could not save PIN');
+      setError('System Error: Could not save admin data.');
     }
   };
 
@@ -119,12 +147,12 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
           ref={el => refs.current[idx] = el}
           type={isPassword ? "password" : "text"}
           inputMode="numeric"
+          pattern="\d*"
           maxLength={1}
           className="w-10 h-12 bg-white/10 border border-white/30 rounded-xl text-center text-xl font-black text-white focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/20 transition-all shadow-sm backdrop-blur-md"
           value={digit}
           onChange={e => handleInputChange(e.target.value, idx, arr, setArr, refs, length)}
-          onKeyDown={e => handleKeyDown(e, idx, arr, refs)}
-          autoFocus={idx === 0}
+          onKeyDown={e => handleKeyDown(e, idx, arr, setArr, refs)}
         />
       ))}
     </div>
@@ -159,19 +187,10 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
   return (
     <div className="fixed inset-0 z-[600] bg-emerald-950 flex flex-col overflow-hidden text-white">
-      {/* Immersive Background Image */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center transition-all duration-700"
-        style={{ backgroundImage: `url(${getBackgroundImage()})` }}
-      />
-      
-      {/* Gradient Scrim Overlay */}
+      <div className="absolute inset-0 bg-cover bg-center transition-all duration-700" style={{ backgroundImage: `url(${getBackgroundImage()})` }} />
       <div className="absolute inset-0 bg-gradient-to-t from-emerald-950 via-emerald-950/80 to-transparent" />
 
-      {/* Content Container */}
       <div className="relative z-10 flex flex-col h-full px-6 pt-16 pb-12 justify-between">
-        
-        {/* Top Section (Title & Subtext) - approx top 30% */}
         <div className="space-y-4 text-center animate-in slide-in-from-top duration-700">
           {step === 'WELCOME' && (
             <div className="space-y-2">
@@ -193,15 +212,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
           )}
         </div>
 
-        {/* Bottom Section (Inputs & Controls) - approx bottom 40% */}
         <div className="space-y-8 animate-in slide-in-from-bottom duration-700">
-          
           {step === 'WELCOME' && (
             <div className="space-y-6">
               <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-[40px] text-center space-y-3 relative overflow-hidden group shadow-2xl">
-                <div className="absolute top-0 right-0 p-4 opacity-5 text-white">
-                  <Lock size={60} />
-                </div>
+                <div className="absolute top-0 right-0 p-4 opacity-5 text-white"><Lock size={60} /></div>
                 <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.3em]">Your One-Time Setup Code</p>
                 <div className="text-5xl font-mono font-black tracking-[0.2em]">{tempOtp}</div>
                 <div className="pt-4 flex items-center justify-center gap-2 text-amber-300">
@@ -209,11 +224,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                   <p className="text-[10px] font-bold uppercase tracking-wider">Write this code down</p>
                 </div>
               </div>
-
-              <button 
-                onClick={() => setStep('VERIFY')}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-6 rounded-[32px] shadow-2xl shadow-emerald-500/30 active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-3"
-              >
+              <button onClick={() => setStep('VERIFY')} className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-6 rounded-[32px] shadow-2xl shadow-emerald-500/30 active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-3">
                 Start Setup <ArrowRight size={20} />
               </button>
             </div>
@@ -230,7 +241,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                   </div>
                 )}
               </div>
-
               <div className="space-y-4">
                 <button 
                   onClick={handleVerifyOtp}
@@ -239,10 +249,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                 >
                   Confirm Identity
                 </button>
-                <button 
-                  onClick={() => setStep('WELCOME')}
-                  className="w-full text-white/50 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 py-2"
-                >
+                <button onClick={() => setStep('WELCOME')} className="w-full text-white/50 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 py-2">
                   <ChevronLeft size={14} /> Go Back
                 </button>
               </div>
@@ -251,12 +258,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
           {step === 'PIN' && (
             <div className="space-y-6">
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="space-y-2">
                   <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest text-center">Set New 4-Digit PIN</p>
                   {renderInputGrid(pinArr, setPinArr, pinRefs, 4, true)}
                 </div>
-
                 <div className="space-y-2">
                   <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest text-center">Confirm Secret PIN</p>
                   {renderInputGrid(confirmPinArr, setConfirmPinArr, confirmPinRefs, 4, true)}
@@ -280,7 +286,6 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             </div>
           )}
 
-          {/* Persistent Footer Note */}
           <div className="flex items-center justify-center gap-3 pt-4 opacity-50">
             <ShieldCheck size={16} />
             <p className="text-[9px] font-bold uppercase tracking-[0.2em]">Military-Grade Protection</p>
