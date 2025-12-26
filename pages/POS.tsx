@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, SaleItem, Sale, InventoryItem, User as DBUser } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
-import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, ChevronUp, Scan } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface POSProps {
@@ -12,7 +12,7 @@ interface POSProps {
 export const POS: React.FC<POSProps> = ({ user }) => {
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const [searchTerm, setSearchTerm] = useState('');
-  const [cart, setCart] = useState<SaleItem[]>([]);
+  const [cart, setCart] = useState<(SaleItem & { image?: string })[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
@@ -39,7 +39,8 @@ export const POS: React.FC<POSProps> = ({ user }) => {
         name: item.name, 
         price: item.sellingPrice, 
         costPrice: item.costPrice, 
-        quantity: 1 
+        quantity: 1,
+        image: item.image
       }];
     });
   };
@@ -67,7 +68,6 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
-    // Fallback for non-secure contexts or older browsers
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
@@ -79,7 +79,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
     const sale: Sale = {
       uuid: generateUUID(),
-      items: [...cart],
+      items: cart.map(({image, ...rest}) => rest), // Strip image before saving to DB
       total,
       totalCost,
       timestamp: Date.now(),
@@ -115,32 +115,24 @@ export const POS: React.FC<POSProps> = ({ user }) => {
   // Scanner Logic
   const startScanner = async () => {
     setIsScanning(true);
-    // Wait for DOM
     setTimeout(async () => {
       try {
         const html5QrCode = new Html5Qrcode(scannerContainerId);
         html5QrCodeRef.current = html5QrCode;
-        
         const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-        
         await html5QrCode.start(
           { facingMode: "environment" }, 
           config, 
           async (decodedText) => {
-            // Success callback
             const item = await db.inventory.where('barcode').equals(decodedText).first();
             if (item) {
               addToCart(item);
-              // Feedback sound or haptic would be good here
               if (navigator.vibrate) navigator.vibrate(50);
-            } else {
-              console.log("No item found for barcode:", decodedText);
             }
           },
-          () => {} // error callback (optional)
+          () => {}
         );
       } catch (err) {
-        console.error("Failed to start scanner", err);
         setIsScanning(false);
       }
     }, 100);
@@ -196,25 +188,43 @@ export const POS: React.FC<POSProps> = ({ user }) => {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        {/* Visual Product Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {filteredItems.map(item => (
             <button 
               key={item.id}
               onClick={() => addToCart(item)}
-              className="bg-white dark:bg-emerald-900/40 p-4 rounded-3xl border border-slate-50 dark:border-emerald-800/20 text-left shadow-sm active:scale-95 active:bg-emerald-50 dark:active:bg-emerald-800/60 transition-all group"
+              className="bg-white dark:bg-emerald-900/40 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 text-left shadow-sm active:scale-95 transition-all group flex flex-col overflow-hidden"
             >
-              <h3 className="font-bold text-slate-800 dark:text-emerald-50 line-clamp-2 leading-snug group-active:text-emerald-700 dark:group-active:text-emerald-400">{item.name}</h3>
-              <p className="text-emerald-600 dark:text-emerald-400 font-black mt-2 text-lg">{formatNaira(item.sellingPrice)}</p>
-              <div className="mt-2 pt-2 border-t border-slate-50 dark:border-emerald-800/20 flex justify-between items-center">
-                <span className="text-[10px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Qty: {item.stock}</span>
-                <div className="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 p-1 rounded-lg">
-                  <Plus size={14} />
+              <div className="h-24 w-full bg-slate-100 dark:bg-emerald-950/40 relative flex-shrink-0">
+                {item.image ? (
+                  <img src={item.image} alt="" className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-black text-2xl uppercase">
+                    {item.name.charAt(0)}
+                  </div>
+                )}
+              </div>
+              <div className="p-3 flex flex-col flex-1 justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-emerald-50 text-xs line-clamp-1 leading-snug group-active:text-emerald-700 dark:group-active:text-emerald-400">
+                    {item.name}
+                  </h3>
+                  <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm mt-0.5">{formatNaira(item.sellingPrice)}</p>
+                </div>
+                <div className="mt-2 pt-2 border-t border-slate-50 dark:border-emerald-800/20 flex justify-between items-center">
+                  <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${item.stock <= (item.minStock || 5) ? 'bg-orange-100 text-orange-600' : 'text-slate-400 dark:text-emerald-500/40 bg-slate-50 dark:bg-emerald-950/40'}`}>
+                    {item.stock} left
+                  </span>
+                  <div className="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 p-1 rounded-lg">
+                    <Plus size={12} />
+                  </div>
                 </div>
               </div>
             </button>
           ))}
           {filteredItems.length === 0 && (
-            <div className="col-span-2 text-center py-20">
+            <div className="col-span-full text-center py-20">
               <div className="bg-slate-100 dark:bg-emerald-900/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300 dark:text-emerald-800">
                 <Search size={32} />
               </div>
@@ -227,26 +237,17 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       {/* Scanner Modal */}
       {isScanning && (
         <div className="fixed inset-0 bg-black z-[200] flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
-          <button 
-            onClick={stopScanner}
-            className="absolute top-8 right-8 bg-white/10 p-4 rounded-full text-white backdrop-blur-md z-[210] active:scale-95"
-          >
-            <X size={24} />
-          </button>
-          
+          <button onClick={stopScanner} className="absolute top-8 right-8 bg-white/10 p-4 rounded-full text-white backdrop-blur-md z-[210] active:scale-95"><X size={24} /></button>
           <div className="w-full max-w-sm space-y-8 flex flex-col items-center">
             <div className="text-center space-y-2">
               <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Scanning...</h2>
               <p className="text-white/60 text-xs font-bold uppercase tracking-widest">Place product barcode inside frame</p>
             </div>
-            
             <div className="w-full aspect-square relative rounded-[48px] overflow-hidden border-4 border-emerald-500/30 shadow-[0_0_80px_rgba(5,150,105,0.2)]">
               <div id={scannerContainerId} className="w-full h-full"></div>
               <div className="absolute inset-0 border-2 border-white/20 rounded-[44px] pointer-events-none"></div>
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-32 border-2 border-emerald-400 rounded-2xl pointer-events-none animate-pulse"></div>
             </div>
-
-            <p className="text-emerald-400 text-[10px] font-black uppercase tracking-[0.4em] animate-pulse">Items added to cart automatically</p>
           </div>
         </div>
       )}
@@ -254,20 +255,9 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       {/* Expandable Bottom Sheet */}
       {cart.length > 0 && (
         <>
-          {isCartExpanded && (
-            <div 
-              className="fixed inset-0 bg-black/20 dark:bg-black/60 z-40 transition-opacity" 
-              onClick={() => setIsCartExpanded(false)}
-            />
-          )}
-          
-          <div 
-            className={`fixed bottom-16 inset-x-0 bg-white dark:bg-emerald-900 border-t-2 border-emerald-500 shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.1)] z-[45] flex flex-col rounded-t-[40px] transition-all duration-300 ease-out ${isCartExpanded ? 'max-h-[85vh] h-auto p-6' : 'max-h-24 p-4'}`}
-          >
-            <button 
-              onClick={() => setIsCartExpanded(!isCartExpanded)}
-              className={`w-full flex flex-col items-center justify-center transition-all ${isCartExpanded ? 'mb-4' : ''}`}
-            >
+          {isCartExpanded && <div className="fixed inset-0 bg-black/20 dark:bg-black/60 z-40 transition-opacity" onClick={() => setIsCartExpanded(false)} />}
+          <div className={`fixed bottom-16 inset-x-0 bg-white dark:bg-emerald-900 border-t-2 border-emerald-500 shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.1)] z-[45] flex flex-col rounded-t-[40px] transition-all duration-300 ease-out ${isCartExpanded ? 'max-h-[85vh] h-auto p-6' : 'max-h-24 p-4'}`}>
+            <button onClick={() => setIsCartExpanded(!isCartExpanded)} className={`w-full flex flex-col items-center justify-center transition-all ${isCartExpanded ? 'mb-4' : ''}`}>
               <div className="w-12 h-1 bg-slate-200 dark:bg-emerald-800 rounded-full mb-3" />
               <div className="w-full flex justify-between items-center">
                 <div className="flex items-center gap-3">
@@ -283,9 +273,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                   )}
                 </div>
                 {!isCartExpanded ? (
-                  <div className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-100">
-                    View Cart <ChevronUp size={14} />
-                  </div>
+                  <div className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">View Cart <ChevronUp size={14} /></div>
                 ) : (
                   <div className="text-right">
                     <p className="text-[10px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase tracking-widest">Grand Total</p>
@@ -299,9 +287,18 @@ export const POS: React.FC<POSProps> = ({ user }) => {
               <div className="flex-1 overflow-y-auto space-y-3 mb-6 pr-1 custom-scrollbar">
                 {cart.map(item => (
                   <div key={item.id} className="flex justify-between items-center bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-slate-100 dark:border-emerald-800/20">
-                    <div className="flex-1">
-                      <h4 className="font-bold text-slate-800 dark:text-emerald-50 text-sm leading-tight">{item.name}</h4>
-                      <p className="text-xs text-slate-400 dark:text-emerald-500/40 font-bold mt-0.5">{formatNaira(item.price)}</p>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-10 h-10 bg-slate-200 dark:bg-emerald-900 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {item.image ? (
+                          <img src={item.image} className="w-full h-full object-cover" alt="" />
+                        ) : (
+                          <span className="text-xs font-black text-emerald-600 uppercase">{item.name.charAt(0)}</span>
+                        )}
+                      </div>
+                      <div className="truncate">
+                        <h4 className="font-bold text-slate-800 dark:text-emerald-50 text-sm leading-tight truncate">{item.name}</h4>
+                        <p className="text-[10px] text-slate-400 dark:text-emerald-500/40 font-bold mt-0.5">{formatNaira(item.price)}</p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800/20 rounded-xl overflow-hidden shadow-sm">
@@ -309,27 +306,14 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                         <span className="font-black px-2 text-center text-sm min-w-[24px] dark:text-emerald-50">{item.quantity}</span>
                         <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:bg-emerald-50 dark:hover:bg-emerald-800 text-slate-400 transition-colors"><Plus size={16}/></button>
                       </div>
-                      <button onClick={() => removeFromCart(item.id)} className="text-red-300 hover:text-red-500 transition-colors">
-                        <Trash2 size={20}/>
-                      </button>
+                      <button onClick={() => removeFromCart(item.id)} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={20}/></button>
                     </div>
                   </div>
                 ))}
               </div>
-
               <div className="grid grid-cols-2 gap-3">
-                <button 
-                  onClick={() => setIsCartExpanded(false)}
-                  className="bg-slate-100 dark:bg-emerald-800 text-slate-500 dark:text-emerald-300 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all"
-                >
-                  Continue Shopping
-                </button>
-                <button 
-                  onClick={handleCheckout}
-                  className="bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-100 active:scale-[0.98] transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
-                >
-                  Confirm Pay <CheckCircle size={16} />
-                </button>
+                <button onClick={() => setIsCartExpanded(false)} className="bg-slate-100 dark:bg-emerald-800 text-slate-500 dark:text-emerald-300 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">Back</button>
+                <button onClick={handleCheckout} className="bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-[0.98] transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">Confirm Pay <CheckCircle size={16} /></button>
               </div>
             </div>
           </div>
@@ -339,55 +323,31 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-6 text-center animate-in zoom-in duration-300 shadow-2xl my-auto border dark:border-emerald-800">
-            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle size={40} />
             </div>
             <h2 className="text-2xl font-black mb-1 text-slate-800 dark:text-emerald-50 tracking-tight">Sale Successful!</h2>
-            <p className="text-slate-400 dark:text-emerald-500/40 text-sm font-medium mb-6">Stock updated and recorded.</p>
-            
             <div className="bg-slate-50 dark:bg-emerald-950/40 rounded-2xl p-4 text-left border border-slate-200 dark:border-emerald-800/40 mb-6 font-mono text-xs relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500 opacity-20"></div>
               <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h3 className="font-bold text-slate-800 dark:text-emerald-50 text-[10px] uppercase">
-                    {localStorage.getItem('shop_name') || 'NaijaShop'}
-                  </h3>
-                  <p className="text-slate-400 dark:text-emerald-500/60 text-[8px]">{localStorage.getItem('shop_info') || 'Nigeria'}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-slate-400 dark:text-emerald-500/60 text-[8px]">{new Date(lastSale?.timestamp || 0).toLocaleDateString()}</p>
-                  <p className="text-slate-400 dark:text-emerald-500/60 text-[8px]">#{(lastSale?.id || 0).toString().padStart(5, '0')}</p>
-                </div>
+                <h3 className="font-bold text-slate-800 dark:text-emerald-50 text-[10px] uppercase">{localStorage.getItem('shop_name') || 'NaijaShop'}</h3>
+                <span className="text-[8px] opacity-60">#{ (lastSale?.id || 0).toString().padStart(5, '0') }</span>
               </div>
               <div className="border-t border-dashed border-slate-300 dark:border-emerald-800/40 my-2"></div>
-              <div className="space-y-1 text-slate-800 dark:text-emerald-50">
-                {lastSale?.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between gap-2">
-                    <span className="truncate">{item.name} x{item.quantity}</span>
-                    <span className="flex-shrink-0">{formatNaira(item.price * item.quantity)}</span>
-                  </div>
-                ))}
-              </div>
+              {lastSale?.items.map((item, idx) => (
+                <div key={idx} className="flex justify-between gap-2 text-slate-800 dark:text-emerald-50">
+                  <span className="truncate">{item.name} x{item.quantity}</span>
+                  <span>{formatNaira(item.price * item.quantity)}</span>
+                </div>
+              ))}
               <div className="border-t border-dashed border-slate-300 dark:border-emerald-800/40 my-2"></div>
               <div className="flex justify-between font-bold text-slate-800 dark:text-emerald-50 text-sm">
                 <span>TOTAL</span>
                 <span>{formatNaira(lastSale?.total || 0)}</span>
               </div>
             </div>
-            
             <div className="space-y-3">
-              <button 
-                onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)}
-                className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-lg"
-              >
-                <MessageCircle size={20} /> Share via WhatsApp
-              </button>
-              <button 
-                onClick={() => setShowSuccessModal(false)}
-                className="w-full py-3 text-slate-400 dark:text-emerald-500/40 font-bold uppercase text-[10px] tracking-widest"
-              >
-                Done
-              </button>
+              <button onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-lg"><MessageCircle size={20} /> Share via WhatsApp</button>
+              <button onClick={() => setShowSuccessModal(false)} className="w-full py-3 text-slate-400 dark:text-emerald-500/40 font-bold uppercase text-[10px] tracking-widest">Done</button>
             </div>
           </div>
         </div>
