@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Page, Role, DeviceRole } from './types.ts';
 import { initTrialDate, User, db } from './db.ts';
@@ -9,6 +10,7 @@ import { Debts } from './pages/Debts.tsx';
 import { Expenses } from './pages/Expenses.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { FAQ } from './pages/FAQ.tsx';
+import { Customers } from './pages/Customers.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
@@ -19,7 +21,7 @@ import { ThemeProvider } from './ThemeContext.tsx';
 import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, Receipt, ShieldAlert, Users, Wallet } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
-const TRIAL_DURATION = 259200000; // 3 days in milliseconds
+const TRIAL_DURATION = 259200000; 
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
@@ -27,7 +29,6 @@ const AppContent: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPirated, setIsPirated] = useState(false);
   
-  // Inventory filter state synced with URL params
   const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock' | 'expiring'>('all');
 
   const [isAtLanding, setIsAtLanding] = useState(() => window.location.pathname === '/' || window.location.pathname === '');
@@ -40,7 +41,6 @@ const AppContent: React.FC = () => {
   const trialStartDate = localStorage.getItem('trial_start_date');
   const isTrialValid = trialStartDate ? (Date.now() - parseInt(trialStartDate)) < TRIAL_DURATION : false;
 
-  // Sync state from URL
   const syncStateFromUrl = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page')?.toUpperCase();
@@ -59,7 +59,6 @@ const AppContent: React.FC = () => {
     setIsAtLanding(window.location.pathname === '/' || window.location.pathname === '');
   }, []);
 
-  // Update URL based on state
   const navigateTo = useCallback((page: Page, filter?: string) => {
     setCurrentPage(page);
     const url = new URL(window.location.href);
@@ -173,6 +172,7 @@ const AppContent: React.FC = () => {
       case Page.EXPENSES: return <Expenses role={isStaffDevice ? 'Staff' : currentUser.role} setPage={(p) => navigateTo(p)} />;
       case Page.SETTINGS: return <Settings role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={(p) => navigateTo(p)} />;
       case Page.FAQ: return <FAQ setPage={(p) => navigateTo(p)} />;
+      case Page.CUSTOMERS: return <Customers setPage={(p) => navigateTo(p)} role={isStaffDevice ? 'Staff' : currentUser.role} />;
       default: return <Dashboard setPage={(p) => navigateTo(p)} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
     }
   };
@@ -200,12 +200,8 @@ const AppContent: React.FC = () => {
           <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Sales</span>
         </button>
 
-        <button onClick={() => navigateTo(Page.EXPENSES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.EXPENSES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-          <Wallet size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Spend</span>
-        </button>
-
-        <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-          <Users size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Debts</span>
+        <button onClick={() => navigateTo(Page.CUSTOMERS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.CUSTOMERS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+          <Wallet size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Wallet</span>
         </button>
         
         {isAdminUser && (

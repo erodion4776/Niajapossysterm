@@ -1,9 +1,10 @@
+
 import Dexie, { Table } from 'dexie';
 
 export interface Category {
   id?: string | number;
   name: string;
-  image?: string; // New: Category visual
+  image?: string; 
 }
 
 export interface InventoryItem {
@@ -17,7 +18,15 @@ export interface InventoryItem {
   category: string;
   barcode?: string;
   dateAdded?: string;
-  image?: string; // New: Product photo (Base64 compressed)
+  image?: string; 
+}
+
+export interface Customer {
+  id?: number;
+  name: string;
+  phone: string;
+  walletBalance: number;
+  lastTransaction: number;
 }
 
 export interface User {
@@ -42,9 +51,12 @@ export interface Sale {
   items: SaleItem[];
   total: number;
   totalCost: number;
+  walletUsed?: number;
+  walletSaved?: number;
   timestamp: number;
   staff_id: string;
   staff_name: string;
+  customer_phone?: string;
 }
 
 export interface Expense {
@@ -72,6 +84,7 @@ export interface Setting {
 export type NaijaShopDatabase = Dexie & {
   inventory: Table<InventoryItem>;
   categories: Table<Category>;
+  customers: Table<Customer>;
   sales: Table<Sale>;
   settings: Table<Setting>;
   users: Table<User>;
@@ -81,10 +94,11 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(12).stores({
+dexieDb.version(14).stores({
   inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock',
   categories: '++id, name',
-  sales: '++id, uuid, timestamp, total, staff_id, staff_name',
+  customers: '++id, &phone, name, walletBalance',
+  sales: '++id, uuid, timestamp, total, staff_id, staff_name, customer_phone',
   settings: 'key',
   users: '++id, name, pin, role',
   expenses: '++id, date, amount',
@@ -122,7 +136,6 @@ export async function initTrialDate() {
     });
   }
 
-  // Seed default categories if empty
   const catCount = await db.categories.count();
   if (catCount === 0) {
     await db.categories.bulkAdd([
@@ -135,9 +148,10 @@ export async function initTrialDate() {
 }
 
 export async function clearAllData() {
-  await db.transaction('rw', [db.inventory, db.categories, db.sales, db.settings, db.users, db.expenses, db.debts], async () => {
+  await db.transaction('rw', [db.inventory, db.categories, db.customers, db.sales, db.settings, db.users, db.expenses, db.debts], async () => {
     await db.inventory.clear();
     await db.categories.clear();
+    await db.customers.clear();
     await db.sales.clear();
     await db.settings.clear();
     await db.users.clear();
