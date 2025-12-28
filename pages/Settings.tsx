@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData, User } from '../db.ts';
@@ -6,11 +7,12 @@ import pako from 'pako';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
-  Moon, Sun, Key, Users, X, Send
+  Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
 import { useTheme } from '../ThemeContext.tsx';
+import { connectPrinter, disconnectPrinter } from '../utils/printer.ts';
 
 interface SettingsProps {
   role: Role;
@@ -30,6 +32,8 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
   const [isImporting, setIsImporting] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isConnectingPrinter, setIsConnectingPrinter] = useState(false);
+  const [printerName, setPrinterName] = useState(() => localStorage.getItem('connected_printer_name'));
   
   const [showBackupSuccess, setShowBackupSuccess] = useState(false);
   const [backupFileName, setBackupFileName] = useState('');
@@ -81,6 +85,23 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
     } finally {
       setIsBackingUp(false);
     }
+  };
+
+  const handleConnectPrinter = async () => {
+    setIsConnectingPrinter(true);
+    try {
+      const name = await connectPrinter();
+      setPrinterName(name);
+    } catch (err: any) {
+      alert("Connection failed: " + err.message);
+    } finally {
+      setIsConnectingPrinter(false);
+    }
+  };
+
+  const handleDisconnectPrinter = () => {
+    disconnectPrinter();
+    setPrinterName(null);
   };
 
   const handleAddUser = async (e: React.FormEvent) => {
@@ -207,41 +228,36 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </button>
       </header>
 
-      {/* Reconciliation Modal Results */}
-      {reconcileResult && (
-        <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-md flex items-center justify-center p-6 animate-in zoom-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 text-center space-y-6">
-            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto">
-              <RefreshCw size={32} />
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Reconciliation Done</h2>
-              <p className="text-[10px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest mt-1">Daily Records Merged</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/20">
-                <p className="text-[8px] font-black text-emerald-400 uppercase">Merged</p>
-                <p className="text-xl font-black text-emerald-600">{reconcileResult.merged}</p>
-              </div>
-              <div className="bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-slate-100 dark:border-emerald-800/20">
-                <p className="text-[8px] font-black text-slate-400 uppercase">Duplicates</p>
-                <p className="text-xl font-black text-slate-800 dark:text-emerald-100">{reconcileResult.skipped}</p>
-              </div>
-            </div>
-            <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-2xl text-left border border-amber-100 dark:border-amber-800/20">
-               <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 leading-tight">
-                 💡 Oga, stock has been deducted. Now send the "Master Update" back to staff to sync their phones.
-               </p>
-            </div>
-            <button 
-              onClick={() => { setReconcileResult(null); window.location.reload(); }}
-              className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg"
-            >
-              Continue
-            </button>
+      {/* Printer Section */}
+      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+             <div className="bg-blue-50 dark:bg-blue-900/30 p-2.5 rounded-2xl text-blue-600 dark:text-blue-400">
+                <Printer size={24} />
+             </div>
+             <div>
+                <h2 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Receipt Printer</h2>
+                <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">
+                  {printerName ? `Connected: ${printerName}` : 'Bluetooth Thermal (58mm)'}
+                </p>
+             </div>
           </div>
+          {printerName ? (
+            <button onClick={handleDisconnectPrinter} className="bg-red-50 dark:bg-red-950/20 text-red-500 p-2 rounded-xl border border-red-100 dark:border-red-900/40">
+              <X size={20} />
+            </button>
+          ) : (
+            <button 
+              onClick={handleConnectPrinter} 
+              disabled={isConnectingPrinter}
+              className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2"
+            >
+              {isConnectingPrinter ? <Loader2 size={14} className="animate-spin" /> : <Bluetooth size={14} />}
+              {isConnectingPrinter ? 'Searching' : 'Connect'}
+            </button>
+          )}
         </div>
-      )}
+      </section>
 
       {/* Theme Switcher Toggle */}
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">

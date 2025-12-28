@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, SaleItem, Sale, InventoryItem, User as DBUser } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
-import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon } from 'lucide-react';
+import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, Printer, Loader2 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { connectPrinter, printReceipt } from '../utils/printer.ts';
 
 interface POSProps {
   user: DBUser;
@@ -17,6 +19,11 @@ export const POS: React.FC<POSProps> = ({ user }) => {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
   
+  // Printing States
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printSuccess, setPrintSuccess] = useState(false);
+  const [printerName, setPrinterName] = useState(() => localStorage.getItem('connected_printer_name'));
+
   // Scanner States
   const [isScanning, setIsScanning] = useState(false);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
@@ -79,7 +86,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
     const sale: Sale = {
       uuid: generateUUID(),
-      items: cart.map(({image, ...rest}) => rest), // Strip image before saving to DB
+      items: cart.map(({image, ...rest}) => rest), 
       total,
       totalCost,
       timestamp: Date.now(),
@@ -105,10 +112,39 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
       setCart([]);
       setIsCartExpanded(false);
+      setPrintSuccess(false);
       setShowSuccessModal(true);
     } catch (error: any) {
       console.error('Checkout error:', error);
       alert('Checkout failed: ' + (error.message || 'Unknown database error'));
+    }
+  };
+
+  const handlePrint = async () => {
+    if (!lastSale) return;
+
+    if (!printerName) {
+      try {
+        const name = await connectPrinter();
+        setPrinterName(name);
+        return;
+      } catch (e) {
+        alert("Failed to connect printer. Ensure Bluetooth is ON.");
+        return;
+      }
+    }
+
+    setIsPrinting(true);
+    try {
+      await printReceipt(lastSale);
+      setPrintSuccess(true);
+      setTimeout(() => setPrintSuccess(false), 3000);
+    } catch (e: any) {
+      alert("Printing failed: " + e.message);
+      // If characteristic lost, reset printer
+      if (e.message.includes('No printer')) setPrinterName(null);
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -345,9 +381,25 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                 <span>{formatNaira(lastSale?.total || 0)}</span>
               </div>
             </div>
+            
             <div className="space-y-3">
-              <button onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-lg"><MessageCircle size={20} /> Share via WhatsApp</button>
-              <button onClick={() => setShowSuccessModal(false)} className="w-full py-3 text-slate-400 dark:text-emerald-500/40 font-bold uppercase text-[10px] tracking-widest">Done</button>
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)} 
+                  className="w-full bg-emerald-50 text-emerald-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 shadow-sm border border-emerald-100 text-[10px] uppercase tracking-widest"
+                >
+                  <MessageCircle size={18} /> WhatsApp
+                </button>
+                <button 
+                  onClick={handlePrint}
+                  disabled={isPrinting}
+                  className={`w-full ${printSuccess ? 'bg-blue-600' : 'bg-blue-500'} text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-blue-200 text-[10px] uppercase tracking-widest transition-all disabled:opacity-50`}
+                >
+                  {isPrinting ? <Loader2 size={18} className="animate-spin" /> : printSuccess ? <CheckCircle size={18} /> : <Printer size={18} />}
+                  {isPrinting ? 'Wait...' : !printerName ? 'Connect' : printSuccess ? 'Sent!' : 'Print'}
+                </button>
+              </div>
+              <button onClick={() => setShowSuccessModal(false)} className="w-full py-3 text-slate-400 dark:text-emerald-500/40 font-bold uppercase text-[10px] tracking-widest">Close Sale</button>
             </div>
           </div>
         </div>
