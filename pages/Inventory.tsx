@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, InventoryItem, Category } from '../db.ts';
@@ -6,7 +5,8 @@ import { formatNaira } from '../utils/whatsapp.ts';
 import { 
   Plus, Search, Package, Edit3, X, Trash2, 
   Camera, LayoutGrid, List, Image as ImageIcon, Loader2,
-  Tag, ShieldAlert
+  Tag, ShieldAlert, TrendingUp, AlertTriangle, CheckCircle2,
+  ChevronRight, ArrowRight
 } from 'lucide-react';
 import { Role } from '../types.ts';
 import { ExpiryScanner } from '../components/ExpiryScanner.tsx';
@@ -32,11 +32,22 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [showScanner, setShowScanner] = useState<'add' | 'edit' | null>(null);
   const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [isUpdatingBulk, setIsUpdatingBulk] = useState(false);
   
+  // Bulk Updater State
+  const [bulkStep, setBulkStep] = useState<1 | 2>(1);
+  const [bulkData, setBulkData] = useState({
+    targetCategory: 'All',
+    updateType: 'Percentage' as 'Percentage' | 'Fixed',
+    targetField: 'Selling Price' as 'Selling Price' | 'Cost Price',
+    value: 0
+  });
+
   const [formData, setFormData] = useState<Omit<InventoryItem, 'id'>>({
     name: '',
     costPrice: 0,
@@ -114,6 +125,50 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
     setEditingCat(null);
   };
 
+  const handleApplyBulkUpdate = async () => {
+    if (!inventory || isUpdatingBulk) return;
+    setIsUpdatingBulk(true);
+
+    try {
+      const itemsToUpdate = bulkData.targetCategory === 'All' 
+        ? inventory 
+        : inventory.filter(i => i.category === bulkData.targetCategory);
+
+      if (itemsToUpdate.length === 0) {
+        alert("No items found to update.");
+        return;
+      }
+
+      const updatedItems = itemsToUpdate.map(item => {
+        let currentPrice = bulkData.targetField === 'Selling Price' ? item.sellingPrice : item.costPrice;
+        let newPrice = currentPrice;
+
+        if (bulkData.updateType === 'Percentage') {
+          newPrice = currentPrice * (1 + bulkData.value / 100);
+        } else {
+          newPrice = currentPrice + bulkData.value;
+        }
+
+        // Smart Rounding to nearest ₦50 for Nigerian context
+        newPrice = Math.ceil(newPrice / 50) * 50;
+
+        return {
+          ...item,
+          [bulkData.targetField === 'Selling Price' ? 'sellingPrice' : 'costPrice']: newPrice
+        };
+      });
+
+      await db.inventory.bulkPut(updatedItems);
+      alert(`₦-Inflation Protection Applied! ${updatedItems.length} prices updated and rounded to nearest ₦50.`);
+      setShowBulkModal(false);
+      setBulkStep(1);
+    } catch (err) {
+      alert("Bulk update failed. " + (err as Error).message);
+    } finally {
+      setIsUpdatingBulk(false);
+    }
+  };
+
   const filteredItems = useMemo(() => {
     if (!inventory) return [];
     let items = inventory;
@@ -147,6 +202,15 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
           <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Inventory Control</p>
         </div>
         <div className="flex gap-2">
+          {isAdmin && activeTab === 'products' && (
+            <button 
+              onClick={() => setShowBulkModal(true)}
+              className="p-4 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-[24px] border border-amber-100 dark:border-amber-800/40 active:scale-90 transition-all shadow-sm"
+              title="Inflation Protector"
+            >
+              <TrendingUp size={20} />
+            </button>
+          )}
           <button 
             onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
             className="p-4 bg-white dark:bg-emerald-900/40 text-slate-400 dark:text-emerald-400 rounded-[24px] border border-slate-100 dark:border-emerald-800/40 active:scale-90 transition-all shadow-sm"
@@ -243,6 +307,149 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
               <p className="font-black text-xs text-slate-800 dark:text-emerald-50 uppercase tracking-widest">{cat.name}</p>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Inflation Protector (Bulk Update) Modal */}
+      {showBulkModal && (
+        <div className="fixed inset-0 bg-black/60 z-[110] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-100 dark:bg-amber-950/40 p-2 rounded-xl text-amber-600">
+                  <TrendingUp size={24} />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-gray-800 dark:text-emerald-50 tracking-tight italic">Inflation Protector</h2>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Bulk Price Updater</p>
+                </div>
+              </div>
+              <button onClick={() => { setShowBulkModal(false); setBulkStep(1); }} className="bg-gray-100 dark:bg-emerald-800 p-3 rounded-full text-gray-400"><X size={20} /></button>
+            </div>
+
+            {bulkStep === 1 ? (
+              <div className="space-y-6">
+                <div className="bg-amber-50 dark:bg-amber-950/20 p-5 rounded-3xl border border-amber-100 dark:border-amber-900/40 flex items-start gap-4">
+                  <AlertTriangle className="text-amber-600 flex-shrink-0" size={20} />
+                  <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 leading-relaxed">
+                    Protect your profit margin from inflation. Increase prices across categories or your entire shop instantly.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Target Category</label>
+                    <select 
+                      className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50"
+                      value={bulkData.targetCategory}
+                      onChange={e => setBulkData({...bulkData, targetCategory: e.target.value})}
+                    >
+                      <option value="All">All Items</option>
+                      {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Target Field</label>
+                    <div className="flex bg-slate-100 dark:bg-emerald-950/40 p-1 rounded-2xl gap-1">
+                      {['Selling Price', 'Cost Price'].map(field => (
+                        <button 
+                          key={field}
+                          onClick={() => setBulkData({...bulkData, targetField: field as any})}
+                          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bulkData.targetField === field ? 'bg-white dark:bg-emerald-800 text-emerald-600 dark:text-emerald-50 shadow-sm' : 'text-slate-400'}`}
+                        >
+                          {field}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Increase Type</label>
+                    <div className="flex bg-slate-100 dark:bg-emerald-950/40 p-1 rounded-2xl gap-1">
+                      {['Percentage', 'Fixed'].map(type => (
+                        <button 
+                          key={type}
+                          onClick={() => setBulkData({...bulkData, updateType: type as any})}
+                          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bulkData.updateType === type ? 'bg-white dark:bg-emerald-800 text-emerald-600 dark:text-emerald-50 shadow-sm' : 'text-slate-400'}`}
+                        >
+                          {type === 'Percentage' ? 'By %' : 'By Fixed ₦'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">
+                      {bulkData.updateType === 'Percentage' ? 'Increase Percentage (%)' : 'Increase Amount (₦)' }
+                    </label>
+                    <input 
+                      type="number" 
+                      inputMode="numeric"
+                      className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50 text-xl"
+                      value={bulkData.value || ''}
+                      onChange={e => setBulkData({...bulkData, value: Number(e.target.value)})}
+                      placeholder={bulkData.updateType === 'Percentage' ? "e.g. 10" : "e.g. 500"}
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => setBulkStep(2)}
+                  disabled={!bulkData.value}
+                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-[28px] shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  Review Changes <ChevronRight size={18} />
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-8 animate-in slide-in-from-right duration-300">
+                <div className="text-center space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Update Summary</p>
+                  <h3 className="text-3xl font-black text-slate-800 dark:text-emerald-50 tracking-tighter">
+                    {bulkData.updateType === 'Percentage' ? `+${bulkData.value}%` : `+₦${bulkData.value.toLocaleString()}`}
+                  </h3>
+                  <p className="text-xs font-bold text-slate-500 uppercase">
+                    Increase on <span className="text-emerald-600">{bulkData.targetField}</span>
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-emerald-950/40 p-6 rounded-[32px] border dark:border-emerald-800/20 space-y-4">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400 font-bold uppercase tracking-widest">Affected Category</span>
+                    <span className="text-slate-800 dark:text-emerald-50 font-black">{bulkData.targetCategory}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400 font-bold uppercase tracking-widest">Estimated Items</span>
+                    <span className="text-slate-800 dark:text-emerald-50 font-black">
+                      {bulkData.targetCategory === 'All' ? inventory?.length : inventory?.filter(i => i.category === bulkData.targetCategory).length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400 font-bold uppercase tracking-widest">Rounding Rule</span>
+                    <span className="text-emerald-600 font-black">Nearest ₦50</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <button 
+                    onClick={handleApplyBulkUpdate}
+                    disabled={isUpdatingBulk}
+                    className="w-full bg-emerald-600 text-white font-black py-6 rounded-[32px] shadow-2xl shadow-emerald-500/20 active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-3"
+                  >
+                    {isUpdatingBulk ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle2 size={20} />}
+                    {isUpdatingBulk ? "Updating..." : "Apply Protection Now"}
+                  </button>
+                  <button 
+                    onClick={() => setBulkStep(1)}
+                    className="w-full py-4 text-slate-400 dark:text-emerald-500/40 font-bold uppercase text-[10px] tracking-widest"
+                  >
+                    Go Back & Edit
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
