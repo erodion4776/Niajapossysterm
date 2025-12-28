@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, InventoryItem, Category, User as DBUser } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
@@ -7,7 +7,7 @@ import {
   Plus, Search, Package, Edit3, X, Trash2, 
   Camera, LayoutGrid, List, Image as ImageIcon, Loader2,
   Tag, ShieldAlert, TrendingUp, AlertTriangle, CheckCircle2,
-  ChevronRight, ArrowRight, History
+  ChevronRight, ArrowRight, History, Barcode, Calendar, Scan
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { ExpiryScanner } from '../components/ExpiryScanner.tsx';
@@ -42,8 +42,9 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [isUpdatingBulk, setIsUpdatingBulk] = useState(false);
   
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Bulk Updater State
-  const [bulkStep, setBulkStep] = useState<1 | 2>(1);
   const [bulkData, setBulkData] = useState({
     targetCategory: 'All',
     updateType: 'Percentage' as 'Percentage' | 'Fixed',
@@ -149,6 +150,14 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     setEditingItem(null);
   };
 
+  const handleDeleteItem = async (id: number | string) => {
+    if (!isAdmin) return;
+    if (confirm("Delete this product forever? This cannot be undone.")) {
+      await db.inventory.delete(id);
+      setEditingItem(null);
+    }
+  };
+
   const handleAddCat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
@@ -162,6 +171,14 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     if (!editingCat || !isAdmin) return;
     await db.categories.update(editingCat.id!, { ...editingCat });
     setEditingCat(null);
+  };
+
+  const handleDeleteCat = async (id: number | string) => {
+    if (!isAdmin) return;
+    if (confirm("Delete this category? Products inside will remain in 'General' category.")) {
+      await db.categories.delete(id);
+      setEditingCat(null);
+    }
   };
 
   const handleApplyBulkUpdate = async () => {
@@ -188,7 +205,6 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
           newPrice = currentPrice + bulkData.value;
         }
 
-        // Smart Rounding to nearest ₦50 for Nigerian context
         newPrice = Math.ceil(newPrice / 50) * 50;
 
         return {
@@ -200,7 +216,6 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       await db.inventory.bulkPut(updatedItems);
       alert(`₦-Inflation Protection Applied! ${updatedItems.length} prices updated and rounded to nearest ₦50.`);
       setShowBulkModal(false);
-      setBulkStep(1);
     } catch (err) {
       alert("Bulk update failed. " + (err as Error).message);
     } finally {
@@ -355,8 +370,337 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
           ))}
         </div>
       )}
-      {/* ... Bulk, Add, Edit modals ... */}
-      {/* (Skipping full modal re-write for brevity, but I included the log logic in handleAddItem and handleUpdateItem above) */}
+
+      {/* MODALS START HERE */}
+
+      {/* Add Product Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 italic">Stock New Item</h2>
+              <button onClick={() => setShowAddModal(false)} className="p-3 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90 transition-all"><X size={20} /></button>
+            </div>
+            
+            <form onSubmit={handleAddItem} className="space-y-6">
+              {/* Image Upload Area */}
+              <div className="flex justify-center">
+                <div className="relative group">
+                  <div className="w-32 h-32 rounded-[32px] bg-slate-50 dark:bg-emerald-950 flex items-center justify-center overflow-hidden border-4 border-white dark:border-emerald-800 shadow-xl">
+                    {formData.image ? (
+                      <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-slate-300">
+                        <ImageIcon size={40} />
+                        <span className="text-[8px] font-black uppercase">No Photo</span>
+                      </div>
+                    )}
+                    {isProcessingImage && <div className="absolute inset-0 bg-white/60 dark:bg-emerald-900/60 flex items-center justify-center"><Loader2 className="animate-spin text-emerald-600" /></div>}
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" id="add-img" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'product-add')} />
+                  <label htmlFor="add-img" className="absolute -bottom-2 -right-2 bg-emerald-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 transition-all cursor-pointer"><Camera size={18} /></label>
+                  {formData.image && <button type="button" onClick={() => removeImage('product-add')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-xl shadow-lg active:scale-90 transition-all"><Trash2 size={14}/></button>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Product Name</label>
+                  <input required className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Peak Milk Tin" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Cost Price (₦)</label>
+                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Selling Price (₦)</label>
+                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.sellingPrice || ''} onChange={e => setFormData({...formData, sellingPrice: Number(e.target.value)})} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">In Stock</label>
+                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.stock || ''} onChange={e => setFormData({...formData, stock: Number(e.target.value)})} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Alert Level</label>
+                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.minStock || ''} onChange={e => setFormData({...formData, minStock: Number(e.target.value)})} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Category</label>
+                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                      {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Expiry Date</label>
+                    <div className="flex gap-2">
+                      <input type="date" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs" value={formData.expiryDate} onChange={e => setFormData({...formData, expiryDate: e.target.value})} />
+                      <button type="button" onClick={() => setShowScanner('add')} className="p-4 bg-emerald-100 dark:bg-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-2xl active:scale-90"><Scan size={20}/></button>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Barcode (Optional)</label>
+                  <div className="relative">
+                    <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                    <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan or type barcode" />
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] shadow-xl uppercase tracking-widest text-xs active:scale-[0.98] transition-all">
+                Save Product
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Product Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 italic">Update Item</h2>
+              <button onClick={() => setEditingItem(null)} className="p-3 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20} /></button>
+            </div>
+            
+            <form onSubmit={handleUpdateItem} className="space-y-6">
+              <div className="flex justify-center">
+                <div className="relative">
+                  <div className="w-32 h-32 rounded-[32px] bg-slate-50 dark:bg-emerald-950 flex items-center justify-center overflow-hidden border-4 border-white dark:border-emerald-800 shadow-xl">
+                    {editingItem.image ? (
+                      <img src={editingItem.image} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon size={40} className="text-slate-200" />
+                    )}
+                    {isProcessingImage && <div className="absolute inset-0 bg-white/60 dark:bg-emerald-900/60 flex items-center justify-center"><Loader2 className="animate-spin text-emerald-600" /></div>}
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" id="edit-img" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'product-edit')} />
+                  <label htmlFor="edit-img" className="absolute -bottom-2 -right-2 bg-emerald-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 cursor-pointer"><Camera size={18} /></label>
+                  {editingItem.image && <button type="button" onClick={() => removeImage('product-edit')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-xl shadow-lg active:scale-90"><Trash2 size={14}/></button>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Product Name</label>
+                  <input required className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Cost Price (₦)</label>
+                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.costPrice || ''} onChange={e => setEditingItem({...editingItem, costPrice: Number(e.target.value)})} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Selling Price (₦)</label>
+                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.sellingPrice || ''} onChange={e => setEditingItem({...editingItem, sellingPrice: Number(e.target.value)})} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Current Stock</label>
+                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.stock || ''} onChange={e => setEditingItem({...editingItem, stock: Number(e.target.value)})} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Alert Level</label>
+                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.minStock || ''} onChange={e => setEditingItem({...editingItem, minStock: Number(e.target.value)})} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Category</label>
+                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
+                      {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Expiry Date</label>
+                    <div className="flex gap-2">
+                      <input type="date" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs" value={editingItem.expiryDate} onChange={e => setEditingItem({...editingItem, expiryDate: e.target.value})} />
+                      <button type="button" onClick={() => setShowScanner('edit')} className="p-4 bg-emerald-100 dark:bg-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-2xl active:scale-90"><Scan size={20}/></button>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Barcode</label>
+                  <div className="relative">
+                    <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                    <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.barcode} onChange={e => setEditingItem({...editingItem, barcode: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <button type="submit" className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] shadow-xl uppercase tracking-widest text-xs active:scale-[0.98] transition-all">
+                  Update Product
+                </button>
+                <button type="button" onClick={() => editingItem.id && handleDeleteItem(editingItem.id)} className="w-full py-4 text-red-300 font-black uppercase text-[8px] tracking-widest hover:text-red-500 transition-colors">
+                  Remove from Catalog
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Category Modal */}
+      {showCatModal && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">New Category</h2>
+              <button onClick={() => setShowCatModal(false)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20} /></button>
+            </div>
+            
+            <form onSubmit={handleAddCat} className="space-y-6">
+               <div className="flex justify-center">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-3xl bg-slate-50 dark:bg-emerald-950 flex items-center justify-center overflow-hidden border-2 dark:border-emerald-800">
+                    {catFormData.image ? (
+                      <img src={catFormData.image} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon size={32} className="text-slate-200" />
+                    )}
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" id="cat-add-img" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'cat-add')} />
+                  <label htmlFor="cat-add-img" className="absolute -bottom-2 -right-2 bg-emerald-600 text-white p-2.5 rounded-xl shadow-lg cursor-pointer"><Camera size={16} /></label>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Name</label>
+                <input required className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={catFormData.name} onChange={e => setCatFormData({...catFormData, name: e.target.value})} placeholder="e.g. Drinks" />
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] active:scale-[0.98] transition-all">Create Category</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Category Modal */}
+      {editingCat && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Edit Category</h2>
+              <button onClick={() => setEditingCat(null)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20} /></button>
+            </div>
+            
+            <form onSubmit={handleUpdateCat} className="space-y-6">
+               <div className="flex justify-center">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-3xl bg-slate-50 dark:bg-emerald-950 flex items-center justify-center overflow-hidden border-2 dark:border-emerald-800">
+                    {editingCat.image ? (
+                      <img src={editingCat.image} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon size={32} className="text-slate-200" />
+                    )}
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" id="cat-edit-img" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'cat-edit')} />
+                  <label htmlFor="cat-edit-img" className="absolute -bottom-2 -right-2 bg-emerald-600 text-white p-2.5 rounded-xl shadow-lg cursor-pointer"><Camera size={16} /></label>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Name</label>
+                <input required className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={editingCat.name} onChange={e => setEditingCat({...editingCat, name: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <button type="submit" className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] active:scale-[0.98] transition-all">Update Name</button>
+                {editingCat.name !== 'General' && (
+                  <button type="button" onClick={() => editingCat.id && handleDeleteCat(editingCat.id)} className="w-full py-3 text-red-300 font-bold uppercase text-[8px] tracking-widest hover:text-red-500">Delete Category</button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Inflation Protector (Bulk Update) Modal */}
+      {showBulkModal && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-md rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+             <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-3">
+                   <div className="p-2 bg-amber-50 dark:bg-amber-900 rounded-xl text-amber-600"><TrendingUp size={20}/></div>
+                   <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 italic">Inflation Protector</h2>
+                </div>
+                <button onClick={() => setShowBulkModal(false)} className="p-2 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20}/></button>
+             </div>
+             
+             <div className="space-y-6">
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-2xl flex items-start gap-3">
+                   <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={16} />
+                   <p className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase leading-relaxed">Increase prices for your whole shop in one second. All new prices round to the nearest ₦50.</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Category</label>
+                      <select 
+                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none"
+                        value={bulkData.targetCategory}
+                        onChange={e => setBulkData({...bulkData, targetCategory: e.target.value})}
+                      >
+                        <option value="All">All Items</option>
+                        {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                   </div>
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Target Price</label>
+                      <select 
+                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none"
+                        value={bulkData.targetField}
+                        onChange={e => setBulkData({...bulkData, targetField: e.target.value as any})}
+                      >
+                        <option value="Selling Price">Selling Price</option>
+                        <option value="Cost Price">Cost Price</option>
+                      </select>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Increase Type</label>
+                      <select 
+                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none"
+                        value={bulkData.updateType}
+                        onChange={e => setBulkData({...bulkData, updateType: e.target.value as any})}
+                      >
+                        <option value="Percentage">% Percentage</option>
+                        <option value="Fixed">+ Fixed Amount (₦)</option>
+                      </select>
+                   </div>
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Amount</label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          className="w-full p-4 pl-10 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-black text-amber-600 outline-none"
+                          value={bulkData.value || ''}
+                          onChange={e => setBulkData({...bulkData, value: Number(e.target.value)})}
+                          placeholder="0"
+                        />
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-amber-600/50">{bulkData.updateType === 'Percentage' ? '%' : '₦'}</span>
+                      </div>
+                   </div>
+                </div>
+
+                <button 
+                  onClick={handleApplyBulkUpdate}
+                  disabled={isUpdatingBulk}
+                  className="w-full bg-amber-600 text-white font-black py-6 rounded-[28px] shadow-xl shadow-amber-100 dark:shadow-none uppercase tracking-widest text-xs active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                >
+                  {isUpdatingBulk ? <Loader2 className="animate-spin" /> : <TrendingUp size={20} />} 
+                  {isUpdatingBulk ? 'Updating...' : 'Update Entire Stock'}
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
