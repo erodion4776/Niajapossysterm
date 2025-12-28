@@ -4,9 +4,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, InventoryItem, Category } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
 import { 
-  Plus, Search, Package, Edit3, X, Lock, Trash2, 
+  Plus, Search, Package, Edit3, X, Trash2, 
   Camera, LayoutGrid, List, Image as ImageIcon, Loader2,
-  ChevronRight, Tag, Settings2, ShieldAlert
+  Tag, ShieldAlert
 } from 'lucide-react';
 import { Role } from '../types.ts';
 import { ExpiryScanner } from '../components/ExpiryScanner.tsx';
@@ -28,9 +28,8 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
   const [activeTab, setActiveTab] = useState<'products' | 'categories'>('products');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentFilter, setCurrentFilter] = useState<'all' | 'low-stock' | 'expiring'>(initialFilter);
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => (localStorage.getItem('inventory_view') as any) || 'list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => (localStorage.getItem('inventory_view') as any) || 'grid');
   
-  // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -72,7 +71,7 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
       else if (target === 'cat-add') setCatFormData(prev => ({ ...prev, image: base64 }));
       else if (target === 'cat-edit') setEditingCat(prev => prev ? { ...prev, image: base64 } : null);
     } catch (err) {
-      alert("Failed to process image");
+      alert("Failed to process image. Try a smaller file.");
     } finally {
       setIsProcessingImage(false);
     }
@@ -164,33 +163,13 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
 
       {/* Tab Switcher */}
       <div className="flex bg-slate-100 dark:bg-emerald-900/40 p-1.5 rounded-[24px] border border-slate-200 dark:border-emerald-800/40">
-        <button 
-          onClick={() => setActiveTab('products')}
-          className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'products' ? 'bg-white dark:bg-emerald-800 text-emerald-600 dark:text-emerald-50 shadow-sm' : 'text-slate-400'}`}
-        >
+        <button onClick={() => setActiveTab('products')} className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'products' ? 'bg-white dark:bg-emerald-800 text-emerald-600 dark:text-emerald-50 shadow-sm' : 'text-slate-400'}`}>
           <Package size={16} /> Products
         </button>
-        <button 
-          onClick={() => setActiveTab('categories')}
-          className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'categories' ? 'bg-white dark:bg-emerald-800 text-emerald-600 dark:text-emerald-50 shadow-sm' : 'text-slate-400'}`}
-        >
+        <button onClick={() => setActiveTab('categories')} className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'categories' ? 'bg-white dark:bg-emerald-800 text-emerald-600 dark:text-emerald-50 shadow-sm' : 'text-slate-400'}`}>
           <Tag size={16} /> Categories
         </button>
       </div>
-
-      {activeTab === 'products' && (
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {['all', 'low-stock', 'expiring'].map((f) => (
-            <button 
-              key={f}
-              onClick={() => { setCurrentFilter(f as any); clearInitialFilter?.(); }}
-              className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${currentFilter === f ? 'bg-emerald-600 text-white shadow-lg' : 'bg-white dark:bg-emerald-900/40 text-gray-400 dark:text-emerald-500/40 border border-gray-100 dark:border-emerald-800/40'}`}
-            >
-              {f.replace('-', ' ')}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="relative">
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300 dark:text-emerald-800" size={18} />
@@ -211,8 +190,13 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
               return (
                 <button key={item.id} disabled={!isAdmin} onClick={() => isAdmin && setEditingItem(item)} className="bg-white dark:bg-emerald-900/40 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 overflow-hidden shadow-sm flex flex-col active:scale-[0.97] transition-all text-left group">
                   <div className="h-32 w-full bg-slate-100 dark:bg-emerald-950/40 relative">
-                    {item.image ? <img src={item.image} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center text-slate-300 dark:text-emerald-900"><ImageIcon size={32} /></div>}
-                    {/* Fix: Added missing ShieldAlert component here */}
+                    {item.image ? (
+                      <img src={item.image} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-black text-2xl uppercase">
+                        {item.name.charAt(0)}
+                      </div>
+                    )}
                     {isExpiring && <div className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full animate-pulse"><ShieldAlert size={12} /></div>}
                   </div>
                   <div className="p-4 space-y-1">
@@ -225,7 +209,15 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
             }
             return (
               <button key={item.id} disabled={!isAdmin} onClick={() => isAdmin && setEditingItem(item)} className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] border border-gray-50 dark:border-emerald-800/20 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all text-left">
-                <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-emerald-950 overflow-hidden border dark:border-emerald-800/40">{item.image ? <img src={item.image} alt="" className="w-full h-full object-cover" /> : <Package className="w-full h-full p-4 text-slate-200" />}</div>
+                <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-emerald-950 overflow-hidden border dark:border-emerald-800/40">
+                  {item.image ? (
+                    <img src={item.image} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-black text-lg uppercase">
+                      {item.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold text-slate-800 dark:text-emerald-50 text-sm truncate">{item.name}</h3>
                   <div className="flex items-center gap-2 mt-0.5"><p className="text-emerald-600 dark:text-emerald-400 font-black text-sm">{formatNaira(item.sellingPrice)}</p><span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${isLow ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 dark:bg-emerald-950 text-gray-500'}`}>{item.stock} in stock</span></div>
@@ -240,7 +232,13 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
           {filteredCats.map(cat => (
             <button key={cat.id} onClick={() => isAdmin && setEditingCat(cat)} className="bg-white dark:bg-emerald-900/40 p-4 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-all text-center">
               <div className="w-full aspect-square bg-slate-50 dark:bg-emerald-950 rounded-2xl overflow-hidden">
-                {cat.image ? <img src={cat.image} className="w-full h-full object-cover" alt="" /> : <div className="w-full h-full flex items-center justify-center text-slate-200"><Tag size={32} /></div>}
+                {cat.image ? (
+                  <img src={cat.image} className="w-full h-full object-cover" alt="" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-black text-2xl uppercase">
+                    {cat.name.charAt(0)}
+                  </div>
+                )}
               </div>
               <p className="font-black text-xs text-slate-800 dark:text-emerald-50 uppercase tracking-widest">{cat.name}</p>
             </button>
@@ -248,41 +246,60 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
         </div>
       )}
 
-      {/* Product Modals */}
+      {/* Product Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-gray-800 dark:text-emerald-50 tracking-tight italic">New Product</h2><button onClick={() => setShowAddModal(false)} className="bg-gray-100 dark:bg-emerald-800 p-3 rounded-full text-gray-400"><X size={20} /></button></div>
             <form onSubmit={handleAddItem} className="space-y-6 pb-4">
               <div className="flex flex-col items-center">
-                <div className="w-32 h-32 bg-slate-50 dark:bg-emerald-950 rounded-[40px] border-4 border-white dark:border-emerald-800 shadow-xl overflow-hidden relative group">
-                  {formData.image ? <img src={formData.image} className="w-full h-full object-cover" alt="" /> : <div className="w-full h-full flex flex-col items-center justify-center text-slate-300"><Camera size={32} /><span className="text-[8px] font-black uppercase mt-1">Snap Product</span></div>}
-                  {isProcessingImage && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
-                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'product-add')} />
-                  {formData.image && <button type="button" onClick={() => removeImage('product-add')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full shadow-lg"><X size={12} /></button>}
+                <div className={`relative group w-full max-w-[200px] aspect-square bg-slate-50 dark:bg-emerald-950 rounded-[40px] border-4 border-dashed ${formData.image ? 'border-emerald-500' : 'border-slate-200 dark:border-emerald-800'} shadow-xl overflow-hidden flex flex-col items-center justify-center transition-all`}>
+                  {formData.image ? (
+                    <img src={formData.image} className="w-full h-full object-cover" alt="Preview" />
+                  ) : (
+                    <div className="text-center p-6 space-y-2">
+                      <Camera size={32} className="mx-auto text-emerald-600 dark:text-emerald-500" />
+                      <span className="text-[10px] font-black text-emerald-600 uppercase block tracking-widest">Add Product Photo</span>
+                    </div>
+                  )}
+                  {isProcessingImage && <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm"><Loader2 size={24} className="text-white animate-spin" /></div>}
+                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'product-add')} />
+                  {formData.image && (
+                    <button type="button" onClick={() => removeImage('product-add')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-full shadow-lg z-20 active:scale-90"><X size={16} /></button>
+                  )}
                 </div>
               </div>
               <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Item Name</label><input required type="text" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
               <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Category</label><select className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50 text-sm" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>{categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div><div className="space-y-1"><label className="text-[10px] font-black text-red-400 uppercase tracking-widest ml-2 flex justify-between items-center">Expiry <button type="button" onClick={() => setShowScanner('add')} className="text-emerald-500"><Camera size={12} /></button></label><input type="date" className="w-full p-4 bg-red-50/30 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 rounded-2xl font-bold dark:text-emerald-50" value={formData.expiryDate} onChange={e => setFormData({...formData, expiryDate: e.target.value})} /></div></div>
               <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Cost Price (₦)</label><input required type="number" step="0.01" inputMode="decimal" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} /></div><div className="space-y-1"><label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-2">Selling Price (₦)</label><input required type="number" step="0.01" inputMode="decimal" className="w-full p-4 bg-emerald-50/30 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={formData.sellingPrice || ''} onChange={e => setFormData({...formData, sellingPrice: Number(e.target.value)})} /></div></div>
-              <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Stock Level</label><input required type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={formData.stock || ''} onChange={e => setFormData({...formData, stock: Number(e.target.value)})} /></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Min. Stock</label><input type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={formData.minStock || ''} onChange={e => setFormData({...formData, minStock: Number(e.target.value)})} /></div></div>
+              <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Stock Level</label><input required type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={formData.stock || ''} onChange={e => setFormData({...formData, stock: Number(e.target.value)})} /></div><div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Min. Stock</label><input required type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={formData.minStock || ''} onChange={e => setFormData({...formData, minStock: Number(e.target.value)})} /></div></div>
               <button type="submit" disabled={isProcessingImage} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs">Save Product</button>
             </form>
           </div>
         </div>
       )}
 
+      {/* Product Edit Modal */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black text-gray-800 dark:text-emerald-50 tracking-tight italic">Edit Item</h2><button onClick={() => setEditingItem(null)} className="bg-gray-100 dark:bg-emerald-800 p-3 rounded-full text-gray-400"><X size={20} /></button></div>
             <form onSubmit={handleUpdateItem} className="space-y-6 pb-4">
               <div className="flex flex-col items-center">
-                <div className="w-32 h-32 bg-slate-50 dark:bg-emerald-950 rounded-[40px] border-4 border-white dark:border-emerald-800 shadow-xl overflow-hidden relative">
-                  {editingItem.image ? <img src={editingItem.image} className="w-full h-full object-cover" alt="" /> : <div className="w-full h-full flex flex-col items-center justify-center text-slate-300"><Camera size={32} /></div>}
-                  {isProcessingImage && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
-                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'product-edit')} />
-                  {editingItem.image && <button type="button" onClick={() => removeImage('product-edit')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full shadow-lg"><X size={12} /></button>}
+                <div className={`relative group w-full max-w-[200px] aspect-square bg-slate-50 dark:bg-emerald-950 rounded-[40px] border-4 border-dashed ${editingItem.image ? 'border-emerald-500' : 'border-slate-200 dark:border-emerald-800'} shadow-xl overflow-hidden flex flex-col items-center justify-center transition-all`}>
+                  {editingItem.image ? (
+                    <img src={editingItem.image} className="w-full h-full object-cover" alt="Preview" />
+                  ) : (
+                    <div className="text-center p-6 space-y-2">
+                      <Camera size={32} className="mx-auto text-emerald-600 dark:text-emerald-500" />
+                      <span className="text-[10px] font-black text-emerald-600 uppercase block tracking-widest">Update Photo</span>
+                    </div>
+                  )}
+                  {isProcessingImage && <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm"><Loader2 size={24} className="text-white animate-spin" /></div>}
+                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'product-edit')} />
+                  {editingItem.image && (
+                    <button type="button" onClick={() => removeImage('product-edit')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-full shadow-lg z-20 active:scale-90"><X size={16} /></button>
+                  )}
                 </div>
               </div>
               <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Product Name</label><input required type="text" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} /></div>
@@ -294,18 +311,27 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
         </div>
       )}
 
-      {/* Category Modals */}
+      {/* Category Add Modal */}
       {showCatModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800">
-            <div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-gray-800 dark:text-emerald-50 tracking-tight italic">New Category</h2><button onClick={() => setShowAddModal(false)} className="bg-gray-100 dark:bg-emerald-800 p-3 rounded-full text-gray-400"><X size={20} /></button></div>
+            <div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-gray-800 dark:text-emerald-50 tracking-tight italic">New Category</h2><button onClick={() => setShowCatModal(false)} className="bg-gray-100 dark:bg-emerald-800 p-3 rounded-full text-gray-400"><X size={20} /></button></div>
             <form onSubmit={handleAddCat} className="space-y-6 pb-4">
               <div className="flex flex-col items-center">
-                <div className="w-32 h-32 bg-slate-50 dark:bg-emerald-950 rounded-[40px] border-4 border-white dark:border-emerald-800 shadow-xl overflow-hidden relative">
-                  {catFormData.image ? <img src={catFormData.image} className="w-full h-full object-cover" alt="" /> : <div className="w-full h-full flex flex-col items-center justify-center text-slate-300"><Tag size={32} /></div>}
-                  {isProcessingImage && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
-                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'cat-add')} />
-                  {catFormData.image && <button type="button" onClick={() => removeImage('cat-add')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full shadow-lg"><X size={12} /></button>}
+                <div className={`relative group w-full max-w-[200px] aspect-square bg-slate-50 dark:bg-emerald-950 rounded-[40px] border-4 border-dashed ${catFormData.image ? 'border-emerald-500' : 'border-slate-200 dark:border-emerald-800'} shadow-xl overflow-hidden flex flex-col items-center justify-center transition-all`}>
+                  {catFormData.image ? (
+                    <img src={catFormData.image} className="w-full h-full object-cover" alt="Preview" />
+                  ) : (
+                    <div className="text-center p-6 space-y-2">
+                      <Camera size={32} className="mx-auto text-emerald-600 dark:text-emerald-500" />
+                      <span className="text-[10px] font-black text-emerald-600 uppercase block tracking-widest">Category Photo</span>
+                    </div>
+                  )}
+                  {isProcessingImage && <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm"><Loader2 size={24} className="text-white animate-spin" /></div>}
+                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'cat-add')} />
+                  {catFormData.image && (
+                    <button type="button" onClick={() => removeImage('cat-add')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-full shadow-lg z-20 active:scale-90"><X size={16} /></button>
+                  )}
                 </div>
               </div>
               <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Category Name</label><input required type="text" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={catFormData.name} onChange={e => setCatFormData({...catFormData, name: e.target.value})} /></div>
@@ -315,17 +341,27 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
         </div>
       )}
 
+      {/* Category Edit Modal */}
       {editingCat && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800">
             <div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-gray-800 dark:text-emerald-50 tracking-tight italic">Edit Category</h2><button onClick={() => setEditingCat(null)} className="bg-gray-100 dark:bg-emerald-800 p-3 rounded-full text-gray-400"><X size={20} /></button></div>
             <form onSubmit={handleUpdateCat} className="space-y-6 pb-4">
               <div className="flex flex-col items-center">
-                <div className="w-32 h-32 bg-slate-50 dark:bg-emerald-950 rounded-[40px] border-4 border-white dark:border-emerald-800 shadow-xl overflow-hidden relative">
-                  {editingCat.image ? <img src={editingCat.image} className="w-full h-full object-cover" alt="" /> : <div className="w-full h-full flex flex-col items-center justify-center text-slate-300"><Tag size={32} /></div>}
-                  {isProcessingImage && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><Loader2 size={24} className="text-white animate-spin" /></div>}
-                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'cat-edit')} />
-                  {editingCat.image && <button type="button" onClick={() => removeImage('cat-edit')} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full shadow-lg"><X size={12} /></button>}
+                <div className={`relative group w-full max-w-[200px] aspect-square bg-slate-50 dark:bg-emerald-950 rounded-[40px] border-4 border-dashed ${editingCat.image ? 'border-emerald-500' : 'border-slate-200 dark:border-emerald-800'} shadow-xl overflow-hidden flex flex-col items-center justify-center transition-all`}>
+                  {editingCat.image ? (
+                    <img src={editingCat.image} className="w-full h-full object-cover" alt="Preview" />
+                  ) : (
+                    <div className="text-center p-6 space-y-2">
+                      <Camera size={32} className="mx-auto text-emerald-600 dark:text-emerald-500" />
+                      <span className="text-[10px] font-black text-emerald-600 uppercase block tracking-widest">Update Photo</span>
+                    </div>
+                  )}
+                  {isProcessingImage && <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm"><Loader2 size={24} className="text-white animate-spin" /></div>}
+                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'cat-edit')} />
+                  {editingCat.image && (
+                    <button type="button" onClick={() => removeImage('cat-edit')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-full shadow-lg z-20 active:scale-90"><X size={16} /></button>
+                  )}
                 </div>
               </div>
               <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Category Name</label><input required type="text" className="w-full p-4 bg-gray-50 dark:bg-emerald-950/40 border dark:border-emerald-800/20 rounded-2xl font-bold dark:text-emerald-50" value={editingCat.name} onChange={e => setEditingCat({...editingCat, name: e.target.value})} /></div>
@@ -337,9 +373,3 @@ export const Inventory: React.FC<InventoryProps> = ({ role, initialFilter = 'all
     </div>
   );
 };
-
-const ArrowRight = ({ size }: { size: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M5 12h14M12 5l7 7-7 7"/>
-  </svg>
-);
