@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, Sale } from '../db.ts';
@@ -5,9 +6,12 @@ import { formatNaira, shareReceiptToWhatsApp, exportStaffSalesReport } from '../
 import { 
   History, Search, Calendar, Trash2, 
   X, FileText, Smartphone, Receipt, RefreshCw,
-  TrendingUp, CreditCard, User, ArrowRight, MessageCircle, Share2, Loader2, CheckCircle2
+  TrendingUp, CreditCard, User, ArrowRight, MessageCircle, Share2, Loader2, CheckCircle2,
+  Printer
 } from 'lucide-react';
 import { Role } from '../types.ts';
+import { connectToPrinter, isPrinterConnected, sendToPrinter } from '../utils/bluetoothManager.ts';
+import { generateReceiptBytes } from '../utils/receiptGenerator.ts';
 
 interface SalesProps {
   role: Role;
@@ -21,6 +25,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
   const [filterDate, setFilterDate] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const sales = useLiveQuery(async () => {
     let query = db.sales.orderBy('timestamp').reverse();
@@ -70,6 +75,21 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
       alert("Failed to export report: " + (err as Error).message);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handlePrint = async (sale: Sale) => {
+    setIsPrinting(true);
+    try {
+      if (!isPrinterConnected()) {
+        await connectToPrinter();
+      }
+      const bytes = generateReceiptBytes(sale);
+      await sendToPrinter(bytes);
+    } catch (e: any) {
+      alert("Printing failed: " + e.message);
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -214,18 +234,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
                     {sale.items.length} {sale.items.length === 1 ? 'item' : 'items'}
                   </p>
                 </div>
-                <div className="flex gap-1 mt-3 flex-wrap">
-                  {sale.items.slice(0, 3).map((item, idx) => (
-                    <span key={idx} className="bg-gray-50 dark:bg-emerald-950/40 text-gray-400 dark:text-emerald-500/40 text-[8px] font-black px-2 py-1 rounded-lg border border-slate-100 dark:border-emerald-800/40 uppercase">
-                      {item.name}
-                    </span>
-                  ))}
-                  {sale.items.length > 3 && (
-                    <span className="bg-gray-50 dark:bg-emerald-950/40 text-gray-400 dark:text-emerald-500/40 text-[8px] font-black px-2 py-1 rounded-lg border border-slate-100 dark:border-emerald-800/40 uppercase">
-                      +{sale.items.length - 3} more
-                    </span>
-                  )}
-                </div>
               </div>
             </button>
           ))
@@ -251,13 +259,11 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             </div>
 
             <div className="space-y-8">
-              {/* Professional Receipt Mock */}
               <div className="bg-white dark:bg-emerald-950/40 border-2 border-slate-100 dark:border-emerald-800/40 rounded-[32px] p-6 font-mono text-xs text-gray-600 dark:text-emerald-100/60 relative shadow-inner">
                 <div className="text-center mb-6">
                    <h3 className="font-black text-slate-900 dark:text-emerald-50 text-sm uppercase mb-1">
                      {localStorage.getItem('shop_name') || 'NaijaShop POS'}
                    </h3>
-                   <p className="text-[10px] opacity-60">{localStorage.getItem('shop_info') || 'Nigeria'}</p>
                 </div>
                 
                 <div className="flex justify-between text-[10px] mb-4">
@@ -270,7 +276,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
                 <div className="space-y-3">
                   {selectedSale.items.map((item, idx) => (
                     <div key={idx} className="flex justify-between items-start gap-4 text-slate-800 dark:text-emerald-50">
-                      <span className="flex-1 leading-tight">{item.name} <br/><span className="opacity-40">{item.quantity} x {formatNaira(item.price)}</span></span>
+                      <span className="flex-1 leading-tight">{item.name} x{item.quantity}</span>
                       <span className="font-bold">{formatNaira(item.price * item.quantity)}</span>
                     </div>
                   ))}
@@ -282,21 +288,21 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
                   <span>TOTAL</span>
                   <span>{formatNaira(selectedSale.total)}</span>
                 </div>
-                
-                <div className="mt-8 flex flex-col items-center gap-1 opacity-40">
-                  <div className="flex items-center gap-2">
-                    <User size={10} />
-                    <p className="uppercase text-[8px] font-bold">Served by {selectedSale.staff_name}</p>
-                  </div>
-                  <p className="uppercase text-[7px] font-bold">Powering local businesses 🇳🇬</p>
-                </div>
               </div>
 
               {/* Actions */}
               <div className="grid grid-cols-1 gap-3">
                 <button 
+                  onClick={() => handlePrint(selectedSale)}
+                  disabled={isPrinting}
+                  className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-xl text-[10px] uppercase tracking-widest disabled:opacity-50"
+                >
+                  {isPrinting ? <Loader2 size={20} className="animate-spin" /> : <Printer size={20} />}
+                  {isPrinting ? 'Printing...' : 'Print Physical Receipt'}
+                </button>
+                <button 
                   onClick={() => shareReceiptToWhatsApp(selectedSale)}
-                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-xl shadow-emerald-100 dark:shadow-none text-[10px] uppercase tracking-widest"
+                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-xl text-[10px] uppercase tracking-widest"
                 >
                   <MessageCircle size={20} /> Share via WhatsApp
                 </button>

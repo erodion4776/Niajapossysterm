@@ -5,7 +5,8 @@ import { db, SaleItem, Sale, InventoryItem, User as DBUser } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
 import { Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, Printer, Loader2 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { connectPrinter, printReceipt } from '../utils/printer.ts';
+import { connectToPrinter, isPrinterConnected, sendToPrinter } from '../utils/bluetoothManager.ts';
+import { generateReceiptBytes } from '../utils/receiptGenerator.ts';
 
 interface POSProps {
   user: DBUser;
@@ -123,26 +124,25 @@ export const POS: React.FC<POSProps> = ({ user }) => {
   const handlePrint = async () => {
     if (!lastSale) return;
 
-    if (!printerName) {
-      try {
-        const name = await connectPrinter();
-        setPrinterName(name);
-        return;
-      } catch (e) {
-        alert("Failed to connect printer. Ensure Bluetooth is ON.");
-        return;
-      }
-    }
-
     setIsPrinting(true);
     try {
-      await printReceipt(lastSale);
+      // 1. Connect if not connected
+      if (!isPrinterConnected()) {
+        const name = await connectToPrinter();
+        setPrinterName(name);
+      }
+
+      // 2. Generate Bytes
+      const bytes = generateReceiptBytes(lastSale);
+
+      // 3. Send to Printer
+      await sendToPrinter(bytes);
       setPrintSuccess(true);
-      setTimeout(() => setPrintSuccess(false), 3000);
+      setTimeout(() => setPrintSuccess(false), 2000);
     } catch (e: any) {
+      console.error(e);
       alert("Printing failed: " + e.message);
-      // If characteristic lost, reset printer
-      if (e.message.includes('No printer')) setPrinterName(null);
+      setPrinterName(localStorage.getItem('connected_printer_name')); // Reset status
     } finally {
       setIsPrinting(false);
     }
@@ -396,7 +396,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                   className={`w-full ${printSuccess ? 'bg-blue-600' : 'bg-blue-500'} text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-blue-200 text-[10px] uppercase tracking-widest transition-all disabled:opacity-50`}
                 >
                   {isPrinting ? <Loader2 size={18} className="animate-spin" /> : printSuccess ? <CheckCircle size={18} /> : <Printer size={18} />}
-                  {isPrinting ? 'Wait...' : !printerName ? 'Connect' : printSuccess ? 'Sent!' : 'Print'}
+                  {isPrinting ? 'Printing...' : !printerName ? 'Setup Printer' : printSuccess ? 'Printed!' : 'Print Receipt'}
                 </button>
               </div>
               <button onClick={() => setShowSuccessModal(false)} className="w-full py-3 text-slate-400 dark:text-emerald-500/40 font-bold uppercase text-[10px] tracking-widest">Close Sale</button>
