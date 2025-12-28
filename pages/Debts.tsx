@@ -6,7 +6,8 @@ import { formatNaira } from '../utils/whatsapp.ts';
 import { 
   Users, Plus, Search, MessageCircle, CheckCircle2, 
   Trash2, X, Wallet, Calendar, AlertCircle, Phone,
-  CreditCard, ArrowRight, Loader2, BookOpen, TrendingDown
+  CreditCard, ArrowRight, Loader2, BookOpen, TrendingDown,
+  ShoppingCart
 } from 'lucide-react';
 import { Role } from '../types.ts';
 
@@ -32,8 +33,7 @@ export const Debts: React.FC<DebtsProps> = ({ role }) => {
     note: ''
   });
 
-  const unpaidDebts = debts?.filter(d => d.status === 'Unpaid' && d.remainingBalance > 0) || [];
-  const clearedDebts = debts?.filter(d => d.status === 'Paid' || d.remainingBalance <= 0) || [];
+  const unpaidDebts = debts?.filter(d => d.status.toLowerCase() === 'unpaid' && d.remainingBalance > 0) || [];
   
   const filteredDebts = unpaidDebts.filter(d => 
     d.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -138,11 +138,11 @@ export const Debts: React.FC<DebtsProps> = ({ role }) => {
       <div className="space-y-4">
         {filteredDebts.length > 0 ? (
           filteredDebts.map(debt => (
-            <div key={debt.id} className="bg-white dark:bg-emerald-900 p-5 rounded-[32px] border border-slate-100 dark:border-emerald-800 shadow-sm space-y-4 relative overflow-hidden">
+            <div key={debt.id} className="bg-white dark:bg-emerald-900 p-5 rounded-[32px] border border-slate-100 dark:border-emerald-800 shadow-sm space-y-4 relative overflow-hidden group">
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-4">
-                  <div className="bg-amber-50 dark:bg-emerald-950 text-amber-600 dark:text-emerald-400 p-3 rounded-2xl">
-                    <BookOpen size={24} />
+                  <div className={`p-3 rounded-2xl ${debt.items.startsWith('POS Sale') ? 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400' : 'bg-amber-50 text-amber-600 dark:bg-emerald-950 dark:text-emerald-400'}`}>
+                    {debt.items.startsWith('POS Sale') ? <ShoppingCart size={24} /> : <BookOpen size={24} />}
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-black text-slate-800 dark:text-emerald-50 text-lg leading-tight truncate uppercase">{debt.customerName}</h3>
@@ -158,8 +158,11 @@ export const Debts: React.FC<DebtsProps> = ({ role }) => {
               </div>
 
               <div className="bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-2xl space-y-1">
-                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Items / Note</p>
-                 <p className="text-xs font-bold text-slate-600 dark:text-emerald-100 truncate">{debt.items}</p>
+                 <div className="flex justify-between items-center mb-1">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Items / Note</p>
+                    {debt.items.startsWith('POS Sale') && <span className="text-[8px] font-black text-blue-500 uppercase px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 rounded">POS Transaction</span>}
+                 </div>
+                 <p className="text-xs font-bold text-slate-600 dark:text-emerald-100">{debt.items}</p>
                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-emerald-800">
                     <Calendar size={10} className="text-slate-300" />
                     <span className="text-[9px] font-bold text-slate-400 uppercase">{new Date(debt.date).toLocaleDateString([], { dateStyle: 'medium' })}</span>
@@ -184,7 +187,7 @@ export const Debts: React.FC<DebtsProps> = ({ role }) => {
               {isAdmin && (
                 <button 
                   onClick={() => handleDeleteDebt(debt.id!)}
-                  className="absolute top-4 right-4 p-2 text-slate-200 hover:text-red-400 transition-colors"
+                  className="absolute top-4 right-4 p-2 text-slate-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                 >
                   <Trash2 size={14} />
                 </button>

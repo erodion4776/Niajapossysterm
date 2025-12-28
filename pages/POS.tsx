@@ -7,7 +7,7 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, 
   MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, 
   Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight,
-  BookOpen, CreditCard
+  BookOpen, CreditCard, AlertCircle
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
@@ -86,8 +86,10 @@ export const POS: React.FC<POSProps> = ({ user }) => {
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const total = Math.max(0, cartSubtotal - walletCreditApplied);
-  const totalCost = cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0);
+  // Only apply wallet discount if in Immediate mode
+  const total = paymentMode === 'Immediate' 
+    ? Math.max(0, cartSubtotal - walletCreditApplied)
+    : cartSubtotal;
 
   const changeDue = Math.max(0, Number(amountPaid || 0) - total);
 
@@ -100,19 +102,31 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     setPaymentMode('Immediate');
   };
 
-  const handleLookupCustomer = async () => {
-    if (!customerPhone) return;
+  // Helper to handle mode switching cleanly
+  const togglePaymentMode = (mode: 'Immediate' | 'Debt') => {
+    setPaymentMode(mode);
+    if (mode === 'Debt') {
+      setWalletCreditApplied(0);
+      setAmountPaid('');
+      setSaveChangeToWallet(false);
+    }
+  };
+
+  const handleLookupCustomer = async (explicitPhone?: string) => {
+    const phoneToSearch = explicitPhone || customerPhone;
+    if (!phoneToSearch) return;
     setIsSearchingCustomer(true);
     try {
-      const customer = await db.customers.where('phone').equals(customerPhone).first();
+      const customer = await db.customers.where('phone').equals(phoneToSearch).first();
       if (customer) {
         setSelectedCustomer(customer);
-      } else {
+      } else if (!explicitPhone) {
+        // Only prompt for new name if user clicked search button explicitly
         const name = prompt("New Customer! Enter their name:", "Walk-in Customer");
         if (name) {
           const id = await db.customers.add({
             name,
-            phone: customerPhone,
+            phone: phoneToSearch,
             walletBalance: 0,
             lastTransaction: Date.now()
           });
@@ -125,22 +139,35 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     }
   };
 
+  // Auto-search if 11 digits entered
+  useEffect(() => {
+    if (customerPhone.length === 11 && !selectedCustomer) {
+      handleLookupCustomer(customerPhone);
+    }
+  }, [customerPhone]);
+
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     
-    // Strict requirement for Debt
-    if (paymentMode === 'Debt' && !selectedCustomer) {
-      alert("Please identify the customer (Phone Number) before recording a debt.");
-      return;
+    // Validations
+    if (paymentMode === 'Debt') {
+      if (!selectedCustomer) {
+        alert("Oga, select or search for a customer before recording a debt!");
+        return;
+      }
+      if (total <= 0) {
+        alert("Cannot record a ₦0 debt. Switch to 'Paid Now' instead.");
+        return;
+      }
     }
 
     const sale: Sale = {
       uuid: crypto.randomUUID(),
       items: cart.map(({image, ...rest}) => rest), 
       total,
-      totalCost,
-      walletUsed: walletCreditApplied,
-      walletSaved: saveChangeToWallet ? changeDue : 0,
+      totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
+      walletUsed: paymentMode === 'Immediate' ? walletCreditApplied : 0,
+      walletSaved: paymentMode === 'Immediate' && saveChangeToWallet ? changeDue : 0,
       paymentMethod: paymentMode === 'Debt' ? 'Debt' : 'Cash',
       timestamp: Date.now(),
       staff_id: String(user.id || user.role),
@@ -160,22 +187,20 @@ export const POS: React.FC<POSProps> = ({ user }) => {
           }
         }
 
-        // 2. Wallet/Debt Logic
+        // 2. Ledger/Wallet Logic
         if (selectedCustomer) {
           if (paymentMode === 'Debt') {
-            // Record to Debt Ledger
             const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
             await db.debts.add({
               customerName: selectedCustomer.name,
               customerPhone: selectedCustomer.phone,
               totalAmount: total,
               remainingBalance: total,
-              items: itemsSummary,
+              items: `POS Sale: ${itemsSummary}`,
               date: Date.now(),
               status: 'Unpaid'
             });
           } else {
-            // Standard wallet updates
             let newBalance = selectedCustomer.walletBalance - walletCreditApplied;
             if (saveChangeToWallet) newBalance += changeDue;
             await db.customers.update(selectedCustomer.id!, { 
@@ -185,7 +210,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
           }
         }
 
-        // 3. Record Sale
+        // 3. Complete Sale Record
         const saleId = await db.sales.add(sale);
         setLastSale({ ...sale, id: saleId as number });
       });
@@ -355,13 +380,13 @@ export const POS: React.FC<POSProps> = ({ user }) => {
               {/* Payment Mode Selector */}
               <div className="bg-slate-100 dark:bg-emerald-950 p-1 rounded-2xl flex gap-1 mb-6">
                 <button 
-                  onClick={() => setPaymentMode('Immediate')}
+                  onClick={() => togglePaymentMode('Immediate')}
                   className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${paymentMode === 'Immediate' ? 'bg-white dark:bg-emerald-800 text-emerald-600 dark:text-emerald-50 shadow-sm' : 'text-slate-400'}`}
                 >
                   <CreditCard size={14} /> Paid Now
                 </button>
                 <button 
-                  onClick={() => setPaymentMode('Debt')}
+                  onClick={() => togglePaymentMode('Debt')}
                   className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${paymentMode === 'Debt' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400'}`}
                 >
                   <BookOpen size={14} /> Record Debt
@@ -373,15 +398,15 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                   <div className="relative flex-1">
                     <input 
                       type="tel" 
-                      placeholder="Customer Phone (Required for Debt)" 
-                      className={`w-full pl-10 pr-4 py-3.5 bg-slate-50 dark:bg-emerald-950 border rounded-2xl text-sm font-bold dark:text-emerald-50 ${paymentMode === 'Debt' && !selectedCustomer ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-slate-100 dark:border-emerald-800/40'}`}
+                      placeholder="Customer Phone..." 
+                      className={`w-full pl-10 pr-4 py-3.5 bg-slate-50 dark:bg-emerald-950 border rounded-2xl text-sm font-bold dark:text-emerald-50 ${paymentMode === 'Debt' && !selectedCustomer ? 'border-amber-400 ring-2 ring-amber-400/20 shadow-inner' : 'border-slate-100 dark:border-emerald-800/40'}`}
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                     />
                     <UserPlus className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
                   </div>
                   <button 
-                    onClick={handleLookupCustomer}
+                    onClick={() => handleLookupCustomer()}
                     disabled={isSearchingCustomer}
                     className="px-4 bg-emerald-100 dark:bg-emerald-800 text-emerald-600 dark:text-emerald-100 rounded-2xl flex items-center justify-center active:scale-90"
                   >
@@ -389,7 +414,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                   </button>
                 </div>
 
-                {selectedCustomer && (
+                {selectedCustomer ? (
                   <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/20 animate-in slide-in-from-top duration-200">
                     <div className="flex justify-between items-center mb-3">
                       <div className="flex items-center gap-2">
@@ -404,12 +429,18 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                     </div>
                     {paymentMode === 'Immediate' && selectedCustomer.walletBalance > 0 && walletCreditApplied === 0 && (
                       <button 
-                        onClick={() => setWalletCreditApplied(Math.min(selectedCustomer.walletBalance, total))}
+                        onClick={() => setWalletCreditApplied(Math.min(selectedCustomer.walletBalance, cartSubtotal))}
                         className="w-full bg-emerald-600 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-sm"
                       >
                         <Wallet size={14} /> Use Wallet Credit
                       </button>
                     )}
+                  </div>
+                ) : paymentMode === 'Debt' && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-2xl border border-dashed border-amber-300 flex items-center gap-3">
+                    {/* Fixed: Added missing AlertCircle import from lucide-react */}
+                    <AlertCircle className="text-amber-500" size={20} />
+                    <p className="text-[9px] font-black text-amber-700 dark:text-amber-400 uppercase leading-relaxed">Identity required to post debt to ledger.</p>
                   </div>
                 )}
               </div>
@@ -470,10 +501,11 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                   )}
                 </div>
               ) : (
-                <div className="bg-amber-50 dark:bg-amber-900/20 p-6 rounded-[32px] border border-amber-200 mb-4 text-center space-y-2">
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-6 rounded-[32px] border-2 border-dashed border-amber-300 mb-4 text-center space-y-2 relative overflow-hidden">
+                   <div className="absolute top-0 right-0 p-2 opacity-5 text-amber-800"><BookOpen size={60} /></div>
                    <p className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-[0.2em]">Debit Summary</p>
                    <p className="text-3xl font-black text-amber-800 dark:text-emerald-50 tracking-tighter">{formatNaira(total)}</p>
-                   <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase">This will be added to customer ledger</p>
+                   <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase">Customer will owe full amount</p>
                 </div>
               )}
 
@@ -481,7 +513,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                 <button onClick={() => setIsCartExpanded(false)} className="bg-slate-100 dark:bg-emerald-800 text-slate-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px]">Back</button>
                 <button 
                   onClick={handleCheckout} 
-                  className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all ${paymentMode === 'Debt' ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'}`}
+                  className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all active:scale-95 ${paymentMode === 'Debt' ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-emerald-600 text-white shadow-emerald-200'}`}
                 >
                   {paymentMode === 'Debt' ? 'Post to Ledger' : 'Confirm Pay'} <CheckCircle size={16} />
                 </button>
@@ -508,7 +540,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
               </div>
               <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase">
                 <span>Method</span>
-                <span className="font-black text-slate-800 dark:text-emerald-50">{lastSale?.paymentMethod === 'Debt' ? 'DEBT' : 'CASH'}</span>
+                <span className="font-black text-slate-800 dark:text-emerald-50 uppercase">{lastSale?.paymentMethod || 'CASH'}</span>
               </div>
               {lastSale?.walletSaved && lastSale.walletSaved > 0 && (
                 <div className="flex justify-between font-black text-emerald-600 text-[10px] uppercase pt-2 border-t border-dashed border-emerald-200">
