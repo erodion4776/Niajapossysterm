@@ -9,8 +9,8 @@ import {
   Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight 
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { connectToPrinter, isPrinterConnected, sendToPrinter } from '../utils/bluetoothManager.ts';
-import { generateReceiptBytes } from '../utils/receiptGenerator.ts';
+import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
+import { formatReceipt } from '../utils/receiptFormatter.ts';
 
 interface POSProps {
   user: DBUser;
@@ -34,8 +34,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
   // Printing States
   const [isPrinting, setIsPrinting] = useState(false);
-  const [printSuccess, setPrintSuccess] = useState(false);
-  const [printerName, setPrinterName] = useState(() => localStorage.getItem('connected_printer_name'));
+  const [printerName, setPrinterName] = useState(() => localStorage.getItem('last_printer_name'));
 
   // Scanner States
   const [isScanning, setIsScanning] = useState(false);
@@ -147,7 +146,6 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
     try {
       await db.transaction('rw', [db.inventory, db.sales, db.customers], async () => {
-        // 1. Update Inventory
         for (const item of cart) {
           if (!item.id) continue;
           const invItem = await db.inventory.get(item.id);
@@ -157,25 +155,21 @@ export const POS: React.FC<POSProps> = ({ user }) => {
           }
         }
 
-        // 2. Update Customer Wallet
         if (selectedCustomer) {
           let newBalance = selectedCustomer.walletBalance - walletCreditApplied;
           if (saveChangeToWallet) newBalance += changeDue;
-          
           await db.customers.update(selectedCustomer.id!, { 
             walletBalance: newBalance,
             lastTransaction: Date.now()
           });
         }
 
-        // 3. Record Sale
         const saleId = await db.sales.add(sale);
         setLastSale({ ...sale, id: saleId as number });
       });
 
       setCart([]);
       setIsCartExpanded(false);
-      setPrintSuccess(false);
       setShowSuccessModal(true);
       resetWalletState();
     } catch (error: any) {
@@ -187,14 +181,12 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     if (!lastSale) return;
     setIsPrinting(true);
     try {
-      if (!isPrinterConnected()) {
-        const name = await connectToPrinter();
+      if (!isPrinterReady()) {
+        const name = await connectBluetoothPrinter();
         setPrinterName(name);
       }
-      const bytes = generateReceiptBytes(lastSale);
-      await sendToPrinter(bytes);
-      setPrintSuccess(true);
-      setTimeout(() => setPrintSuccess(false), 2000);
+      const bytes = formatReceipt(lastSale);
+      await sendRawToPrinter(bytes);
     } catch (e: any) {
       alert("Printing failed: " + e.message);
     } finally {
@@ -202,7 +194,6 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     }
   };
 
-  // Scanner Logic
   const startScanner = async () => {
     setIsScanning(true);
     setTimeout(async () => {
@@ -338,8 +329,6 @@ export const POS: React.FC<POSProps> = ({ user }) => {
             </button>
 
             <div className={`overflow-y-auto transition-all duration-300 flex flex-col ${isCartExpanded ? 'flex-1 opacity-100' : 'h-0 opacity-0 pointer-events-none'}`}>
-              
-              {/* Customer Wallet Module */}
               <div className="mb-6 space-y-3">
                 <div className="flex gap-2">
                   <div className="relative flex-1">
@@ -412,7 +401,6 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                 ))}
               </div>
 
-              {/* Payment Math Section */}
               <div className="bg-slate-50 dark:bg-emerald-950/40 p-5 rounded-[32px] border border-slate-100 dark:border-emerald-800/20 space-y-4 mb-4">
                 <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-slate-400">
                   <span>Grand Total</span>
@@ -479,16 +467,22 @@ export const POS: React.FC<POSProps> = ({ user }) => {
               )}
             </div>
             
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)} className="w-full bg-emerald-50 text-emerald-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 border border-emerald-100 text-[10px] uppercase tracking-widest">
-                <MessageCircle size={18} /> WhatsApp
+            <div className="grid grid-cols-1 gap-3">
+              <button 
+                onClick={handlePrint} 
+                disabled={isPrinting} 
+                className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 active:scale-95 shadow-xl shadow-blue-200 uppercase tracking-widest text-xs disabled:opacity-50 transition-all"
+              >
+                {isPrinting ? <Loader2 size={20} className="animate-spin" /> : <Printer size={20} />}
+                {isPrinting ? 'Printing...' : '🖨️ Print Physical Receipt'}
               </button>
-              <button onClick={handlePrint} disabled={isPrinting} className="w-full bg-blue-500 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 text-[10px] uppercase tracking-widest disabled:opacity-50">
-                {isPrinting ? <Loader2 size={18} className="animate-spin" /> : <Printer size={18} />}
-                {isPrinting ? 'Printing...' : 'Thermal'}
-              </button>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)} className="w-full bg-emerald-50 text-emerald-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 border border-emerald-100 text-[10px] uppercase tracking-widest">
+                  <MessageCircle size={18} /> WhatsApp
+                </button>
+                <button onClick={() => setShowSuccessModal(false)} className="w-full py-4 text-slate-400 font-bold uppercase text-[10px] tracking-widest bg-slate-50 dark:bg-emerald-800 rounded-2xl">Next Sale</button>
+              </div>
             </div>
-            <button onClick={() => setShowSuccessModal(false)} className="w-full mt-4 py-3 text-slate-400 font-bold uppercase text-[10px] tracking-widest">Next Sale</button>
           </div>
         </div>
       )}

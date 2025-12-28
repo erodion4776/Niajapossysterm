@@ -10,8 +10,8 @@ import {
   Printer
 } from 'lucide-react';
 import { Role } from '../types.ts';
-import { connectToPrinter, isPrinterConnected, sendToPrinter } from '../utils/bluetoothManager.ts';
-import { generateReceiptBytes } from '../utils/receiptGenerator.ts';
+import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
+import { formatReceipt } from '../utils/receiptFormatter.ts';
 
 interface SalesProps {
   role: Role;
@@ -78,14 +78,15 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
     }
   };
 
-  const handlePrint = async (sale: Sale) => {
+  const handlePrint = async (sale: Sale, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setIsPrinting(true);
     try {
-      if (!isPrinterConnected()) {
-        await connectToPrinter();
+      if (!isPrinterReady()) {
+        await connectBluetoothPrinter();
       }
-      const bytes = generateReceiptBytes(sale);
-      await sendToPrinter(bytes);
+      const bytes = formatReceipt(sale);
+      await sendRawToPrinter(bytes);
     } catch (e: any) {
       alert("Printing failed: " + e.message);
     } finally {
@@ -127,7 +128,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
         </div>
       </header>
 
-      {/* Staff Export Section */}
       {!isAdmin && (
         <section className="bg-emerald-600 p-6 rounded-[32px] shadow-xl text-white space-y-4">
           <div className="flex items-center gap-3">
@@ -153,7 +153,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
         </section>
       )}
 
-      {/* Dynamic Summary Card */}
       <section className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm relative overflow-hidden transition-colors">
         <div className="relative z-10 space-y-1">
           <p className="text-slate-400 dark:text-emerald-500/40 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
@@ -169,7 +168,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
         <TrendingUp className="absolute -right-4 -bottom-4 opacity-5 text-emerald-500" size={140} />
       </section>
 
-      {/* Filter Bar */}
       <div className="space-y-3">
         <div className="relative">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
@@ -203,7 +201,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
         </div>
       </div>
 
-      {/* List Feed */}
       <div className="space-y-4">
         <div className="flex items-center gap-2 px-2">
            <History className="text-gray-300 dark:text-emerald-800" size={16} />
@@ -220,19 +217,28 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
               <div className="p-4 rounded-2xl bg-gray-50 dark:bg-emerald-950/40 text-gray-400 dark:text-emerald-800 group-active:bg-emerald-50 dark:group-active:bg-emerald-800 group-active:text-emerald-500 transition-colors">
                 <Receipt size={24}/>
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start">
                   <h3 className="font-black text-slate-800 dark:text-emerald-50 text-lg">#{String(sale.id).slice(-4)}</h3>
                   <span className="text-emerald-600 dark:text-emerald-400 font-black text-lg tracking-tighter">{formatNaira(sale.total)}</span>
                 </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-[10px] font-bold text-gray-400 dark:text-emerald-500/40 uppercase tracking-widest">
-                    {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                  <span className="w-1 h-1 bg-gray-200 dark:bg-emerald-800 rounded-full"></span>
-                  <p className="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-widest">
-                    {sale.items.length} {sale.items.length === 1 ? 'item' : 'items'}
-                  </p>
+                <div className="flex items-center justify-between mt-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-bold text-gray-400 dark:text-emerald-500/40 uppercase tracking-widest">
+                      {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    <span className="w-1 h-1 bg-gray-200 dark:bg-emerald-800 rounded-full"></span>
+                    <p className="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-widest">
+                      {sale.items.length} {sale.items.length === 1 ? 'item' : 'items'}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={(e) => handlePrint(sale, e)}
+                    className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg active:scale-90 transition-all border border-blue-100 dark:border-blue-800/40"
+                    title="Quick Print"
+                  >
+                    <Printer size={16} />
+                  </button>
                 </div>
               </div>
             </button>
@@ -247,7 +253,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
         )}
       </div>
 
-      {/* Sale Detail Modal */}
       {selectedSale && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[90vh] overflow-y-auto border dark:border-emerald-800">
@@ -290,7 +295,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="grid grid-cols-1 gap-3">
                 <button 
                   onClick={() => handlePrint(selectedSale)}
@@ -298,7 +302,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
                   className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-3 active:scale-95 shadow-xl text-[10px] uppercase tracking-widest disabled:opacity-50"
                 >
                   {isPrinting ? <Loader2 size={20} className="animate-spin" /> : <Printer size={20} />}
-                  {isPrinting ? 'Printing...' : 'Print Physical Receipt'}
+                  {isPrinting ? 'Printing...' : '🖨️ Re-Print Receipt'}
                 </button>
                 <button 
                   onClick={() => shareReceiptToWhatsApp(selectedSale)}

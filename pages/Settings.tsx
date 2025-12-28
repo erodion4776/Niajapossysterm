@@ -7,12 +7,12 @@ import pako from 'pako';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
-  Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert
+  Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert, Wifi
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
 import { useTheme } from '../ThemeContext.tsx';
-import { connectPrinter, disconnectPrinter } from '../utils/printer.ts';
+import { connectBluetoothPrinter, disconnectPrinter, isPrinterReady } from '../utils/bluetoothPrinter.ts';
 
 interface SettingsProps {
   role: Role;
@@ -32,8 +32,10 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
   const [isImporting, setIsImporting] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  
   const [isConnectingPrinter, setIsConnectingPrinter] = useState(false);
-  const [printerName, setPrinterName] = useState(() => localStorage.getItem('connected_printer_name'));
+  const [printerStatus, setPrinterStatus] = useState(() => isPrinterReady() ? 'Connected' : 'Disconnected');
+  const [printerName, setPrinterName] = useState(() => localStorage.getItem('last_printer_name'));
   
   const [showBackupSuccess, setShowBackupSuccess] = useState(false);
   const [backupFileName, setBackupFileName] = useState('');
@@ -87,21 +89,24 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
     }
   };
 
-  const handleConnectPrinter = async () => {
+  const handlePairPrinter = async () => {
     setIsConnectingPrinter(true);
     try {
-      const name = await connectPrinter();
+      const name = await connectBluetoothPrinter();
       setPrinterName(name);
+      setPrinterStatus('Connected');
     } catch (err: any) {
-      alert("Connection failed: " + err.message);
+      alert("Pairing failed: " + err.message);
+      setPrinterStatus('Disconnected');
     } finally {
       setIsConnectingPrinter(false);
     }
   };
 
-  const handleDisconnectPrinter = () => {
+  const handleUnpairPrinter = () => {
     disconnectPrinter();
     setPrinterName(null);
+    setPrinterStatus('Disconnected');
   };
 
   const handleAddUser = async (e: React.FormEvent) => {
@@ -228,33 +233,52 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </button>
       </header>
 
-      {/* Printer Section */}
-      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <div className="bg-blue-50 dark:bg-blue-900/30 p-2.5 rounded-2xl text-blue-600 dark:text-blue-400">
-                <Printer size={24} />
-             </div>
-             <div>
-                <h2 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Receipt Printer</h2>
-                <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">
-                  {printerName ? `Connected: ${printerName}` : 'Bluetooth Thermal (58mm)'}
-                </p>
-             </div>
+      {/* Printer Setup Card */}
+      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-50 dark:bg-blue-900/30 p-2.5 rounded-2xl text-blue-600 dark:text-blue-400">
+            <Printer size={24} />
           </div>
-          {printerName ? (
-            <button onClick={handleDisconnectPrinter} className="bg-red-50 dark:bg-red-950/20 text-red-500 p-2 rounded-xl border border-red-100 dark:border-red-900/40">
-              <X size={20} />
-            </button>
-          ) : (
-            <button 
-              onClick={handleConnectPrinter} 
-              disabled={isConnectingPrinter}
-              className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2"
-            >
-              {isConnectingPrinter ? <Loader2 size={14} className="animate-spin" /> : <Bluetooth size={14} />}
-              {isConnectingPrinter ? 'Searching' : 'Connect'}
-            </button>
+          <div>
+            <h2 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Printer Setup</h2>
+            <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Bluetooth Thermal (58mm)</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 dark:bg-emerald-950/40 p-5 rounded-3xl border border-slate-100 dark:border-emerald-800/20 space-y-4">
+           <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</span>
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${printerStatus === 'Connected' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                <span className={`text-[10px] font-black uppercase ${printerStatus === 'Connected' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  {printerStatus}
+                </span>
+              </div>
+           </div>
+           {printerName && (
+             <div className="flex justify-between items-center border-t border-slate-100 dark:border-emerald-800/40 pt-3">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Paired Printer</span>
+                <span className="text-[10px] font-black text-slate-800 dark:text-emerald-50 truncate max-w-[150px]">{printerName}</span>
+             </div>
+           )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3">
+          <button 
+            onClick={handlePairPrinter} 
+            disabled={isConnectingPrinter}
+            className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest shadow-lg shadow-blue-200 dark:shadow-none active:scale-95 transition-all disabled:opacity-50"
+          >
+            {isConnectingPrinter ? <Loader2 size={16} className="animate-spin" /> : <Bluetooth size={16} />}
+            {isConnectingPrinter ? 'Searching...' : 'Find & Pair Printer'}
+          </button>
+          {printerStatus === 'Connected' && (
+             <button 
+               onClick={handleUnpairPrinter}
+               className="w-full py-3 text-red-400 font-bold uppercase text-[9px] tracking-widest"
+             >
+               Unpair Device
+             </button>
           )}
         </div>
       </section>
@@ -281,7 +305,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
 
       {isAdmin && (
         <>
-          {/* DAILY RECONCILIATION SECTION */}
           <section className="bg-emerald-950 p-6 rounded-[32px] shadow-2xl text-white space-y-6 relative overflow-hidden border border-emerald-800">
             <div className="relative z-10 space-y-4">
               <div className="flex items-center gap-3">
@@ -316,7 +339,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
             <Users size={120} className="absolute -right-8 -bottom-8 opacity-5 text-emerald-500" />
           </section>
 
-          {/* Clone to Staff */}
           <section className="bg-gray-900 p-6 rounded-[32px] shadow-xl text-white space-y-4">
             <div className="flex items-center gap-3">
               <div className="bg-emerald-500/20 p-2.5 rounded-2xl text-emerald-400 border border-emerald-500/20">
@@ -338,7 +360,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </>
       )}
 
-      {/* Restore/Backup Section */}
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-3xl border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-5">
         <h2 className="text-xs font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest flex items-center gap-2">
           <Database size={14} /> Full Data Control
@@ -370,7 +391,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </div>
       </section>
 
-      {/* Staff List & Shop Info */}
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-3xl border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-5">
         <div className="flex justify-between items-center">
           <h2 className="text-xs font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest flex items-center gap-2">
@@ -428,7 +448,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </div>
       </section>
 
-      {/* Add Staff Modal */}
       {showAddUser && (
         <div className="fixed inset-0 z-[500] bg-black/60 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800">
@@ -454,7 +473,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         </div>
       )}
 
-      {/* Backup Success Modal */}
       {showBackupSuccess && (
         <BackupSuccessModal 
           isOpen={showBackupSuccess} 
@@ -463,7 +481,6 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
         />
       )}
 
-      {/* Import Stats Modal */}
       {importStats && (
         <div className="fixed inset-0 z-[600] bg-black/60 backdrop-blur-md flex items-center justify-center p-6 animate-in zoom-in duration-300">
           <div className="bg-white dark:bg-emerald-900 rounded-[40px] p-8 w-full max-w-xs text-center space-y-6 shadow-2xl border border-emerald-800">
