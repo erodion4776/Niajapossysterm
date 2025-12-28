@@ -1,7 +1,7 @@
 import { Sale } from '../db.ts';
 
 /**
- * ESC/POS Command Constants
+ * ESC/POS Command Constants for 58mm Thermal Printers
  */
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -25,14 +25,14 @@ export function formatReceipt(sale: Sale): Uint8Array {
   const shopName = localStorage.getItem('shop_name') || 'NAIJASHOP';
   const shopInfo = localStorage.getItem('shop_info') || '';
   const dateStr = new Date(sale.timestamp).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' });
-  const receiptNo = String(sale.id).padStart(5, '0');
+  const receiptNo = String(sale.id || '0').padStart(5, '0');
 
   const encoder = new TextEncoder();
   const bytes: number[] = [];
 
   const add = (data: number[] | string) => {
     if (typeof data === 'string') {
-      // Replace Naira with N for printer compatibility
+      // Replace Naira with N for hardware compatibility
       const safeText = data.replace(/₦/g, 'N');
       bytes.push(...Array.from(encoder.encode(safeText)));
     } else {
@@ -42,7 +42,7 @@ export function formatReceipt(sale: Sale): Uint8Array {
 
   const line = () => add('--------------------------------\n');
 
-  // 1. Header
+  // 1. Initialize & Header
   add(CMD.INIT);
   add(CMD.ALIGN_CENTER);
   add(CMD.BOLD_ON);
@@ -59,31 +59,37 @@ export function formatReceipt(sale: Sale): Uint8Array {
   add(`${dateStr}\n`);
   line();
 
-  // 2. Items Table (32 chars wide)
-  // ITEM (15) QTY (6) TOTAL (11)
+  // 2. Items Table (ITEM (16) QTY (6) TOTAL (10))
   add(CMD.ALIGN_LEFT);
-  add('ITEM           QTY      TOTAL   \n');
+  add('ITEM            QTY       TOTAL \n');
   line();
 
   sale.items.forEach(item => {
-    const name = item.name.substring(0, 14).padEnd(15, ' ');
+    const name = item.name.substring(0, 15).padEnd(16, ' ');
     const qty = `x${item.quantity}`.padEnd(6, ' ');
-    const price = (item.price * item.quantity).toLocaleString().padStart(11, ' ');
+    const price = (item.price * item.quantity).toLocaleString().padStart(10, ' ');
     add(`${name}${qty}${price}\n`);
   });
 
   line();
 
-  // 3. Totals
+  // 3. Totals and Wallet Info
   add(CMD.ALIGN_RIGHT);
+  
   if (sale.walletUsed && sale.walletUsed > 0) {
-    add(`CREDIT USED: -N${sale.walletUsed.toLocaleString()}\n`);
+    add(`WALLET CREDIT: -N${sale.walletUsed.toLocaleString()}\n`);
   }
+  
   add(CMD.BOLD_ON);
   add(`TOTAL: N${sale.total.toLocaleString()}\n`);
   add(CMD.BOLD_OFF);
 
-  // 4. Footer
+  if (sale.walletSaved && sale.walletSaved > 0) {
+    add(CMD.ALIGN_CENTER);
+    add(`\nSAVED TO WALLET: N${sale.walletSaved.toLocaleString()}\n`);
+  }
+
+  // 4. Footer & Policy
   add(CMD.LINE_FEED);
   add(CMD.ALIGN_CENTER);
   add('THANK YOU FOR YOUR PATRONAGE\n');
@@ -92,11 +98,11 @@ export function formatReceipt(sale: Sale): Uint8Array {
   add(CMD.BOLD_OFF);
   add('Powered by NaijaShopApp\n');
 
-  // 5. Tear space
+  // 5. Tear Space & Partial Cut
   add(CMD.LINE_FEED);
   add(CMD.LINE_FEED);
   add(CMD.LINE_FEED);
-  add([GS, 0x56, 0x01]); // Partial cut command
+  add([GS, 0x56, 0x01, 0x31]); // Feed and cut command
 
   return new Uint8Array(bytes);
 }

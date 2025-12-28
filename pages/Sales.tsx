@@ -234,10 +234,10 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
                   </div>
                   <button 
                     onClick={(e) => handlePrint(sale, e)}
-                    className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg active:scale-90 transition-all border border-blue-100 dark:border-blue-800/40"
+                    className="p-2.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl active:scale-90 transition-all border border-blue-100 dark:border-blue-800/40"
                     title="Quick Print"
                   >
-                    <Printer size={16} />
+                    <Printer size={18} />
                   </button>
                 </div>
               </div>

@@ -3,12 +3,15 @@
  * Supports 58mm (32 chars) ESC/POS printers
  */
 
-// Fix: Using any for Web Bluetooth types to avoid "Cannot find name" errors in environments without Web Bluetooth type definitions.
 let printerCharacteristic: any | null = null;
 let printerDevice: any | null = null;
 
-const PRINTER_SERVICE_UUID = '00001101-0000-1000-8000-00805f9b34fb'; // Serial Port Profile
-const FALLBACK_SERVICE_UUID = '0000ff00-0000-1000-8000-00805f9b34fb'; // Common BLE Printer Service
+// Common Bluetooth Printer Service UUIDs
+const PRINTER_SERVICES = [
+  '00001101-0000-1000-8000-00805f9b34fb', // Serial Port Profile (Standard)
+  '0000ff00-0000-1000-8000-00805f9b34fb', // Common BLE Printer
+  '0000ff01-0000-1000-8000-00805f9b34fb'  // Alternative BLE
+];
 
 export const isPrinterReady = () => !!printerCharacteristic;
 
@@ -18,38 +21,51 @@ export const isPrinterReady = () => !!printerCharacteristic;
 export async function connectBluetoothPrinter(): Promise<string> {
   const nav = navigator as any;
   if (!nav.bluetooth) {
-    throw new Error('Bluetooth not supported on this device/browser.');
+    throw new Error('Bluetooth not supported on this browser. Use Chrome or Edge.');
   }
 
   try {
     printerDevice = await nav.bluetooth.requestDevice({
       filters: [
-        { services: [PRINTER_SERVICE_UUID] },
         { namePrefix: 'MPT' },
         { namePrefix: 'TP' },
-        { namePrefix: 'ZJ' }
+        { namePrefix: 'ZJ' },
+        { namePrefix: 'BT' },
+        { namePrefix: 'Inner' }
       ],
-      optionalServices: [PRINTER_SERVICE_UUID, FALLBACK_SERVICE_UUID]
+      optionalServices: PRINTER_SERVICES
     });
 
     const server = await printerDevice?.gatt?.connect();
     if (!server) throw new Error('GATT Server connection failed');
 
-    // Try primary service then fallback
-    let service;
-    try {
-      service = await server.getPrimaryService(PRINTER_SERVICE_UUID);
-    } catch (e) {
-      service = await server.getPrimaryService(FALLBACK_SERVICE_UUID);
+    // Attempt to find a writable characteristic in standard services
+    let writableChar = null;
+    
+    for (const serviceUuid of PRINTER_SERVICES) {
+      try {
+        const service = await server.getPrimaryService(serviceUuid);
+        const characteristics = await service.getCharacteristics();
+        writableChar = characteristics.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
+        if (writableChar) break;
+      } catch (e) {
+        continue;
+      }
     }
 
-    const characteristics = await service.getCharacteristics();
-    // Find first writable characteristic
-    // Fix: cast characteristic item to any in the find predicate.
-    printerCharacteristic = characteristics.find((c: any) => c.properties.write || c.properties.writeWithoutResponse) || null;
+    if (!writableChar) {
+      // Fallback: try all available services
+      const allServices = await server.getPrimaryServices();
+      for (const service of allServices) {
+        const chars = await service.getCharacteristics();
+        writableChar = chars.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
+        if (writableChar) break;
+      }
+    }
 
-    if (!printerCharacteristic) throw new Error('No writable characteristic found');
+    if (!writableChar) throw new Error('No writable characteristic found on this printer.');
 
+    printerCharacteristic = writableChar;
     localStorage.setItem('last_printer_name', printerDevice?.name || 'Thermal Printer');
     return printerDevice?.name || 'Connected Printer';
   } catch (error) {
@@ -68,8 +84,8 @@ export async function sendRawToPrinter(data: Uint8Array): Promise<void> {
   for (let i = 0; i < data.length; i += CHUNK_SIZE) {
     const chunk = data.slice(i, i + CHUNK_SIZE);
     await printerCharacteristic.writeValue(chunk);
-    // 15ms delay to prevent buffer overflow on low-end printers
-    await new Promise(resolve => setTimeout(resolve, 15));
+    // 20ms delay is essential for low-cost thermal printer buffers
+    await new Promise(resolve => setTimeout(resolve, 20));
   }
 }
 

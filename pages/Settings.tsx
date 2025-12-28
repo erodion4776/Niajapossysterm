@@ -257,7 +257,7 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
            </div>
            {printerName && (
              <div className="flex justify-between items-center border-t border-slate-100 dark:border-emerald-800/40 pt-3">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Paired Printer</span>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Paired Device</span>
                 <span className="text-[10px] font-black text-slate-800 dark:text-emerald-50 truncate max-w-[150px]">{printerName}</span>
              </div>
            )}
@@ -275,9 +275,9 @@ export const Settings: React.FC<SettingsProps> = ({ role, setRole, setPage }) =>
           {printerStatus === 'Connected' && (
              <button 
                onClick={handleUnpairPrinter}
-               className="w-full py-3 text-red-400 font-bold uppercase text-[9px] tracking-widest"
+               className="w-full py-2 text-red-400 font-bold uppercase text-[9px] tracking-widest hover:text-red-500"
              >
-               Unpair Device
+               Unpair Printer
              </button>
           )}
         </div>
