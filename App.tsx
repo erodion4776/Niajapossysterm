@@ -11,6 +11,7 @@ import { Expenses } from './pages/Expenses.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { FAQ } from './pages/FAQ.tsx';
 import { Customers } from './pages/Customers.tsx';
+import { StockLogs } from './pages/StockLogs.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
@@ -162,15 +163,18 @@ const AppContent: React.FC = () => {
         />;
       case Page.INVENTORY: 
         return <Inventory 
+          user={currentUser}
           role={isStaffDevice ? 'Staff' : currentUser.role} 
           initialFilter={inventoryFilter} 
           clearInitialFilter={() => navigateTo(Page.INVENTORY, 'all')}
+          setPage={(p) => navigateTo(p)}
         />;
       case Page.POS: return <POS user={currentUser} />;
       case Page.SALES: return <Sales role={isStaffDevice ? 'Staff' : currentUser.role} />;
       case Page.DEBTS: return <Debts role={isStaffDevice ? 'Staff' : currentUser.role} />;
+      case Page.STOCK_LOGS: return <StockLogs setPage={(p) => navigateTo(p)} />;
       case Page.EXPENSES: return <Expenses role={isStaffDevice ? 'Staff' : currentUser.role} setPage={(p) => navigateTo(p)} />;
-      case Page.SETTINGS: return <Settings role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={(p) => navigateTo(p)} />;
+      case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={(p) => navigateTo(p)} />;
       case Page.FAQ: return <FAQ setPage={(p) => navigateTo(p)} />;
       case Page.CUSTOMERS: return <Customers setPage={(p) => navigateTo(p)} role={isStaffDevice ? 'Staff' : currentUser.role} />;
       default: return <Dashboard setPage={(p) => navigateTo(p)} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
@@ -192,7 +196,7 @@ const AppContent: React.FC = () => {
           <ShoppingBag size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">POS</span>
         </button>
 
-        <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+        <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY || currentPage === Page.STOCK_LOGS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Package size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Stock</span>
         </button>
 

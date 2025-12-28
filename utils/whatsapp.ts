@@ -256,14 +256,14 @@ export const backupToWhatsApp = async (data: any, excludePhotos = false): Promis
   }
 };
 
-export const reconcileStaffSales = async (staffData: any) => {
+export const reconcileStaffSales = async (staffData: any, adminName: string = 'Admin') => {
   const staffSales = staffData.sales || [];
   if (staffSales.length === 0) return { success: true, merged: 0, skipped: 0 };
 
   let mergedCount = 0;
   let skippedCount = 0;
 
-  await db.transaction('rw', [db.inventory, db.sales, db.customers], async () => {
+  await db.transaction('rw', [db.inventory, db.sales, db.customers, db.stock_logs], async () => {
     for (const sale of staffSales) {
       const existing = await db.sales.where('uuid').equals(sale.uuid).first();
       if (existing) {
@@ -278,6 +278,18 @@ export const reconcileStaffSales = async (staffData: any) => {
         if (invItem) {
           const newStock = Math.max(0, (invItem.stock || 0) - item.quantity);
           await db.inventory.update(invItem.id!, { stock: newStock });
+          
+          // Log the deduction from reconciliation
+          await db.stock_logs.add({
+            item_id: invItem.id!,
+            itemName: invItem.name,
+            quantityChanged: -item.quantity,
+            previousStock: invItem.stock,
+            newStock: newStock,
+            type: 'Reconciliation Deduction',
+            date: Date.now(),
+            staff_name: adminName
+          });
         }
       }
 

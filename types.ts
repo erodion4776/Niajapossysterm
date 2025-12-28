@@ -9,7 +9,8 @@ export enum Page {
   FAQ = 'FAQ',
   DEBTS = 'DEBTS',
   EXPENSES = 'EXPENSES',
-  CUSTOMERS = 'CUSTOMERS'
+  CUSTOMERS = 'CUSTOMERS',
+  STOCK_LOGS = 'STOCK_LOGS'
 }
 
 export type Role = 'Admin' | 'Staff';
