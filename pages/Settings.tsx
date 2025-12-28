@@ -1,13 +1,21 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, clearAllData, User as DBUser } from '../db.ts';
-import { backupToWhatsApp, generateShopKey, reconcileStaffSales, generateMasterStockKey, generateStaffInviteKey } from '../utils/whatsapp.ts';
+import { db, clearAllData, User as DBUser, Category, InventoryItem } from '../db.ts';
+import { 
+  backupToWhatsApp, 
+  generateShopKey, 
+  reconcileStaffSales, 
+  generateMasterStockKey, 
+  generateStaffInviteKey, 
+  decodeShopKey 
+} from '../utils/whatsapp.ts';
 import pako from 'pako';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
-  Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert, Wifi
+  Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert, Wifi, TrendingUp, AlertTriangle, 
+  ChevronRight, MapPin, Phone, Receipt, Info, LogOut
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -24,30 +32,41 @@ interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage }) => {
   const isAdmin = role === 'Admin';
   const { theme, toggleTheme } = useTheme();
-  const [shopName, setShopName] = useState(() => localStorage.getItem('shop_name') || '');
-  const [shopInfo, setShopInfo] = useState(() => localStorage.getItem('shop_info') || '');
+  
+  // Shop Branding State
+  const [shopName, setShopName] = useState(() => localStorage.getItem('shop_name') || 'NaijaShop');
+  const [shopInfo, setShopInfo] = useState(() => localStorage.getItem('shop_info') || 'Address, City, Phone');
+  const [receiptFooter, setReceiptFooter] = useState(() => localStorage.getItem('receipt_footer') || 'Thank you for your patronage!');
+
+  // UI States
   const [showAddUser, setShowAddUser] = useState(false);
-  const [newUser, setNewUser] = useState({ name: '', pin: '', role: 'Staff' as Role });
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSyncingStock, setIsSyncingStock] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
+  const [isBackingUp, setIsBackingUp] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
-  const [isBackingUp, setIsBackingUp] = useState(false);
-  
   const [isConnectingPrinter, setIsConnectingPrinter] = useState(false);
-  const [printerStatus, setPrinterStatus] = useState(() => isPrinterReady() ? 'Connected' : 'Disconnected');
-  const [printerName, setPrinterName] = useState(() => localStorage.getItem('last_printer_name'));
   
+  // Modal Data
+  const [newUser, setNewUser] = useState({ name: '', pin: '', role: 'Staff' as Role });
+  const [bulkData, setBulkData] = useState({
+    targetCategory: 'All',
+    updateType: 'Percentage' as 'Percentage' | 'Fixed',
+    targetField: 'Selling Price' as 'Selling Price' | 'Cost Price',
+    value: 0
+  });
+
+  // Feedback States
   const [showBackupSuccess, setShowBackupSuccess] = useState(false);
   const [backupFileName, setBackupFileName] = useState('');
-  
-  const [importStats, setImportStats] = useState<{sales: number, inventory: number, debts: number, expenses: number} | null>(null);
   const [reconcileResult, setReconcileResult] = useState<{merged: number, skipped: number} | null>(null);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reconcileInputRef = useRef<HTMLInputElement>(null);
 
   const users = useLiveQuery(() => db.users.toArray());
+  const categories = useLiveQuery(() => db.categories.toArray());
+  const printerName = localStorage.getItem('last_printer_name');
 
   useEffect(() => {
     localStorage.setItem('shop_name', shopName);
@@ -57,28 +76,26 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     localStorage.setItem('shop_info', shopInfo);
   }, [shopInfo]);
 
+  useEffect(() => {
+    localStorage.setItem('receipt_footer', receiptFooter);
+  }, [receiptFooter]);
+
   const handleBackup = async () => {
     setIsBackingUp(true);
     try {
-      const inventory = await db.inventory.toArray();
-      const sales = await db.sales.toArray();
-      const expenses = await db.expenses.toArray();
-      const debts = await db.debts.toArray();
-      const usersList = await db.users.toArray();
-      const settings = await db.settings.toArray();
-      
-      const result = await backupToWhatsApp({ 
-        inventory, 
-        sales, 
-        expenses, 
-        debts,
-        users: usersList,
-        settings,
+      const data = {
+        inventory: await db.inventory.toArray(),
+        sales: await db.sales.toArray(),
+        expenses: await db.expenses.toArray(),
+        debts: await db.debts.toArray(),
+        users: await db.users.toArray(),
+        categories: await db.categories.toArray(),
+        settings: await db.settings.toArray(),
         shopName,
         shopInfo,
         timestamp: Date.now() 
-      });
-
+      };
+      const result = await backupToWhatsApp(data);
       if (result.success && result.method === 'DOWNLOAD') {
         setBackupFileName(result.fileName || 'NaijaShop_Backup.json.gz');
         setShowBackupSuccess(true);
@@ -90,15 +107,58 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     }
   };
 
+  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        setIsImporting(true);
+        let jsonStr = '';
+        const result = event.target?.result;
+
+        if (file.name.endsWith('.gz')) {
+          const decompressed = pako.ungzip(new Uint8Array(result as ArrayBuffer));
+          jsonStr = new TextDecoder().decode(decompressed);
+        } else {
+          jsonStr = typeof result === 'string' ? result : new TextDecoder().decode(result as ArrayBuffer);
+        }
+
+        const data = JSON.parse(jsonStr);
+        if (confirm("Replace all local data with this backup? Current records will be deleted!")) {
+          await clearAllData();
+          await db.transaction('rw', [db.inventory, db.sales, db.expenses, db.debts, db.users, db.categories, db.settings], async () => {
+            if (data.inventory) await db.inventory.bulkAdd(data.inventory);
+            if (data.sales) await db.sales.bulkAdd(data.sales);
+            if (data.expenses) await db.expenses.bulkAdd(data.expenses);
+            if (data.debts) await db.debts.bulkAdd(data.debts);
+            if (data.users) await db.users.bulkAdd(data.users);
+            if (data.categories) await db.categories.bulkAdd(data.categories);
+            await db.settings.put({ key: 'is_activated', value: true });
+          });
+          if (data.shopName) localStorage.setItem('shop_name', data.shopName);
+          if (data.shopInfo) localStorage.setItem('shop_info', data.shopInfo);
+          window.location.reload();
+        }
+      } catch (err) {
+        alert('Restore failed: ' + (err as Error).message);
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+
+    if (file.name.endsWith('.gz')) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
+  };
+
   const handlePairPrinter = async () => {
     setIsConnectingPrinter(true);
     try {
-      const name = await connectBluetoothPrinter();
-      setPrinterName(name);
-      setPrinterStatus('Connected');
+      await connectBluetoothPrinter();
     } catch (err: any) {
       alert("Pairing failed: " + err.message);
-      setPrinterStatus('Disconnected');
     } finally {
       setIsConnectingPrinter(false);
     }
@@ -106,53 +166,435 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
   const handleUnpairPrinter = () => {
     disconnectPrinter();
-    setPrinterName(null);
-    setPrinterStatus('Disconnected');
+    window.location.reload();
   };
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUser.name || !newUser.pin) return;
-    await db.users.add({
-      ...newUser,
-      id: `user-${Date.now()}`
-    });
-    setNewUser({ name: '', pin: '', role: 'Staff' as Role });
+    if (!newUser.name || newUser.pin.length !== 4) return;
+    await db.users.add({ ...newUser });
+    setNewUser({ name: '', pin: '', role: 'Staff' });
     setShowAddUser(false);
+  };
+
+  const handleDeleteUser = async (id: string | number) => {
+    if (confirm("Delete this user account?")) {
+      await db.users.delete(id);
+    }
+  };
+
+  const handleApplyInflationProtection = async () => {
+    const inventory = await db.inventory.toArray();
+    const itemsToUpdate = bulkData.targetCategory === 'All' 
+      ? inventory 
+      : inventory.filter(i => i.category === bulkData.targetCategory);
+
+    if (itemsToUpdate.length === 0) return alert("No items found.");
+    
+    if (confirm(`Update prices for ${itemsToUpdate.length} items? This cannot be undone.`)) {
+      const updated = itemsToUpdate.map(item => {
+        let current = bulkData.targetField === 'Selling Price' ? item.sellingPrice : item.costPrice;
+        let newValue = bulkData.updateType === 'Percentage' ? current * (1 + bulkData.value / 100) : current + bulkData.value;
+        newValue = Math.ceil(newValue / 50) * 50; // Smart Rounding for Nigerian context
+        return { 
+          ...item, 
+          [bulkData.targetField === 'Selling Price' ? 'sellingPrice' : 'costPrice']: newValue 
+        };
+      });
+      await db.inventory.bulkPut(updated);
+      alert("Prices updated and rounded to nearest ₦50!");
+      setShowBulkModal(false);
+    }
   };
 
   const handleReconcileMerge = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
         setIsMerging(true);
-        let jsonStr = '';
         const result = event.target?.result;
-
-        if (file.name.endsWith('.gz') || (result instanceof ArrayBuffer && new Uint8Array(result as ArrayBuffer)[0] === 0x1f)) {
-          const decompressed = pako.ungzip(new Uint8Array(result as ArrayBuffer));
-          jsonStr = new TextDecoder().decode(decompressed);
-        } else if (typeof result === 'string') {
-          jsonStr = result;
-        } else {
-          jsonStr = new TextDecoder().decode(result as ArrayBuffer);
-        }
-
-        const staffData = JSON.parse(jsonStr);
+        const decompressed = pako.ungzip(new Uint8Array(result as ArrayBuffer));
+        const staffData = JSON.parse(new TextDecoder().decode(decompressed));
         const report = await reconcileStaffSales(staffData, user.name || 'Admin');
         setReconcileResult({ merged: report.merged, skipped: report.skipped });
       } catch (err) {
-        alert('Reconciliation failed: ' + (err as Error).message);
+        alert('Merge failed. Ensure file is a valid Staff Report.');
       } finally {
         setIsMerging(false);
         if (reconcileInputRef.current) reconcileInputRef.current.value = '';
       }
     };
-
-    if (file.name.endsWith('.gz')) reader.readAsArrayBuffer(file);
-    else reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
-  // ... Rest of component ...
+
+  const faqItems = [
+    { id: 'staff', title: 'How to Setup Staff', content: '1. Add a Staff member in Settings. 2. Tap "Invite" (Share Icon) to get a code. 3. Send that code to your staff via WhatsApp. 4. They open the app on their phone, tap "Import Code / Sync", and paste the code.' },
+    { id: 'offline', title: 'Daily Offline Use', content: 'Record all sales offline. At the end of the day, have your staff click "Send Report" in Sales History to send you a sync file via WhatsApp. Use "Merge Staff" here to sync their sales.' },
+    { id: 'backup', title: 'Data Safety', content: 'Backup your shop daily. The backup file is saved to your phone\'s Downloads. We recommend emailing it to yourself or saving to Google Drive for 100% safety.' },
+    { id: 'printer', title: 'Connecting Thermal Printer', content: 'Make sure your Bluetooth printer is on. Tap "Pair Printer". Select your printer from the list (usually name starts with MPT, TP, or BT). Once connected, the app will print receipts automatically after sales.' }
+  ];
+
+  return (
+    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
+      <BackupSuccessModal isOpen={showBackupSuccess} onClose={() => setShowBackupSuccess(false)} fileName={backupFileName} />
+
+      <header className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Admin Control</h1>
+          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Master Settings</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={toggleTheme} className="p-3 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl shadow-sm text-emerald-600 active:scale-90 transition-all">
+            {theme === 'light' ? <Moon size={24} /> : <Sun size={24} />}
+          </button>
+          <button onClick={() => window.location.reload()} className="p-3 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl shadow-sm text-red-400 active:scale-90 transition-all">
+            <LogOut size={24} />
+          </button>
+        </div>
+      </header>
+
+      {/* Shop Branding Section */}
+      <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600 dark:text-emerald-300">
+            <Store size={18} />
+          </div>
+          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Shop Branding</h2>
+        </div>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-300 uppercase ml-2 flex items-center gap-1"><Store size={10}/> Business Name</label>
+            <input 
+              className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+              value={shopName} 
+              onChange={e => setShopName(e.target.value)} 
+              placeholder="e.g. Al-Barakah Stores"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-300 uppercase ml-2 flex items-center gap-1"><MapPin size={10}/> Address & Phone</label>
+            <input 
+              className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+              value={shopInfo} 
+              onChange={e => setShopInfo(e.target.value)} 
+              placeholder="e.g. 12 Market St, Lagos. 08012345678"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-300 uppercase ml-2 flex items-center gap-1"><Receipt size={10}/> Receipt Footer</label>
+            <input 
+              className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+              value={receiptFooter} 
+              onChange={e => setReceiptFooter(e.target.value)} 
+              placeholder="e.g. No Refund After Payment"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Printer Configuration Section */}
+      <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 bg-blue-50 dark:bg-blue-900/40 rounded-xl text-blue-600 dark:text-blue-300">
+            <Printer size={18} />
+          </div>
+          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bluetooth Printer</h2>
+        </div>
+        <div className="p-5 bg-slate-50 dark:bg-emerald-950/40 rounded-[28px] border border-slate-100 dark:border-emerald-800 flex items-center justify-between">
+           <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-2xl ${isPrinterReady() ? 'bg-emerald-100 text-emerald-600 animate-pulse' : 'bg-slate-200 text-slate-400'}`}>
+                <Bluetooth size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-800 dark:text-emerald-50 truncate max-w-[120px]">{printerName || 'No Printer'}</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">{isPrinterReady() ? 'Connected & Ready' : '58mm Thermal Offline'}</p>
+              </div>
+           </div>
+           {isPrinterReady() ? (
+             <button onClick={handleUnpairPrinter} className="text-red-400 font-black text-[10px] uppercase tracking-widest bg-white dark:bg-emerald-900 px-4 py-2 rounded-xl border border-red-100 dark:border-red-900">Disconnect</button>
+           ) : (
+             <button onClick={handlePairPrinter} disabled={isConnectingPrinter} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 disabled:opacity-50">
+               {isConnectingPrinter ? 'Pairing...' : 'Pair Now'}
+             </button>
+           )}
+        </div>
+      </section>
+
+      {/* Staff Management Section */}
+      <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
+        <div className="flex justify-between items-center mb-2">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-50 dark:bg-purple-900/40 rounded-xl text-purple-600 dark:text-purple-300">
+              <Users size={18} />
+            </div>
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Staff Management</h2>
+          </div>
+          <button onClick={() => setShowAddUser(true)} className="p-2.5 bg-emerald-600 text-white rounded-xl active:scale-90 transition-all shadow-lg shadow-emerald-200"><Plus size={18}/></button>
+        </div>
+        <div className="space-y-3">
+          {users?.map(u => (
+            <div key={u.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-950/40 rounded-2xl border border-slate-100 dark:border-emerald-800/40">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${u.role === 'Admin' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                  {u.role === 'Admin' ? <ShieldCheck size={18} /> : <UserIcon size={18} />}
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-800 dark:text-emerald-50">{u.name}</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{u.role} • <span className="font-mono tracking-tighter">PIN: {u.pin}</span></p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {u.role === 'Staff' && (
+                  <button onClick={() => generateStaffInviteKey(u)} className="p-2 text-emerald-500 active:scale-90" title="Invite Code">
+                    <Share2 size={16}/>
+                  </button>
+                )}
+                {u.id !== user.id && (
+                  <button onClick={() => handleDeleteUser(u.id!)} className="p-2 text-red-300 active:scale-90">
+                    <Trash2 size={16}/>
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Inflation Protector / Bulk Update Tool */}
+      <button 
+        onClick={() => setShowBulkModal(true)}
+        className="w-full flex items-center gap-4 p-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 rounded-[32px] text-left active:scale-95 transition-all shadow-sm group"
+      >
+        <div className="bg-amber-500 text-white p-3.5 rounded-2xl group-hover:scale-110 transition-transform"><TrendingUp size={24}/></div>
+        <div className="flex-1">
+          <h3 className="font-black text-amber-900 dark:text-amber-50 leading-none">Inflation Protector</h3>
+          <p className="text-[10px] font-bold text-amber-600/60 uppercase mt-1 tracking-widest">Update Bulk Prices Fast</p>
+        </div>
+        <ChevronRight size={20} className="text-amber-300" />
+      </button>
+
+      {/* Data Management Section */}
+      <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600 dark:text-emerald-300">
+            <Database size={18} />
+          </div>
+          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data Safety</h2>
+        </div>
+        
+        <div className="grid grid-cols-1 gap-4">
+          <button 
+            onClick={handleBackup} 
+            disabled={isBackingUp} 
+            className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all"
+          >
+            {isBackingUp ? <Loader2 size={18} className="animate-spin"/> : <CloudUpload size={18}/>} 
+            {isBackingUp ? 'Saving Data...' : 'Full Shop Backup'}
+          </button>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex-1 bg-white dark:bg-emerald-800 border border-slate-100 dark:border-emerald-700 p-5 rounded-[24px] flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-all shadow-sm">
+              <input type="file" className="hidden" accept=".json,.gz" onChange={handleImportJSON} />
+              <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-emerald-900 flex items-center justify-center mb-2">
+                <Database className="text-slate-400" size={20}/>
+              </div>
+              <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Restore Backup</span>
+            </label>
+            <label className="flex-1 bg-white dark:bg-emerald-800 border border-slate-100 dark:border-emerald-700 p-5 rounded-[24px] flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-all shadow-sm">
+              <input type="file" className="hidden" accept=".gz" onChange={handleReconcileMerge} />
+              <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900 flex items-center justify-center mb-2">
+                <RefreshCw className={`text-emerald-400 ${isMerging ? 'animate-spin' : ''}`} size={20}/>
+              </div>
+              <span className="text-[8px] font-black uppercase tracking-widest text-emerald-400">Merge Staff Report</span>
+            </label>
+          </div>
+          
+          {reconcileResult && (
+             <div className="bg-emerald-50 dark:bg-emerald-900/40 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/40 flex items-center justify-between animate-in zoom-in duration-300">
+               <div className="flex items-center gap-2">
+                 <CheckCircle2 size={16} className="text-emerald-500" />
+                 <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-widest">
+                   Synced: {reconcileResult.merged} | Skipped: {reconcileResult.skipped}
+                 </span>
+               </div>
+               <button onClick={() => setReconcileResult(null)} className="text-[9px] font-bold text-emerald-400">Clear</button>
+             </div>
+          )}
+
+          <button 
+            onClick={async () => { 
+              if(confirm("FINAL WARNING: Delete ALL shop data? This cannot be recovered!")) { 
+                await clearAllData(); 
+                localStorage.clear();
+                window.location.reload(); 
+              } 
+            }} 
+            className="w-full py-4 text-red-300 font-bold text-[9px] uppercase tracking-[0.4em] hover:text-red-500 transition-colors"
+          >
+            Wipe Terminal Data
+          </button>
+        </div>
+      </section>
+
+      {/* Accordion FAQ Section */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2 px-2 mb-1">
+          <HelpCircle size={14} className="text-slate-300" />
+          <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Help & FAQ</h3>
+        </div>
+        {faqItems.map(item => (
+          <div key={item.id} className="bg-white dark:bg-emerald-900 border border-slate-50 dark:border-emerald-800 p-5 rounded-[28px] shadow-sm">
+            <button 
+              onClick={() => setActiveAccordion(activeAccordion === item.id ? null : item.id)} 
+              className="w-full flex items-center justify-between group"
+            >
+               <span className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight group-active:text-emerald-600 transition-colors">{item.title}</span>
+               <ChevronDown size={18} className={`text-slate-300 transition-transform duration-300 ${activeAccordion === item.id ? 'rotate-180' : ''}`} />
+            </button>
+            {activeAccordion === item.id && (
+              <div className="mt-4 animate-in slide-in-from-top duration-300">
+                <p className="text-xs font-medium text-slate-500 dark:text-emerald-400 leading-relaxed bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-slate-100 dark:border-emerald-800">
+                  {item.content}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </section>
+
+      <div className="py-6 text-center">
+        <p className="text-[9px] font-black text-slate-300 dark:text-emerald-900 uppercase tracking-[0.5em]">NaijaShop Offline POS • v2.5</p>
+      </div>
+
+      {/* Add User Modal */}
+      {showAddUser && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-8">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600"><Users size={20}/></div>
+                <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 italic">New Account</h2>
+              </div>
+              <button onClick={() => setShowAddUser(false)} className="p-2 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20}/></button>
+            </div>
+            <form onSubmit={handleAddUser} className="space-y-6">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Full Name</label>
+                <input 
+                  required 
+                  className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-4 focus:ring-emerald-500/10" 
+                  value={newUser.name} 
+                  onChange={e => setNewUser({...newUser, name: e.target.value})} 
+                  placeholder="e.g. Musa Ibrahim"
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">4-Digit PIN</label>
+                <input 
+                  required 
+                  type="password" 
+                  maxLength={4} 
+                  inputMode="numeric" 
+                  className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-black text-2xl tracking-[0.8em] text-center dark:text-emerald-50 outline-none focus:ring-4 focus:ring-emerald-500/10" 
+                  value={newUser.pin} 
+                  onChange={e => setNewUser({...newUser, pin: e.target.value.replace(/\D/g,'')})} 
+                />
+              </div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/40 flex items-center gap-3">
+                 <ShieldAlert size={18} className="text-emerald-500" />
+                 <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 uppercase leading-relaxed">Admin power is given only on your primary phone terminal.</p>
+              </div>
+              <button className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] shadow-xl shadow-emerald-100 dark:shadow-none uppercase tracking-widest text-xs active:scale-[0.98] transition-all">Create Account</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Inflation Protector (Bulk Update) Modal */}
+      {showBulkModal && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-md rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+             <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-3">
+                   <div className="p-2 bg-amber-50 dark:bg-amber-900 rounded-xl text-amber-600"><TrendingUp size={20}/></div>
+                   <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 italic">Inflation Protector</h2>
+                </div>
+                <button onClick={() => setShowBulkModal(false)} className="p-2 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20}/></button>
+             </div>
+             
+             <div className="space-y-6">
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-2xl flex items-start gap-3">
+                   <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={16} />
+                   <p className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase leading-relaxed">Increase prices for your whole shop in one second. All new prices round to the nearest ₦50.</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Category</label>
+                      <select 
+                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none"
+                        value={bulkData.targetCategory}
+                        onChange={e => setBulkData({...bulkData, targetCategory: e.target.value})}
+                      >
+                        <option value="All">All Items</option>
+                        {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                   </div>
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Target Price</label>
+                      <select 
+                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none"
+                        value={bulkData.targetField}
+                        onChange={e => setBulkData({...bulkData, targetField: e.target.value as any})}
+                      >
+                        <option value="Selling Price">Selling Price</option>
+                        <option value="Cost Price">Cost Price</option>
+                      </select>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Increase Type</label>
+                      <select 
+                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none"
+                        value={bulkData.updateType}
+                        onChange={e => setBulkData({...bulkData, updateType: e.target.value as any})}
+                      >
+                        <option value="Percentage">% Percentage</option>
+                        <option value="Fixed">+ Fixed Amount (₦)</option>
+                      </select>
+                   </div>
+                   <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Amount</label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          className="w-full p-4 pl-10 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-black text-amber-600 outline-none"
+                          value={bulkData.value || ''}
+                          onChange={e => setBulkData({...bulkData, value: Number(e.target.value)})}
+                          placeholder="0"
+                        />
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-amber-600/50">{bulkData.updateType === 'Percentage' ? '%' : '₦'}</span>
+                      </div>
+                   </div>
+                </div>
+
+                <button 
+                  onClick={handleApplyInflationProtection}
+                  className="w-full bg-amber-600 text-white font-black py-6 rounded-[28px] shadow-xl shadow-amber-100 dark:shadow-none uppercase tracking-widest text-xs active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                >
+                  <TrendingUp size={20} /> Update Entire Stock
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Settings;
