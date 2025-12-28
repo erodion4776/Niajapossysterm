@@ -18,7 +18,7 @@ import { RoleSelection } from './components/RoleSelection.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
 import { ThemeProvider } from './ThemeContext.tsx';
-import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, Receipt, ShieldAlert, Users, Wallet } from 'lucide-react';
+import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, Receipt, ShieldAlert, Users, Wallet, BookOpen } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
 const TRIAL_DURATION = 259200000; 
@@ -198,6 +198,10 @@ const AppContent: React.FC = () => {
 
         <button onClick={() => navigateTo(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Sales</span>
+        </button>
+
+        <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+          <BookOpen size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Debts</span>
         </button>
 
         <button onClick={() => navigateTo(Page.CUSTOMERS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.CUSTOMERS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>

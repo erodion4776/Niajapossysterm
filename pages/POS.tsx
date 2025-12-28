@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, SaleItem, Sale, InventoryItem, User as DBUser, Customer } from '../db.ts';
+import { db, SaleItem, Sale, InventoryItem, User as DBUser, Customer, Debt } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
 import { 
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, 
   MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, 
-  Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight 
+  Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight,
+  BookOpen, CreditCard
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
@@ -24,7 +25,8 @@ export const POS: React.FC<POSProps> = ({ user }) => {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
   
-  // Customer & Wallet States
+  // Checkout Configuration
+  const [paymentMode, setPaymentMode] = useState<'Immediate' | 'Debt'>('Immediate');
   const [customerPhone, setCustomerPhone] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
@@ -69,7 +71,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     setCart(newCart);
     if (newCart.length === 0) {
       setIsCartExpanded(false);
-      resetWalletState();
+      resetCheckoutState();
     }
   };
 
@@ -89,12 +91,13 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
   const changeDue = Math.max(0, Number(amountPaid || 0) - total);
 
-  const resetWalletState = () => {
+  const resetCheckoutState = () => {
     setCustomerPhone('');
     setSelectedCustomer(null);
     setWalletCreditApplied(0);
     setAmountPaid('');
     setSaveChangeToWallet(false);
+    setPaymentMode('Immediate');
   };
 
   const handleLookupCustomer = async () => {
@@ -122,14 +125,14 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     }
   };
 
-  const applyWalletCredit = () => {
-    if (!selectedCustomer || selectedCustomer.walletBalance <= 0) return;
-    const canApply = Math.min(selectedCustomer.walletBalance, cartSubtotal);
-    setWalletCreditApplied(canApply);
-  };
-
   const handleCheckout = async () => {
     if (cart.length === 0) return;
+    
+    // Strict requirement for Debt
+    if (paymentMode === 'Debt' && !selectedCustomer) {
+      alert("Please identify the customer (Phone Number) before recording a debt.");
+      return;
+    }
 
     const sale: Sale = {
       uuid: crypto.randomUUID(),
@@ -138,6 +141,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       totalCost,
       walletUsed: walletCreditApplied,
       walletSaved: saveChangeToWallet ? changeDue : 0,
+      paymentMethod: paymentMode === 'Debt' ? 'Debt' : 'Cash',
       timestamp: Date.now(),
       staff_id: String(user.id || user.role),
       staff_name: user.name || user.role,
@@ -145,7 +149,8 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     };
 
     try {
-      await db.transaction('rw', [db.inventory, db.sales, db.customers], async () => {
+      await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts], async () => {
+        // 1. Inventory Logic
         for (const item of cart) {
           if (!item.id) continue;
           const invItem = await db.inventory.get(item.id);
@@ -155,15 +160,32 @@ export const POS: React.FC<POSProps> = ({ user }) => {
           }
         }
 
+        // 2. Wallet/Debt Logic
         if (selectedCustomer) {
-          let newBalance = selectedCustomer.walletBalance - walletCreditApplied;
-          if (saveChangeToWallet) newBalance += changeDue;
-          await db.customers.update(selectedCustomer.id!, { 
-            walletBalance: newBalance,
-            lastTransaction: Date.now()
-          });
+          if (paymentMode === 'Debt') {
+            // Record to Debt Ledger
+            const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
+            await db.debts.add({
+              customerName: selectedCustomer.name,
+              customerPhone: selectedCustomer.phone,
+              totalAmount: total,
+              remainingBalance: total,
+              items: itemsSummary,
+              date: Date.now(),
+              status: 'Unpaid'
+            });
+          } else {
+            // Standard wallet updates
+            let newBalance = selectedCustomer.walletBalance - walletCreditApplied;
+            if (saveChangeToWallet) newBalance += changeDue;
+            await db.customers.update(selectedCustomer.id!, { 
+              walletBalance: newBalance,
+              lastTransaction: Date.now()
+            });
+          }
         }
 
+        // 3. Record Sale
         const saleId = await db.sales.add(sale);
         setLastSale({ ...sale, id: saleId as number });
       });
@@ -171,7 +193,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       setCart([]);
       setIsCartExpanded(false);
       setShowSuccessModal(true);
-      resetWalletState();
+      resetCheckoutState();
     } catch (error: any) {
       alert('Checkout failed: ' + error.message);
     }
@@ -323,19 +345,36 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                   )}
                 </div>
                 {!isCartExpanded && (
-                  <div className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">View Cart <ChevronUp size={14} /></div>
+                  <div className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">View Checkout <ChevronUp size={14} /></div>
                 )}
               </div>
             </button>
 
             <div className={`overflow-y-auto transition-all duration-300 flex flex-col ${isCartExpanded ? 'flex-1 opacity-100' : 'h-0 opacity-0 pointer-events-none'}`}>
+              
+              {/* Payment Mode Selector */}
+              <div className="bg-slate-100 dark:bg-emerald-950 p-1 rounded-2xl flex gap-1 mb-6">
+                <button 
+                  onClick={() => setPaymentMode('Immediate')}
+                  className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${paymentMode === 'Immediate' ? 'bg-white dark:bg-emerald-800 text-emerald-600 dark:text-emerald-50 shadow-sm' : 'text-slate-400'}`}
+                >
+                  <CreditCard size={14} /> Paid Now
+                </button>
+                <button 
+                  onClick={() => setPaymentMode('Debt')}
+                  className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${paymentMode === 'Debt' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400'}`}
+                >
+                  <BookOpen size={14} /> Record Debt
+                </button>
+              </div>
+
               <div className="mb-6 space-y-3">
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <input 
                       type="tel" 
-                      placeholder="Customer Phone..." 
-                      className="w-full pl-10 pr-4 py-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800/40 rounded-2xl text-sm font-bold dark:text-emerald-50"
+                      placeholder="Customer Phone (Required for Debt)" 
+                      className={`w-full pl-10 pr-4 py-3.5 bg-slate-50 dark:bg-emerald-950 border rounded-2xl text-sm font-bold dark:text-emerald-50 ${paymentMode === 'Debt' && !selectedCustomer ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-slate-100 dark:border-emerald-800/40'}`}
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                     />
@@ -357,26 +396,19 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                         <UserCheck className="text-emerald-600" size={16} />
                         <span className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">{selectedCustomer.name}</span>
                       </div>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-white dark:bg-emerald-900 px-2 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800">
-                        WALLET: {formatNaira(selectedCustomer.walletBalance)}
-                      </span>
+                      {paymentMode === 'Immediate' && (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-white dark:bg-emerald-900 px-2 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                          WALLET: {formatNaira(selectedCustomer.walletBalance)}
+                        </span>
+                      )}
                     </div>
-                    {selectedCustomer.walletBalance > 0 && walletCreditApplied === 0 && (
+                    {paymentMode === 'Immediate' && selectedCustomer.walletBalance > 0 && walletCreditApplied === 0 && (
                       <button 
-                        onClick={applyWalletCredit}
+                        onClick={() => setWalletCreditApplied(Math.min(selectedCustomer.walletBalance, total))}
                         className="w-full bg-emerald-600 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-sm"
                       >
-                        <Wallet size={14} /> Use Credit for Discount
+                        <Wallet size={14} /> Use Wallet Credit
                       </button>
-                    )}
-                    {walletCreditApplied > 0 && (
-                      <div className="flex justify-between items-center bg-white dark:bg-emerald-900 p-2 rounded-xl border border-emerald-100">
-                        <span className="text-[10px] font-black text-emerald-600 uppercase">Discount Applied</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black text-emerald-600">-{formatNaira(walletCreditApplied)}</span>
-                          <button onClick={() => setWalletCreditApplied(0)}><X size={12} className="text-slate-400" /></button>
-                        </div>
-                      </div>
                     )}
                   </div>
                 )}
@@ -401,45 +433,58 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                 ))}
               </div>
 
-              <div className="bg-slate-50 dark:bg-emerald-950/40 p-5 rounded-[32px] border border-slate-100 dark:border-emerald-800/20 space-y-4 mb-4">
-                <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-slate-400">
-                  <span>Grand Total</span>
-                  <span className="text-slate-800 dark:text-emerald-50">{formatNaira(total)}</span>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-2">Amount Received (₦)</label>
-                  <input 
-                    type="number" 
-                    inputMode="decimal"
-                    placeholder="Enter cash received..."
-                    className="w-full p-4 bg-white dark:bg-emerald-900 border border-emerald-100 dark:border-emerald-800/40 rounded-2xl font-black text-xl text-emerald-600 focus:ring-4 focus:ring-emerald-500/10"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                  />
-                </div>
-                
-                {changeDue > 0 && (
-                  <div className="flex flex-col gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 rounded-2xl animate-in zoom-in duration-200">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest">Change Due</span>
-                      <span className="text-xl font-black text-amber-700 dark:text-amber-400 tracking-tighter">{formatNaira(changeDue)}</span>
-                    </div>
-                    {selectedCustomer && (
-                      <button 
-                        onClick={() => setSaveChangeToWallet(!saveChangeToWallet)}
-                        className={`w-full py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all ${saveChangeToWallet ? 'bg-emerald-600 text-white shadow-lg' : 'bg-white text-emerald-600 border border-emerald-200'}`}
-                      >
-                        {saveChangeToWallet ? <CheckCircle size={14} /> : <Coins size={14} />}
-                        {saveChangeToWallet ? 'Save Change Enabled' : 'Save Change to Wallet'}
-                      </button>
-                    )}
+              {paymentMode === 'Immediate' ? (
+                <div className="bg-slate-50 dark:bg-emerald-950/40 p-5 rounded-[32px] border border-slate-100 dark:border-emerald-800/20 space-y-4 mb-4">
+                  <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-slate-400">
+                    <span>Grand Total</span>
+                    <span className="text-slate-800 dark:text-emerald-50">{formatNaira(total)}</span>
                   </div>
-                )}
-              </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-2">Amount Received (₦)</label>
+                    <input 
+                      type="number" 
+                      inputMode="decimal"
+                      placeholder="Enter cash received..."
+                      className="w-full p-4 bg-white dark:bg-emerald-900 border border-emerald-100 dark:border-emerald-800/40 rounded-2xl font-black text-xl text-emerald-600 focus:ring-4 focus:ring-emerald-500/10"
+                      value={amountPaid}
+                      onChange={(e) => setAmountPaid(e.target.value)}
+                    />
+                  </div>
+                  
+                  {changeDue > 0 && (
+                    <div className="flex flex-col gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 rounded-2xl animate-in zoom-in duration-200">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest">Change Due</span>
+                        <span className="text-xl font-black text-amber-700 dark:text-amber-400 tracking-tighter">{formatNaira(changeDue)}</span>
+                      </div>
+                      {selectedCustomer && (
+                        <button 
+                          onClick={() => setSaveChangeToWallet(!saveChangeToWallet)}
+                          className={`w-full py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all ${saveChangeToWallet ? 'bg-emerald-600 text-white shadow-lg' : 'bg-white text-emerald-600 border border-emerald-200'}`}
+                        >
+                          {saveChangeToWallet ? <CheckCircle size={14} /> : <Coins size={14} />}
+                          {saveChangeToWallet ? 'Save Change Enabled' : 'Save Change to Wallet'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-6 rounded-[32px] border border-amber-200 mb-4 text-center space-y-2">
+                   <p className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-[0.2em]">Debit Summary</p>
+                   <p className="text-3xl font-black text-amber-800 dark:text-emerald-50 tracking-tighter">{formatNaira(total)}</p>
+                   <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase">This will be added to customer ledger</p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <button onClick={() => setIsCartExpanded(false)} className="bg-slate-100 dark:bg-emerald-800 text-slate-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px]">Back</button>
-                <button onClick={handleCheckout} className="bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2">Confirm Pay <CheckCircle size={16} /></button>
+                <button 
+                  onClick={handleCheckout} 
+                  className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all ${paymentMode === 'Debt' ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'}`}
+                >
+                  {paymentMode === 'Debt' ? 'Post to Ledger' : 'Confirm Pay'} <CheckCircle size={16} />
+                </button>
               </div>
             </div>
           </div>
@@ -449,15 +494,21 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-6 text-center shadow-2xl border dark:border-emerald-800">
-            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle size={40} />
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${lastSale?.paymentMethod === 'Debt' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
+              {lastSale?.paymentMethod === 'Debt' ? <BookOpen size={40} /> : <CheckCircle size={40} />}
             </div>
-            <h2 className="text-2xl font-black mb-1 text-slate-800 dark:text-emerald-50 tracking-tight">Sale Successful!</h2>
+            <h2 className="text-2xl font-black mb-1 text-slate-800 dark:text-emerald-50 tracking-tight">
+              {lastSale?.paymentMethod === 'Debt' ? 'Debt Recorded!' : 'Sale Successful!'}
+            </h2>
             
             <div className="bg-slate-50 dark:bg-emerald-950/40 rounded-2xl p-5 text-left border border-slate-200 dark:border-emerald-800/40 mb-6 space-y-2">
               <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase">
-                <span>Total Bill</span>
+                <span>Total Amount</span>
                 <span>{formatNaira(lastSale?.total || 0)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase">
+                <span>Method</span>
+                <span className="font-black text-slate-800 dark:text-emerald-50">{lastSale?.paymentMethod === 'Debt' ? 'DEBT' : 'CASH'}</span>
               </div>
               {lastSale?.walletSaved && lastSale.walletSaved > 0 && (
                 <div className="flex justify-between font-black text-emerald-600 text-[10px] uppercase pt-2 border-t border-dashed border-emerald-200">
@@ -474,7 +525,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                 className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 active:scale-95 shadow-xl shadow-blue-200 uppercase tracking-widest text-xs disabled:opacity-50 transition-all"
               >
                 {isPrinting ? <Loader2 size={20} className="animate-spin" /> : <Printer size={20} />}
-                {isPrinting ? 'Printing...' : '🖨️ Print Physical Receipt'}
+                {isPrinting ? 'Printing...' : '🖨️ Print Receipt'}
               </button>
               <div className="grid grid-cols-2 gap-3">
                 <button onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)} className="w-full bg-emerald-50 text-emerald-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 border border-emerald-100 text-[10px] uppercase tracking-widest">
