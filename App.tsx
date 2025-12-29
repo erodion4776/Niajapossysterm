@@ -27,8 +27,7 @@ import {
 } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
-const TRIAL_DURATION = 259200000; 
-const OFFLINE_LIMIT_MS = 30 * 24 * 60 * 60 * 1000; // 30 Days
+const TRIAL_DURATION = 259200000; // 3 Days
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
@@ -36,8 +35,6 @@ const AppContent: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPirated, setIsPirated] = useState(false);
   const [isClockTampered, setIsClockTampered] = useState(false);
-  const [isOfflineTooLong, setIsOfflineTooLong] = useState(false);
-  const [isVerifyingTime, setIsVerifyingTime] = useState(false);
   
   const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock' | 'expiring'>('all');
 
@@ -48,71 +45,39 @@ const AppContent: React.FC = () => {
   const [deviceRole, setDeviceRole] = useState<DeviceRole | null>(() => localStorage.getItem('device_role') as DeviceRole);
   const [showRoleSelection, setShowRoleSelection] = useState(false);
 
-  // Subscription State
-  const [expiryDate, setExpiryDate] = useState<number | null>(() => {
-    const saved = localStorage.getItem('subscription_expiry');
-    return saved ? parseInt(saved) : null;
-  });
+  // Subscription Expiry State
+  const [licenseExpiry, setLicenseExpiry] = useState<string | null>(() => localStorage.getItem('license_expiry'));
+  const [isExpired, setIsExpired] = useState(false);
 
   const trialStartDate = localStorage.getItem('trial_start_date');
   const isTrialValid = trialStartDate ? (Date.now() - parseInt(trialStartDate)) < TRIAL_DURATION : false;
   
-  const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - Date.now()) / (1000 * 60 * 60 * 24)) : null;
-  const isExpired = expiryDate ? Date.now() > expiryDate : false;
-
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /**
-   * Fetches Real Nigerian Time to prevent local clock tampering.
-   */
-  const verifyOnlineTime = async () => {
-    if (!navigator.onLine) return;
-    setIsVerifyingTime(true);
-    try {
-      const response = await fetch('https://worldtimeapi.org/api/timezone/Africa/Lagos');
-      if (!response.ok) throw new Error("Time API Offline");
-      const data = await response.json();
-      const networkTime = new Date(data.datetime).getTime();
-      
-      const lastRecorded = await db.security.get('max_date_recorded');
-      
-      // If network time is behind our recorded history, system clock was tampered
-      if (lastRecorded && networkTime < lastRecorded.value - 600000) { // 10 min tolerance
-        setIsClockTampered(true);
-      } else {
-        await db.security.put({ key: 'max_date_recorded', value: networkTime });
-        await db.security.put({ key: 'last_online_verification', value: networkTime });
-        setIsOfflineTooLong(false);
-        setIsClockTampered(false);
-      }
-    } catch (e) {
-      console.error("Online time sync failed", e);
-    } finally {
-      setIsVerifyingTime(false);
-    }
-  };
-
-  /**
-   * Heartbeat: Saves current timestamp every 5 mins.
-   * Ensures system time can only move forward (Monotonic Clock).
+   * Monotonic Heartbeat: Prevents time-travel to bypass expiry
    */
   const saveHeartbeat = async () => {
     const now = Date.now();
-    const lastRecorded = await db.security.get('max_date_recorded');
+    const maxTime = parseInt(localStorage.getItem('max_time_reached') || '0');
     
-    // Check for backward movement (more than 1 min jitter allowance)
-    if (lastRecorded && now < lastRecorded.value - 60000) {
+    if (now < maxTime - 60000) { // 1 min tolerance for system jitter
       setIsClockTampered(true);
     } else {
-      await db.security.put({ key: 'max_date_recorded', value: Math.max(now, lastRecorded?.value || 0) });
-    }
-    
-    // Check offline threshold (30 days)
-    const lastOnline = await db.security.get('last_online_verification');
-    if (lastOnline && now - lastOnline.value > OFFLINE_LIMIT_MS) {
-      setIsOfflineTooLong(true);
+      const newMax = Math.max(now, maxTime);
+      localStorage.setItem('max_time_reached', newMax.toString());
+      await db.security.put({ key: 'max_time_reached', value: newMax });
     }
   };
+
+  const checkExpiry = useCallback((expiryStr: string | null) => {
+    if (!expiryStr) return false;
+    const year = parseInt(expiryStr.substring(0, 4));
+    const month = parseInt(expiryStr.substring(4, 6)) - 1;
+    const day = parseInt(expiryStr.substring(6, 8));
+    const expiryDate = new Date(year, month, day, 23, 59, 59);
+    return Date.now() > expiryDate.getTime();
+  }, []);
 
   const syncStateFromUrl = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -156,66 +121,48 @@ const AppContent: React.FC = () => {
       
       await initTrialDate();
 
-      // 1. Initial Monotonic Check
-      const lastRecorded = await db.security.get('max_date_recorded');
-      const now = Date.now();
-      if (lastRecorded && now < lastRecorded.value) {
+      // 1. Clock Tamper Check
+      const dbMaxTime = await db.security.get('max_time_reached');
+      const lsMaxTime = parseInt(localStorage.getItem('max_time_reached') || '0');
+      const maxTime = Math.max(lsMaxTime, dbMaxTime?.value || 0);
+      
+      if (Date.now() < maxTime - 60000) {
         setIsClockTampered(true);
+        setIsInitialized(true);
         return;
       }
-      
-      // 2. Offline Threshold Check
-      const lastOnline = await db.security.get('last_online_verification');
-      if (!lastOnline) {
-        await db.security.put({ key: 'last_online_verification', value: now });
-      } else if (now - lastOnline.value > OFFLINE_LIMIT_MS) {
-        setIsOfflineTooLong(true);
-      }
 
-      await saveHeartbeat();
-
-      // 3. Wipe Protection & License Recovery (Double-Lock Sync)
+      // 2. License Integrity & Recovery
       const requestCode = await getRequestCode();
-      const dbKey = await db.security.get('activation_key');
-      const dbExp = await db.security.get('subscription_expiry');
-      const lsKey = localStorage.getItem('activation_key');
-      const lsExp = localStorage.getItem('subscription_expiry');
+      const dbExp = await db.security.get('license_expiry');
+      const dbSig = await db.security.get('license_signature');
+      const lsExp = localStorage.getItem('license_expiry');
+      const lsSig = localStorage.getItem('license_signature');
       
-      let validKey = '';
-      let validExp = 0;
+      let validExp = '';
+      let validSig = '';
 
-      // Try validating IndexedDB license
-      if (dbKey?.value && dbExp?.value) {
-        const isValid = await validateLicenseIntegrity(requestCode, dbKey.value, dbExp.value);
-        if (isValid) {
-          validKey = dbKey.value;
-          validExp = dbExp.value;
-        }
+      if (dbExp?.value && dbSig?.value && await validateLicenseIntegrity(requestCode, dbSig.value, dbExp.value)) {
+        validExp = dbExp.value;
+        validSig = dbSig.value;
+      } else if (lsExp && lsSig && await validateLicenseIntegrity(requestCode, lsSig, lsExp)) {
+        validExp = lsExp;
+        validSig = lsSig;
       }
 
-      // If DB failed (cleared or tampered), try LocalStorage
-      if (!validKey && lsKey && lsExp) {
-        const isValid = await validateLicenseIntegrity(requestCode, lsKey, parseInt(lsExp));
-        if (isValid) {
-          validKey = lsKey;
-          validExp = parseInt(lsExp);
-        }
-      }
-
-      // Sync and Restore if we found a valid signed license anywhere
-      if (validKey && validExp) {
-        localStorage.setItem('activation_key', validKey);
-        localStorage.setItem('subscription_expiry', validExp.toString());
+      if (validExp && validSig) {
+        localStorage.setItem('license_expiry', validExp);
+        localStorage.setItem('license_signature', validSig);
         localStorage.setItem('is_activated', 'true');
-        await db.security.put({ key: 'activation_key', value: validKey });
-        await db.security.put({ key: 'subscription_expiry', value: validExp });
-        await db.settings.put({ key: 'is_activated', value: true });
-        setExpiryDate(validExp);
+        await db.security.put({ key: 'license_expiry', value: validExp });
+        await db.security.put({ key: 'license_signature', value: validSig });
+        
+        const expired = checkExpiry(validExp);
+        setIsExpired(expired);
         setIsActivated(true);
+        setLicenseExpiry(validExp);
       } else {
-        // No valid signed license found - either moved devices or tampering detected
         setIsActivated(false);
-        localStorage.setItem('is_activated', 'false');
       }
 
       syncStateFromUrl();
@@ -223,19 +170,16 @@ const AppContent: React.FC = () => {
 
       // Start 5-min Heartbeat
       heartbeatRef.current = setInterval(saveHeartbeat, 5 * 60 * 1000);
-      
-      if (navigator.onLine) verifyOnlineTime();
+      saveHeartbeat();
     };
     startup();
 
-    window.addEventListener('online', verifyOnlineTime);
     window.addEventListener('popstate', syncStateFromUrl);
     return () => {
-      window.removeEventListener('online', verifyOnlineTime);
       window.removeEventListener('popstate', syncStateFromUrl);
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
-  }, [syncStateFromUrl]);
+  }, [syncStateFromUrl, checkExpiry]);
 
   const handleStartTrial = () => {
     setShowRoleSelection(true);
@@ -281,9 +225,9 @@ const AppContent: React.FC = () => {
     return (
       <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
         <Clock size={80} className="text-amber-500 mb-6 animate-bounce" />
-        <h1 className="text-3xl font-black mb-4 uppercase leading-none text-amber-500 italic tracking-tighter">Time-Tamper Lock</h1>
-        <p className="text-slate-300 max-w-sm font-medium mb-8">System clock has been moved backward. Please correct your device date and time settings to unlock.</p>
-        <button onClick={() => window.location.reload()} className="bg-amber-600 px-10 py-5 rounded-[24px] font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Verify Clock Now</button>
+        <h1 className="text-3xl font-black mb-4 uppercase leading-none text-amber-500 italic tracking-tighter">Clock Tampered!</h1>
+        <p className="text-slate-300 max-w-sm font-medium mb-8">Please set your phone to the correct date and time to continue.</p>
+        <button onClick={() => window.location.reload()} className="bg-amber-600 px-10 py-5 rounded-[24px] font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Check Again</button>
       </div>
     );
   }
@@ -334,70 +278,27 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500 transition-colors duration-300">
-      
-      {/* 30-Day Offline Mandatory Check Overlay */}
-      {isOfflineTooLong && (
-        <div className="fixed inset-0 z-[2000] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-white text-center">
-           <div className="w-24 h-24 bg-amber-500/20 rounded-[40px] flex items-center justify-center mb-8 border border-amber-500/30">
-              <Wifi size={48} className="text-amber-500 animate-pulse" />
-           </div>
-           <h1 className="text-3xl font-black mb-4 uppercase tracking-tighter">Security Check</h1>
-           <p className="text-slate-300 mb-8 max-w-xs font-medium leading-relaxed">
-             Security Policy: You have been offline for 30 days. Please turn on data for 10 seconds to verify your license and system clock.
-           </p>
-           <button 
-             onClick={verifyOnlineTime}
-             disabled={isVerifyingTime || !navigator.onLine}
-             className="w-full max-w-xs bg-emerald-600 text-white font-black py-6 rounded-[28px] shadow-xl uppercase tracking-widest text-xs flex items-center justify-center gap-3 active:scale-95 disabled:bg-slate-700"
-           >
-             {!navigator.onLine ? <AlertTriangle size={18}/> : (isVerifyingTime ? <Loader2 className="animate-spin" /> : <RefreshCw size={18} />)} 
-             {!navigator.onLine ? 'Turn On Internet' : (isVerifyingTime ? 'Verifying...' : 'Verify License Now')}
-           </button>
-        </div>
-      )}
-
-      {/* Grace Period Banner (7-day window) */}
-      {expiryDate && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 7 && (
-        <div className="bg-amber-500 text-white px-4 py-3 text-[10px] font-black uppercase flex items-center justify-between sticky top-0 z-[60] shadow-lg border-b border-amber-600/20">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={14} className="animate-pulse" />
-            <span>Your subscription expires in {daysUntilExpiry} days. Contact developer to renew.</span>
-          </div>
-          <a href="https://wa.me/2347062228026" target="_blank" className="bg-white text-amber-600 px-4 py-1.5 rounded-full flex items-center gap-1 active:scale-95 transition-all shadow-sm">
-             <MessageCircle size={10} /> Renew
-          </a>
-        </div>
-      )}
-
       <main className="flex-1 overflow-auto">{renderPage()}</main>
-      
       {!isStaffDevice && <BackupReminder />}
-
       <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/90 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-0.5 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)] transition-colors duration-300">
         <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <LayoutGrid size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Home</span>
         </button>
-        
         <button onClick={() => navigateTo(Page.POS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <ShoppingBag size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">POS</span>
         </button>
-
         <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.INVENTORY || currentPage === Page.STOCK_LOGS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Package size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Stock</span>
         </button>
-
         <button onClick={() => navigateTo(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Sales</span>
         </button>
-
         <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <BookOpen size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Debts</span>
         </button>
-
         <button onClick={() => navigateTo(Page.CUSTOMERS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.CUSTOMERS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
           <Wallet size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Wallet</span>
         </button>
-        
         {!isStaffDevice && currentUser?.role === 'Admin' && (
           <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
             <SettingsIcon size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Admin</span>

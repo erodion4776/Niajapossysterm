@@ -36,18 +36,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
     setIsVerifying(true);
     const result = await verifyActivationKey(requestCode, activationKey);
     
-    if (result.isValid && result.expiry) {
-      // 1. Wipe Protection & Device Tie Save
-      // Save raw key + signed expiry for background integrity checks
-      const keyToSave = activationKey.trim().toUpperCase();
-      
-      localStorage.setItem('activation_key', keyToSave);
-      localStorage.setItem('subscription_expiry', result.expiry.toString());
+    if (result.isValid && result.expiryDate && result.signature) {
+      // 1. Storage of Signed Expiry
+      localStorage.setItem('license_expiry', result.expiryDate);
+      localStorage.setItem('license_signature', result.signature);
       localStorage.setItem('is_activated', 'true');
       localStorage.removeItem('is_trialing');
       
-      await db.security.put({ key: 'activation_key', value: keyToSave });
-      await db.security.put({ key: 'subscription_expiry', value: result.expiry });
+      await db.security.put({ key: 'license_expiry', value: result.expiryDate });
+      await db.security.put({ key: 'license_signature', value: result.signature });
       await db.settings.put({ key: 'is_activated', value: true });
 
       // Check if this is a fresh setup or just a renewal
@@ -78,13 +75,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
         </div>
         <h1 className="text-3xl font-black mb-2 tracking-tight uppercase leading-tight">App Activated!</h1>
         <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm leading-relaxed">Your Temporary Admin PIN is shown below. Store it safely.</p>
-
         <div className="w-full max-w-sm bg-white/5 border border-white/10 p-10 rounded-[48px] mb-8 relative overflow-hidden shadow-2xl">
           <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500"></div>
           <p className="text-emerald-500/40 text-[10px] font-black uppercase tracking-[0.4em] mb-4">Admin Setup OTP</p>
           <div className="text-6xl font-mono font-black tracking-[0.2em] text-white py-2">{tempOtp}</div>
         </div>
-
         <button onClick={() => window.location.reload()} className="w-full max-w-sm bg-white text-emerald-950 font-black py-6 rounded-[28px] flex items-center justify-center gap-3 active:scale-95 shadow-xl uppercase tracking-widest text-xs">
           Create Secret PIN <ArrowRight size={18} />
         </button>
@@ -97,7 +92,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
       <div className="w-20 h-20 bg-emerald-500/20 rounded-[24px] flex items-center justify-center mb-6 border border-emerald-500/30 shadow-2xl">
         {isExpired ? <ShieldAlert size={40} className="text-amber-400" /> : <Lock size={40} className="text-emerald-400" />}
       </div>
-      
       <h1 className="text-3xl font-black mb-2 tracking-tighter uppercase">
         {isExpired ? 'License Expired' : (isTrialExpired ? 'Trial Expired' : 'System Activation')}
       </h1>
@@ -106,7 +100,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
           ? 'Your annual license has ended. Pay ₦10,000 for another year of offline access.' 
           : 'Offline license required. Send your Request Code to get an activation key.'}
       </p>
-
       <div className="w-full max-w-sm space-y-6">
         <div className="bg-emerald-900/40 border border-emerald-800/60 p-6 rounded-[32px] space-y-3 shadow-inner">
           <p className="text-emerald-500/60 text-[10px] font-black uppercase tracking-[0.2em]">Your Device ID</p>
@@ -117,7 +110,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
             </button>
           </div>
         </div>
-
         <a 
           href={`https://api.whatsapp.com/send?phone=2347062228026&text=Hello,%20I%20want%20to%20activate/renew%20NaijaShop%20POS.%20Request%20Code:%20${requestCode}`} 
           target="_blank"
@@ -125,12 +117,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
         >
           <MessageCircle size={24} /> Get Activation Key
         </a>
-
         <div className="relative pt-4">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-emerald-800"></div></div>
           <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest bg-emerald-950 px-3 text-emerald-700">Enter Key Below</div>
         </div>
-
         <div className="space-y-3">
           <input 
             type="text" 

@@ -25,12 +25,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
   const isStaffDevice = deviceRole === 'StaffDevice';
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
 
-  // Filter users based on device type - STRICK LOCKDOWN
   const displayUsers = useMemo(() => {
     if (!users) return [];
     if (isStaffDevice) {
-      // On a staff device, we ONLY show accounts with the 'Staff' role.
-      // This prevents the Boss Admin account from ever appearing or being used on this terminal.
       return users.filter(u => u.role === 'Staff');
     }
     return users;
@@ -52,7 +49,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
     if (!/^\d*$/.test(val)) return;
     const newArr = [...pinArr];
     newArr[index] = val.slice(-1);
-    // Use the correct state setter name 'setPinArr'
     setPinArr(newArr);
     if (val && index < 3) pinRefs.current[index + 1]?.focus();
   };
@@ -69,35 +65,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
       return;
     }
 
-    // Handle Staff Invite (Remote Setup)
     if (data.type === 'STAFF_INVITE') {
       if (confirm(`Accept invite to join "${data.shopName}" as ${data.staffName}?`)) {
         setIsProcessing(true);
         try {
-          // 1. Wipe everything to ensure no old Admin accounts or data remain
           await clearAllData();
-          
-          // 2. Setup the database for the specific staff member
-          await db.transaction('rw', [db.inventory, db.users, db.settings], async () => {
+          await db.transaction('rw', [db.inventory, db.users, db.settings, db.security], async () => {
             if (data.inventory.length > 0) await db.inventory.bulkAdd(data.inventory);
-            
-            // Add ONLY the staff user account provided in the key
-            await db.users.add({
-              name: data.staffName,
-              pin: data.staffPin,
-              role: 'Staff'
-            });
-            
+            await db.users.add({ name: data.staffName, pin: data.staffPin, role: 'Staff' });
             await db.settings.put({ key: 'is_activated', value: true });
+            
+            // Inherit License
+            if (data.license_expiry && data.license_signature) {
+              await db.security.put({ key: 'license_expiry', value: data.license_expiry });
+              await db.security.put({ key: 'license_signature', value: data.license_signature });
+              localStorage.setItem('license_expiry', data.license_expiry);
+              localStorage.setItem('license_signature', data.license_signature);
+            }
           });
           
-          // 3. Update device settings
           localStorage.setItem('shop_name', data.shopName);
           localStorage.setItem('shop_info', data.shopInfo);
           localStorage.setItem('is_activated', 'true');
           localStorage.setItem('device_role', 'StaffDevice');
-          
-          // 4. Reload to refresh the whole app state
           window.location.reload();
         } catch (e) {
           setImportError('Invite setup failed: ' + (e as Error).message);
@@ -108,9 +98,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
       return;
     }
 
-    // Handle Master Stock Update
     if (data.type === 'STOCK_UPDATE') {
-      if (confirm(`Update stock levels from Admin? This will reset your current counts.`)) {
+      if (confirm(`Update stock levels from Admin?`)) {
         setIsProcessing(true);
         try {
           await db.transaction('rw', [db.inventory], async () => {
@@ -140,14 +129,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
       return;
     }
 
-    // Handle Full Setup
     if (confirm(`Clone "${data.settings.shopName}" to this phone?`)) {
       setIsProcessing(true);
       try {
         await clearAllData();
-        await db.transaction('rw', [db.inventory, db.users], async () => {
+        await db.transaction('rw', [db.inventory, db.users, db.security], async () => {
           if (data.inventory.length > 0) await db.inventory.bulkAdd(data.inventory.map(({id, ...rest}: any) => rest));
           if (data.users.length > 0) await db.users.bulkAdd(data.users.map(({id, ...rest}: any) => rest));
+          
+          // Clone license
+          if (data.settings.license_expiry && data.settings.license_signature) {
+             await db.security.put({ key: 'license_expiry', value: data.settings.license_expiry });
+             await db.security.put({ key: 'license_signature', value: data.settings.license_signature });
+             localStorage.setItem('license_expiry', data.settings.license_expiry);
+             localStorage.setItem('license_signature', data.settings.license_signature);
+          }
         });
         localStorage.setItem('shop_name', data.settings.shopName);
         localStorage.setItem('shop_info', data.settings.shopInfo);

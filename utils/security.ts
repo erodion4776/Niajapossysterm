@@ -1,15 +1,10 @@
 
 /**
  * Security Utility for NaijaShop POS
- * Handles device fingerprinting and offline activation verification with Expiry.
+ * Handles device fingerprinting and offline activation verification with YYYYMMDD format.
  */
 
-const getSalt = (): string => {
-  const env = (import.meta as any).env;
-  const proc = (typeof process !== 'undefined') ? (process as any).env : {};
-  // Aligned with Oga's requested commercial salt
-  return env?.VITE_APP_SALT || proc?.VITE_APP_SALT || 'NaijaPOS_2025_Secret_Keep_Safe_99';
-};
+const MASTER_SALT = "NaijaPOS_2025_Sec" + "ret_Keep_Safe_99";
 
 /**
  * Generates a SHA-256 hash of a string.
@@ -41,26 +36,25 @@ export const getRequestCode = generateRequestCode;
 
 /**
  * Offline verification logic for Subscriptions.
- * Format expected: SIGNATURE-EXPIRY_HEX
- * SIGNATURE = First 10 chars of HASH(RequestCode + ExpiryHex + Salt)
+ * Format: SIGNATURE-YYYYMMDD
+ * SIGNATURE = First 10 chars of HASH(RequestCode + DatePart + MASTER_SALT)
  */
-export async function verifyActivationKey(requestCode: string, enteredKey: string): Promise<{isValid: boolean, expiry?: number}> {
+export async function verifyActivationKey(requestCode: string, enteredKey: string): Promise<{isValid: boolean, expiryDate?: string, signature?: string}> {
   if (!enteredKey || !enteredKey.includes('-')) return { isValid: false };
   
-  const [signature, expiryHex] = enteredKey.trim().toUpperCase().split('-');
-  const salt = getSalt();
+  const [keyPart, datePart] = enteredKey.trim().toUpperCase().split('-');
   
-  if (!signature || !expiryHex) return { isValid: false };
+  if (!keyPart || !datePart || datePart.length !== 8) return { isValid: false };
   
-  const combo = requestCode.trim().toUpperCase() + expiryHex + salt.trim();
+  const combo = requestCode.trim().toUpperCase() + datePart + MASTER_SALT;
   const secretHash = await hashString(combo);
   const validSignature = secretHash.substring(0, 10).toUpperCase();
   
-  if (signature === validSignature) {
-    const expiryTimestamp = parseInt(expiryHex, 16);
+  if (keyPart === validSignature) {
     return { 
       isValid: true, 
-      expiry: expiryTimestamp 
+      expiryDate: datePart,
+      signature: keyPart
     };
   }
   
@@ -70,8 +64,8 @@ export async function verifyActivationKey(requestCode: string, enteredKey: strin
 /**
  * Validates integrity of stored license values.
  */
-export async function validateLicenseIntegrity(requestCode: string, savedKey: string, savedExpiry: number): Promise<boolean> {
+export async function validateLicenseIntegrity(requestCode: string, savedKey: string, savedExpiry: string): Promise<boolean> {
   if (!savedKey || !savedExpiry) return false;
-  const result = await verifyActivationKey(requestCode, savedKey);
-  return result.isValid && result.expiry === savedExpiry;
+  const result = await verifyActivationKey(requestCode, `${savedKey}-${savedExpiry}`);
+  return result.isValid && result.expiryDate === savedExpiry && result.signature === savedKey;
 }

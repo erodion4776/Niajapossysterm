@@ -46,16 +46,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
   // License Visibility Logic
   const licenseInfo = useMemo(() => {
-    const expiry = localStorage.getItem('subscription_expiry');
-    if (!expiry) return { status: 'Free Trial', color: 'bg-blue-500', days: 0 };
+    const expiryStr = localStorage.getItem('license_expiry');
+    if (!expiryStr) return { status: 'Free Trial', color: 'bg-blue-500', displayDate: '' };
     
-    const expiryTs = parseInt(expiry);
-    const diff = expiryTs - Date.now();
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    const year = expiryStr.substring(0, 4);
+    const month = expiryStr.substring(4, 6);
+    const day = expiryStr.substring(6, 8);
+    const displayDate = `${year}-${month}-${day}`;
+
+    const expiryDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 23, 59, 59);
+    const now = Date.now();
     
-    if (days <= 0) return { status: 'Expired', color: 'bg-red-500', days: 0 };
-    if (days <= 7) return { status: 'Expiring Soon', color: 'bg-amber-500', days };
-    return { status: 'License Active', color: 'bg-emerald-500', days };
+    if (now > expiryDate.getTime()) return { status: 'Expired', color: 'bg-red-500', displayDate };
+    if (expiryDate.getTime() - now < 604800000) return { status: 'Expiring Soon', color: 'bg-amber-500', displayDate };
+    return { status: 'License Active', color: 'bg-emerald-500', displayDate };
   }, [securityTable]);
 
   // Alert Logic
@@ -93,7 +97,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const totalSalesOnDate = salesOnDate?.reduce((sum, sale) => sum + sale.total, 0) || 0;
   const totalCostOnDate = salesOnDate?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
 
-  // Granular Revenue Breakdown
   const revenueBreakdown = useMemo(() => {
     if (!salesOnDate) return { cash: 0, digital: 0 };
     return salesOnDate.reduce((acc, sale) => {
@@ -113,17 +116,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const netProfitOnDate = grossProfitOnDate - actualExpensesOnDate;
 
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
-
-  const chartData = useMemo(() => {
-    const days = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const label = d.toLocaleDateString('en-NG', { weekday: 'short' });
-      days.push({ label, revenue: 0, profit: 0 });
-    }
-    return days;
-  }, []);
 
   const storeNetWorth = useMemo(() => {
     if (!inventory) return 0;
@@ -148,7 +140,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
                     <p className={`text-[9px] font-black uppercase tracking-tighter ${licenseInfo.status === 'Expired' ? 'text-red-500' : 'text-slate-800 dark:text-emerald-400'}`}>
                       {licenseInfo.status}
                     </p>
-                    {licenseInfo.days > 0 && <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">{licenseInfo.days} Days</p>}
+                    {licenseInfo.displayDate && <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">{licenseInfo.displayDate}</p>}
                  </div>
               </div>
             )}
@@ -178,7 +170,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             </div>
             <button onClick={() => setShowAlerts(false)} className="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-red-500">Dismiss</button>
           </div>
-          
           <div className="flex flex-col">
             {alerts.expiring > 0 && (
               <button onClick={() => onInventoryFilter('expiring')} className="flex items-center gap-4 p-5 bg-red-50 dark:bg-red-950/20 border-b border-white dark:border-emerald-800/20 text-left active:scale-[0.98] transition-all">
@@ -198,7 +189,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </section>
       )}
 
-      {/* Main Revenue Card */}
       <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col gap-1">
           <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
@@ -209,12 +199,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <span className="bg-emerald-500/40 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
               <ShoppingCart size={10}/> {salesOnDate?.length || 0} Orders
             </span>
+            {licenseInfo.displayDate && (
+              <span className="bg-white/10 px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 border border-white/5">
+                <ShieldCheck size={8}/> License until {licenseInfo.displayDate}
+              </span>
+            )}
           </div>
         </div>
         <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={160} />
       </section>
 
-      {/* Granular Revenue Breakdown (Boss Control) */}
       {isAdmin && (
         <section className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-[32px] p-1 flex gap-1 shadow-sm overflow-hidden">
            <div className="flex-1 bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-[28px] text-center">
@@ -255,7 +249,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             </div>
           </div>
         </div>
-
         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
           {salesOnDate && salesOnDate.length > 0 ? (
             salesOnDate.map(sale => (

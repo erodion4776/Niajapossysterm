@@ -59,18 +59,20 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
 };
 
 /**
- * Generates a full shop setup key (Inventory + Staff Users)
+ * Generates a full shop setup key (Inventory + Staff Users + License)
  */
 export const generateShopKey = async () => {
   const inventory = await db.inventory.toArray();
   const users = await db.users.toArray();
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
   const shopInfo = localStorage.getItem('shop_info') || '';
+  const license_expiry = localStorage.getItem('license_expiry');
+  const license_signature = localStorage.getItem('license_signature');
 
   const payload = {
     inventory: inventory.map(({image, ...rest}) => rest), 
     users,
-    settings: { shopName, shopInfo }
+    settings: { shopName, shopInfo, license_expiry, license_signature }
   };
 
   const jsonStr = JSON.stringify(payload);
@@ -103,6 +105,8 @@ export const generateStaffInviteKey = async (user: User) => {
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
   const shopInfo = localStorage.getItem('shop_info') || '';
   const inventory = await db.inventory.toArray();
+  const license_expiry = localStorage.getItem('license_expiry');
+  const license_signature = localStorage.getItem('license_signature');
 
   const payload = {
     type: 'STAFF_INVITE',
@@ -111,6 +115,8 @@ export const generateStaffInviteKey = async (user: User) => {
     staffName: user.name,
     staffPin: user.pin,
     inventory: inventory.map(i => ({ name: i.name, sellingPrice: i.sellingPrice, costPrice: i.costPrice, stock: i.stock, category: i.category, barcode: i.barcode })),
+    license_expiry,
+    license_signature,
     timestamp: Date.now()
   };
 
