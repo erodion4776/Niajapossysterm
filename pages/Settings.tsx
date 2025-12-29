@@ -38,7 +38,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const [shopInfo, setShopInfo] = useState(() => localStorage.getItem('shop_info') || 'Address, City, Phone');
   const [receiptFooter, setReceiptFooter] = useState(() => localStorage.getItem('receipt_footer') || 'Thank you for your patronage!');
 
-  // Soft POS State
+  // Soft POS State - Using exact keys: softPosBank, softPosNumber, softPosAccount
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
@@ -102,6 +102,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       alert("Please fill all bank details fields!");
       return;
     }
+    // EXACT KEY MATCHING
     await db.settings.put({ key: 'softPosBank', value: bankName.trim() });
     await db.settings.put({ key: 'softPosNumber', value: accountNumber.trim() });
     await db.settings.put({ key: 'softPosAccount', value: accountName.trim() });

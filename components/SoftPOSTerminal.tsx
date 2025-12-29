@@ -4,24 +4,19 @@ import {
   X, Copy, Check, ShieldCheck, 
   Smartphone, Landmark, User, Timer, 
   AlertCircle, ChevronRight, CheckCircle2,
-  Wallet, ArrowLeft, CheckCircle
+  Wallet, ArrowLeft, CheckCircle, Loader2
 } from 'lucide-react';
+import { db } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
 
 interface SoftPOSTerminalProps {
   amount: number;
-  bankDetails: {
-    bankName: string;
-    accountNumber: string;
-    accountName: string;
-  } | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({ 
   amount, 
-  bankDetails, 
   onConfirm, 
   onCancel 
 }) => {
@@ -29,6 +24,29 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
   const [copied, setCopied] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isTimedOut, setIsTimedOut] = useState(false);
+  const [details, setDetails] = useState({ bank: '', number: '', name: '' });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDetails = async () => {
+      try {
+        const b = await db.settings.get('softPosBank');
+        const n = await db.settings.get('softPosNumber');
+        const a = await db.settings.get('softPosAccount');
+        
+        setDetails({ 
+          bank: b?.value || '', 
+          number: n?.value || '', 
+          name: a?.value || '' 
+        });
+      } catch (err) {
+        console.error("Failed to load Soft POS details", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchDetails();
+  }, []);
 
   useEffect(() => {
     if (timeLeft <= 0) {
@@ -46,8 +64,8 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
   };
 
   const handleCopy = () => {
-    if (bankDetails?.accountNumber) {
-      navigator.clipboard.writeText(bankDetails.accountNumber);
+    if (details.number) {
+      navigator.clipboard.writeText(details.number);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       if (navigator.vibrate) navigator.vibrate(50);
@@ -94,7 +112,7 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
     }, 2000);
   };
 
-  const isConfigMissing = !bankDetails || !bankDetails.bankName || !bankDetails.accountNumber || !bankDetails.accountName;
+  const isConfigMissing = !details.bank || !details.number || !details.name;
 
   if (isSuccess) {
     return (
@@ -124,7 +142,7 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
             <h2 className={`text-[10px] font-black uppercase tracking-[0.3em] leading-none ${isTimedOut ? 'text-red-400' : 'text-emerald-500'}`}>
               {isTimedOut ? 'Session Expired' : 'Official Transfer Terminal'}
             </h2>
-            <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-1">System Version 2.7 • Secure Offline</p>
+            <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-1">System Version 2.8 • Secure Offline</p>
           </div>
         </div>
         <button onClick={onCancel} className="p-2.5 bg-red-500/10 rounded-2xl hover:bg-red-500/20 transition-colors group">
@@ -147,7 +165,11 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
              <Landmark size={140} />
           </div>
           
-          {isConfigMissing ? (
+          {isLoading ? (
+            <div className="flex justify-center py-10">
+               <Loader2 size={32} className="animate-spin text-emerald-600" />
+            </div>
+          ) : isConfigMissing ? (
             <div className="flex flex-col items-center justify-center text-center py-4 space-y-4">
                <div className="bg-red-50 p-4 rounded-3xl text-red-500">
                   <AlertCircle size={48} />
@@ -161,14 +183,14 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
             <div className="space-y-8 relative z-10">
               <div className="space-y-1 text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bank Name</p>
-                <p className="text-2xl font-black uppercase tracking-tight text-emerald-600">{bankDetails.bankName}</p>
+                <p className="text-2xl font-black uppercase tracking-tight text-emerald-600">{details.bank}</p>
               </div>
 
               <div className="space-y-3 text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account Number</p>
-                <div className="flex items-center justify-center gap-4 bg-slate-100 p-6 rounded-[32px] border border-slate-200 shadow-inner group active:scale-[0.98] transition-all" onClick={handleCopy}>
-                  <span className="text-4xl font-mono font-black tracking-[0.1em] text-slate-900">
-                    {bankDetails.accountNumber}
+                <div className="flex items-center justify-center gap-4 bg-slate-100 p-6 rounded-[32px] border border-slate-200 shadow-inner group active:scale-[0.98] transition-all cursor-pointer" onClick={handleCopy}>
+                  <span className="text-4xl font-mono font-black tracking-[0.1em] text-emerald-950">
+                    {details.number}
                   </span>
                   <div className="p-3 bg-white rounded-2xl shadow-md border border-slate-100 text-slate-400">
                     {copied ? <Check size={20} className="text-emerald-600" /> : <Copy size={20} />}
@@ -178,8 +200,8 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
 
               <div className="space-y-1 text-center border-t border-slate-50 pt-6">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account Name</p>
-                <p className="text-lg font-black uppercase text-slate-800 leading-tight italic tracking-tight">
-                  {bankDetails.accountName.toUpperCase()}
+                <p className="text-lg font-black uppercase text-emerald-950 leading-tight italic tracking-tight">
+                  {details.name.toUpperCase()}
                 </p>
               </div>
             </div>
@@ -212,7 +234,7 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
       <footer className="p-8 bg-slate-900/90 backdrop-blur-md border-t border-white/5 space-y-4">
         <button 
           onClick={handleConfirm}
-          disabled={isConfigMissing}
+          disabled={isLoading || isConfigMissing}
           className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white font-black py-7 rounded-[32px] shadow-[0_20px_40px_-10px_rgba(16,185,129,0.4)] active:scale-[0.98] transition-all uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-4 group"
         >
           <CheckCircle size={24} className="group-hover:scale-110 transition-transform" />

@@ -24,21 +24,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const categories = useLiveQuery(() => db.categories.toArray());
   
-  // Reactive Bank Details for Soft POS
-  const softPosSettings = useLiveQuery(() => 
-    db.settings.where('key').anyOf(['softPosBank', 'softPosNumber', 'softPosAccount']).toArray()
-  );
-
-  const bankDetails = useMemo(() => {
-    if (!softPosSettings) return null;
-    const details = {
-      bankName: softPosSettings.find(s => s.key === 'softPosBank')?.value || '',
-      accountNumber: softPosSettings.find(s => s.key === 'softPosNumber')?.value || '',
-      accountName: softPosSettings.find(s => s.key === 'softPosAccount')?.value || '',
-    };
-    return details;
-  }, [softPosSettings]);
-
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [cart, setCart] = useState<(SaleItem & { image?: string })[]>([]);
@@ -315,10 +300,9 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
 
   return (
     <div className="flex flex-col h-full bg-[#fcfcfc] dark:bg-emerald-950 relative transition-colors duration-300">
-      {showSoftPOSTerminal && bankDetails && (
+      {showSoftPOSTerminal && (
         <SoftPOSTerminal 
           amount={total} 
-          bankDetails={bankDetails} 
           onConfirm={() => handleCheckout('Soft POS (Transfer)')} 
           onCancel={() => { setShowSoftPOSTerminal(false); if(setNavHidden) setNavHidden(false); }} 
         />
@@ -449,7 +433,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                     onClick={() => togglePaymentMode('Transfer')} 
                     className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter transition-all relative ${paymentMode === 'Transfer' ? 'bg-white dark:bg-emerald-800 text-blue-600 shadow-sm' : 'text-slate-400'}`}
                   >
-                    {!bankDetails && <div className="absolute -top-1 -right-1"><AlertCircle size={10} className="text-red-500" /></div>}
                     <Landmark size={16} className="mb-1" /> Soft POS
                   </button>
                   <button onClick={() => togglePaymentMode('Card')} className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter ${paymentMode === 'Card' ? 'bg-white dark:bg-emerald-800 text-purple-600 shadow-sm' : 'text-slate-400'}`}>
