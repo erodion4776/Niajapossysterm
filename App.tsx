@@ -76,7 +76,7 @@ const AppContent: React.FC = () => {
       
       const lastRecorded = await db.security.get('max_date_recorded');
       
-      // If network time is behind our recorded heartbeat, system clock was tampered
+      // If network time is behind our recorded history, system clock was tampered
       if (lastRecorded && networkTime < lastRecorded.value - 600000) { // 10 min tolerance
         setIsClockTampered(true);
       } else {
@@ -174,7 +174,7 @@ const AppContent: React.FC = () => {
 
       await saveHeartbeat();
 
-      // 3. License Recovery & Signature Validation (Double-Lock Sync)
+      // 3. Wipe Protection & License Recovery (Double-Lock Sync)
       const requestCode = await getRequestCode();
       const dbKey = await db.security.get('activation_key');
       const dbExp = await db.security.get('subscription_expiry');
