@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
@@ -17,7 +18,10 @@ import {
   Users,
   Bell,
   ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  ShieldCheck,
+  Zap,
+  Lock
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -35,7 +39,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const allSales = useLiveQuery(() => db.sales.toArray());
-  
+  const securityTable = useLiveQuery(() => db.security.toArray());
+
+  // License Visibility Logic
+  const licenseInfo = useMemo(() => {
+    const expiry = localStorage.getItem('subscription_expiry');
+    if (!expiry) return { status: 'Free Trial', color: 'bg-blue-500', days: 0 };
+    
+    const expiryTs = parseInt(expiry);
+    const diff = expiryTs - Date.now();
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    
+    if (days <= 0) return { status: 'Expired', color: 'bg-red-500', days: 0 };
+    if (days <= 7) return { status: 'Expiring Soon', color: 'bg-amber-500', days };
+    return { status: 'License Active', color: 'bg-emerald-500', days };
+  }, [securityTable]);
+
   // Alert Logic
   const alerts = useMemo(() => {
     if (!inventory) return { expiring: 0, lowStock: 0 };
@@ -48,18 +67,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     let lowStock = 0;
 
     inventory.forEach(item => {
-      // Expiry Check
       if (item.expiryDate) {
         const exp = new Date(item.expiryDate);
-        if (exp >= now && exp <= sevenDaysFromNow) {
-          expiring++;
-        }
+        if (exp >= now && exp <= sevenDaysFromNow) expiring++;
       }
-      // Low Stock Check
       const threshold = item.minStock || 5;
-      if (item.stock <= threshold) {
-        lowStock++;
-      }
+      if (item.stock <= threshold) lowStock++;
     });
 
     return { expiring, lowStock };
@@ -101,9 +114,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     const itemMap: Record<string, { name: string, quantity: number }> = {};
     allSales.forEach(sale => {
       sale.items.forEach(item => {
-        if (!itemMap[item.name]) {
-          itemMap[item.name] = { name: item.name, quantity: 0 };
-        }
+        if (!itemMap[item.name]) itemMap[item.name] = { name: item.name, quantity: 0 };
         itemMap[item.name].quantity += item.quantity;
       });
     });
@@ -125,7 +136,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       const label = d.toLocaleDateString('en-NG', { weekday: 'short' });
       const dayS = new Date(d).setHours(0, 0, 0, 0);
       const dayE = new Date(d).setHours(23, 59, 59, 999);
-      
       const daySales = last7DaysSales.filter(s => s.timestamp >= dayS && s.timestamp <= dayE);
       const revenue = daySales.reduce((sum, s) => sum + s.total, 0);
       const profit = revenue - daySales.reduce((sum, s) => sum + (s.totalCost || 0), 0);
@@ -138,28 +148,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
-      <header className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Home</h1>
-          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Business Overview</p>
-        </div>
-        <div className="flex gap-2">
-          <div className="relative group">
-            <input 
-              type="date" 
-              className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-            />
-            <div className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2">
-              <CalendarIcon size={20} />
-              {!isToday && <span className="text-[10px] font-black uppercase text-slate-400 dark:text-emerald-500/40">{new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
+      <header className="space-y-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Home</h1>
+            <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Business Overview</p>
+          </div>
+          <div className="flex gap-2">
+            {/* LICENSE STATUS PILL */}
+            {!isStaffDevice && (
+              <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-emerald-950 rounded-full border border-slate-200 dark:border-emerald-800/40 pr-3">
+                 <div className={`w-7 h-7 rounded-full ${licenseInfo.color} flex items-center justify-center text-white shadow-lg`}>
+                    <ShieldCheck size={14} />
+                 </div>
+                 <div className="flex flex-col -space-y-0.5">
+                    <p className={`text-[9px] font-black uppercase tracking-tighter ${licenseInfo.status === 'Expired' ? 'text-red-500' : 'text-slate-800 dark:text-emerald-400'}`}>
+                      {licenseInfo.status}
+                    </p>
+                    {licenseInfo.days > 0 && <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">{licenseInfo.days} Days</p>}
+                 </div>
+              </div>
+            )}
+            
+            <div className="relative group">
+              <input 
+                type="date" 
+                className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
+              <div className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
+                <CalendarIcon size={20} />
+                {!isToday && <span className="text-[10px] font-black uppercase text-slate-400 dark:text-emerald-500/40">{new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
+              </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* PHARMACY GRADE ALERT SYSTEM */}
+      {/* ALERT SYSTEM */}
       {(alerts.expiring > 0 || alerts.lowStock > 0) && showAlerts && (
         <section className="bg-white dark:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800/40 rounded-[32px] overflow-hidden shadow-xl animate-in slide-in-from-top duration-500">
           <div className="p-5 border-b border-emerald-50 dark:border-emerald-800/40 flex justify-between items-center">
@@ -206,24 +233,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </section>
       )}
 
-      {!isToday && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 p-3 rounded-2xl flex items-center justify-between">
-          <p className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest flex items-center gap-2">
-            <History size={14} /> Viewing History: {new Date(selectedDate).toLocaleDateString([], { dateStyle: 'long' })}
-          </p>
-          <button 
-            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-            className="text-[9px] font-black text-white bg-amber-600 px-3 py-1 rounded-full uppercase"
-          >
-            Reset
-          </button>
-        </div>
-      )}
-
       <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden transition-all duration-300">
         <div className="relative z-10 flex flex-col gap-1">
           <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
-            {isToday ? (isAdmin ? 'Net Profit Today' : 'Revenue Today') : (isAdmin ? `Net Profit on ${new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : `Revenue on ${new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}`)}
+            {isToday ? (isAdmin ? 'Net Profit Today' : 'Revenue Today') : (isAdmin ? `Net Profit History` : `Revenue History`)}
           </p>
           <h2 className="text-4xl font-black tracking-tighter">{isAdmin ? formatNaira(netProfitOnDate) : formatNaira(totalSalesOnDate)}</h2>
           <div className="flex items-center gap-2 mt-4">
@@ -259,7 +272,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
           </button>
         </div>
       )}
-
+      
       {bestSeller && (
         <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -318,7 +331,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             </div>
             <div>
               <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">
-                {isToday ? "Today's Sales" : `Sales on ${new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+                {isToday ? "Today's Sales" : `Sales History`}
               </h3>
               <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Transaction Feed</p>
             </div>
@@ -357,24 +370,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             </div>
           )}
         </div>
-      </section>
-
-      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-2xl text-blue-600 dark:text-blue-400">
-            <Users size={24} />
-          </div>
-          <div>
-            <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Debt Tracking</h3>
-            <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Customer Credit Book</p>
-          </div>
-        </div>
-        <button 
-          onClick={() => setPage(Page.DEBTS)}
-          className="bg-emerald-50 dark:bg-emerald-800/40 text-emerald-600 dark:text-emerald-400 px-5 py-2 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
-        >
-          View Book
-        </button>
       </section>
     </div>
   );

@@ -19,14 +19,16 @@ import { RoleSelection } from './components/RoleSelection.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
 import { ThemeProvider } from './ThemeContext.tsx';
-import { getRequestCode, validateStoredLicense } from './utils/security.ts';
+import { getRequestCode, validateLicenseIntegrity } from './utils/security.ts';
 import { 
   LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, 
-  Receipt, ShieldAlert, Users, Wallet, BookOpen, AlertTriangle, MessageCircle, Clock
+  Receipt, ShieldAlert, Users, Wallet, BookOpen, AlertTriangle, MessageCircle, Clock, Wifi,
+  Loader2, RefreshCw
 } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
 const TRIAL_DURATION = 259200000; 
+const OFFLINE_LIMIT_MS = 30 * 24 * 60 * 60 * 1000; // 30 Days
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
@@ -34,6 +36,8 @@ const AppContent: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPirated, setIsPirated] = useState(false);
   const [isClockTampered, setIsClockTampered] = useState(false);
+  const [isOfflineTooLong, setIsOfflineTooLong] = useState(false);
+  const [isVerifyingTime, setIsVerifyingTime] = useState(false);
   
   const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock' | 'expiring'>('all');
 
@@ -57,6 +61,58 @@ const AppContent: React.FC = () => {
   const isExpired = expiryDate ? Date.now() > expiryDate : false;
 
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /**
+   * Fetches Real Time from Lagos, Nigeria to prevent local clock tampering.
+   */
+  const verifyOnlineTime = async () => {
+    if (!navigator.onLine) return;
+    setIsVerifyingTime(true);
+    try {
+      const response = await fetch('https://worldtimeapi.org/api/timezone/Africa/Lagos');
+      if (!response.ok) throw new Error("API Offline");
+      const data = await response.json();
+      const networkTime = new Date(data.datetime).getTime();
+      
+      const lastRecorded = await db.security.get('max_date_recorded');
+      
+      // If network time is behind our recorded history, it's a massive tamper
+      if (lastRecorded && networkTime < lastRecorded.value - 600000) { // 10 min tolerance
+        setIsClockTampered(true);
+      } else {
+        await db.security.put({ key: 'max_date_recorded', value: networkTime });
+        await db.security.put({ key: 'last_online_verification', value: networkTime });
+        setIsOfflineTooLong(false);
+        setIsClockTampered(false);
+      }
+    } catch (e) {
+      console.error("Time verification failed", e);
+    } finally {
+      setIsVerifyingTime(false);
+    }
+  };
+
+  /**
+   * Heartbeat: Saves current timestamp every 5 mins.
+   * Ensures system time can only move forward (Monotonic Clock).
+   */
+  const saveHeartbeat = async () => {
+    const now = Date.now();
+    const lastRecorded = await db.security.get('max_date_recorded');
+    
+    // Check for backward movement
+    if (lastRecorded && now < lastRecorded.value - 60000) { // 1 min jitter allowance
+      setIsClockTampered(true);
+    } else {
+      await db.security.put({ key: 'max_date_recorded', value: Math.max(now, lastRecorded?.value || 0) });
+    }
+    
+    // Check offline threshold (30 days)
+    const lastOnline = await db.security.get('last_online_verification');
+    if (lastOnline && now - lastOnline.value > OFFLINE_LIMIT_MS) {
+      setIsOfflineTooLong(true);
+    }
+  };
 
   const syncStateFromUrl = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -91,22 +147,6 @@ const AppContent: React.FC = () => {
     window.history.pushState({}, '', url.toString());
   }, []);
 
-  /**
-   * Heartbeat Function: Saves current timestamp to security table.
-   * Part of Monotonic Clock Check to prevent backward time shifting.
-   */
-  const saveHeartbeat = async () => {
-    const now = Date.now();
-    const maxDateSetting = await db.security.get('max_date_recorded');
-    
-    // Only update if current time is strictly greater or if it doesn't exist
-    if (!maxDateSetting || now > maxDateSetting.value) {
-      await db.security.put({ key: 'max_date_recorded', value: now });
-    } else if (now < maxDateSetting.value - 60000) { // Allow 1-minute jitter for battery/perf
-      setIsClockTampered(true);
-    }
-  };
-
   useEffect(() => {
     const startup = async () => {
       const hostname = window.location.hostname;
@@ -116,59 +156,63 @@ const AppContent: React.FC = () => {
       
       await initTrialDate();
 
-      // 1. Initial Monotonic Clock Check
-      const maxDateSetting = await db.security.get('max_date_recorded');
+      // 1. Initial Monotonic Check
+      const lastRecorded = await db.security.get('max_date_recorded');
       const now = Date.now();
-      if (maxDateSetting && now < maxDateSetting.value) {
+      if (lastRecorded && now < lastRecorded.value) {
         setIsClockTampered(true);
         return;
       }
+      
+      // 2. Initialize Online Tracker if missing
+      const lastOnline = await db.security.get('last_online_verification');
+      if (!lastOnline) {
+        await db.security.put({ key: 'last_online_verification', value: now });
+      } else if (now - lastOnline.value > OFFLINE_LIMIT_MS) {
+        setIsOfflineTooLong(true);
+      }
+
       await saveHeartbeat();
 
-      // 2. Wipe Protection / License Recovery (Double-Lock Sync)
+      // 3. License Signature Check (Anti-Tamper & Device Tie)
       const requestCode = await getRequestCode();
-      const dbLicenseKey = await db.security.get('activation_key');
-      const dbExpiry = await db.security.get('subscription_expiry');
-      const lsLicenseKey = localStorage.getItem('activation_key');
-      const lsExpiry = localStorage.getItem('subscription_expiry');
+      const dbKey = await db.security.get('activation_key');
+      const dbExp = await db.security.get('subscription_expiry');
+      const lsKey = localStorage.getItem('activation_key');
+      const lsExp = localStorage.getItem('subscription_expiry');
       
       let validKey = '';
-      let validExpiry = 0;
+      let validExp = 0;
 
-      // Try to validate IndexedDB license
-      if (dbLicenseKey?.value && dbExpiry?.value) {
-        const isValid = await validateStoredLicense(requestCode, dbLicenseKey.value, dbExpiry.value);
+      // Validate DB License
+      if (dbKey?.value && dbExp?.value) {
+        const isValid = await validateLicenseIntegrity(requestCode, dbKey.value, dbExp.value);
         if (isValid) {
-          validKey = dbLicenseKey.value;
-          validExpiry = dbExpiry.value;
+          validKey = dbKey.value;
+          validExp = dbExp.value;
         }
       }
 
-      // If DB failed, try LocalStorage
-      if (!validKey && lsLicenseKey && lsExpiry) {
-        const isValid = await validateStoredLicense(requestCode, lsLicenseKey, parseInt(lsExpiry));
+      // If DB corrupted or empty, try LS
+      if (!validKey && lsKey && lsExp) {
+        const isValid = await validateLicenseIntegrity(requestCode, lsKey, parseInt(lsExp));
         if (isValid) {
-          validKey = lsLicenseKey;
-          validExpiry = parseInt(lsExpiry);
+          validKey = lsKey;
+          validExp = parseInt(lsExp);
         }
       }
 
-      // Sync and Restore if we found a valid license anywhere
-      if (validKey && validExpiry) {
-        // Restore LS
+      // Sync and Set
+      if (validKey && validExp) {
         localStorage.setItem('activation_key', validKey);
-        localStorage.setItem('subscription_expiry', validExpiry.toString());
+        localStorage.setItem('subscription_expiry', validExp.toString());
         localStorage.setItem('is_activated', 'true');
-        
-        // Restore DB
         await db.security.put({ key: 'activation_key', value: validKey });
-        await db.security.put({ key: 'subscription_expiry', value: validExpiry });
+        await db.security.put({ key: 'subscription_expiry', value: validExp });
         await db.settings.put({ key: 'is_activated', value: true });
-
-        setExpiryDate(validExpiry);
+        setExpiryDate(validExp);
         setIsActivated(true);
       } else {
-        // Corrupt or missing license
         setIsActivated(false);
         localStorage.setItem('is_activated', 'false');
       }
@@ -176,13 +220,17 @@ const AppContent: React.FC = () => {
       syncStateFromUrl();
       setIsInitialized(true);
 
-      // Start Heartbeat: Every 5 minutes
+      // Start 5-min Heartbeat
       heartbeatRef.current = setInterval(saveHeartbeat, 5 * 60 * 1000);
+      
+      if (navigator.onLine) verifyOnlineTime();
     };
     startup();
 
+    window.addEventListener('online', verifyOnlineTime);
     window.addEventListener('popstate', syncStateFromUrl);
     return () => {
+      window.removeEventListener('online', verifyOnlineTime);
       window.removeEventListener('popstate', syncStateFromUrl);
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
@@ -232,8 +280,8 @@ const AppContent: React.FC = () => {
     return (
       <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
         <Clock size={80} className="text-amber-500 mb-6 animate-bounce" />
-        <h1 className="text-3xl font-black mb-4 uppercase leading-none text-amber-500 italic">Time-Tamper Lock</h1>
-        <p className="text-slate-300 max-w-sm font-medium mb-8">System time has been moved backward. Correct your device clock to continue using the app.</p>
+        <h1 className="text-3xl font-black mb-4 uppercase leading-none text-amber-500 italic tracking-tighter">Time-Tamper Lock</h1>
+        <p className="text-slate-300 max-w-sm font-medium mb-8">Phone clock has been moved backward. Please correct your device date and time settings to unlock.</p>
         <button onClick={() => window.location.reload()} className="bg-amber-600 px-10 py-5 rounded-[24px] font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Verify Clock Now</button>
       </div>
     );
@@ -286,12 +334,33 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500 transition-colors duration-300">
       
+      {/* 30-Day Offline Mandatory Check Overlay */}
+      {isOfflineTooLong && (
+        <div className="fixed inset-0 z-[2000] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-white text-center">
+           <div className="w-24 h-24 bg-amber-500/20 rounded-[40px] flex items-center justify-center mb-8 border border-amber-500/30">
+              <Wifi size={48} className="text-amber-500 animate-pulse" />
+           </div>
+           <h1 className="text-3xl font-black mb-4 uppercase tracking-tighter">Security Check</h1>
+           <p className="text-slate-300 mb-8 max-w-xs font-medium leading-relaxed">
+             Security Policy: You have been offline for 30 days. Please turn on data for 10 seconds to verify your license.
+           </p>
+           <button 
+             onClick={verifyOnlineTime}
+             disabled={isVerifyingTime || !navigator.onLine}
+             className="w-full max-w-xs bg-emerald-600 text-white font-black py-6 rounded-[28px] shadow-xl uppercase tracking-widest text-xs flex items-center justify-center gap-3 active:scale-95 disabled:bg-slate-700"
+           >
+             {!navigator.onLine ? <AlertTriangle size={18}/> : (isVerifyingTime ? <Loader2 className="animate-spin" /> : <RefreshCw />)} 
+             {!navigator.onLine ? 'Turn On Internet' : (isVerifyingTime ? 'Verifying...' : 'Verify License Now')}
+           </button>
+        </div>
+      )}
+
       {/* Background Grace Period Banner */}
       {expiryDate && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 7 && (
         <div className="bg-amber-500 text-white px-4 py-3 text-[10px] font-black uppercase flex items-center justify-between sticky top-0 z-[60] shadow-lg border-b border-amber-600/20">
           <div className="flex items-center gap-2">
             <AlertTriangle size={14} className="animate-pulse" />
-            <span>Your subscription expires in {daysUntilExpiry} days. Contact developer to renew.</span>
+            <span>License expires in {daysUntilExpiry} days. Contact developer to renew.</span>
           </div>
           <a href="https://wa.me/2347062228026" target="_blank" className="bg-white text-amber-600 px-4 py-1.5 rounded-full flex items-center gap-1 active:scale-95 transition-all shadow-sm">
              <MessageCircle size={10} /> Renew

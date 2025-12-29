@@ -37,8 +37,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
     const result = await verifyActivationKey(requestCode, activationKey);
     
     if (result.isValid && result.expiry) {
-      // 1. Wipe Protection Sync (LS + DB Security Table)
-      // Save both the raw key and expiry for monotonic/integrity verification later
+      // 1. Wipe Protection & Multi-Storage Save
+      // Save both the raw activation key string AND the decoded expiry.
+      // App.tsx uses validateLicenseIntegrity(ID, Key, Exp) to prevent IndexedDB hacking.
       localStorage.setItem('activation_key', activationKey.trim().toUpperCase());
       localStorage.setItem('subscription_expiry', result.expiry.toString());
       localStorage.setItem('is_activated', 'true');
@@ -48,10 +49,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
       await db.security.put({ key: 'subscription_expiry', value: result.expiry });
       await db.settings.put({ key: 'is_activated', value: true });
 
-      // If it was just an expiry renewal, we don't need onboarding again
-      const isFirstTime = localStorage.getItem('is_setup_pending') !== 'false';
+      // Check if this is a fresh setup or a renewal
+      const isSetupDone = localStorage.getItem('is_setup_pending') === 'false';
       
-      if (isFirstTime) {
+      if (!isSetupDone) {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         setTempOtp(otp);
         localStorage.setItem('temp_otp', otp);
@@ -97,17 +98,17 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
       </div>
       
       <h1 className="text-3xl font-black mb-2 tracking-tighter uppercase">
-        {isExpired ? 'Subscription Expired' : (isTrialExpired ? 'Trial Expired' : 'Enter License')}
+        {isExpired ? 'License Expired' : (isTrialExpired ? 'Trial Expired' : 'System Activation')}
       </h1>
       <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm font-medium">
         {isExpired 
-          ? 'Your annual subscription has ended. Pay ₦10,000 for another year of offline access.' 
-          : 'License required for activation. Send your Request Code to get an activation key.'}
+          ? 'Your annual license has ended. Pay ₦10,000 for another year of offline access.' 
+          : 'Offline license required. Send your Request Code to get an activation key.'}
       </p>
 
       <div className="w-full max-w-sm space-y-6">
         <div className="bg-emerald-900/40 border border-emerald-800/60 p-6 rounded-[32px] space-y-3 shadow-inner">
-          <p className="text-emerald-500/60 text-[10px] font-black uppercase tracking-[0.2em]">Request Code</p>
+          <p className="text-emerald-500/60 text-[10px] font-black uppercase tracking-[0.2em]">Your Device ID</p>
           <div className="flex items-center justify-center gap-3">
             <span className="text-2xl font-mono font-black tracking-widest text-white">{requestCode}</span>
             <button onClick={handleCopy} className="p-2 bg-emerald-800/50 hover:bg-emerald-700/50 rounded-lg active:scale-90 transition-all">
@@ -140,7 +141,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
           <button onClick={handleActivate} disabled={isVerifying || !activationKey} className="w-full bg-white text-emerald-900 font-black py-5 rounded-[24px] hover:bg-emerald-50 active:scale-95 transition-all shadow-lg text-xs uppercase tracking-widest">
             {isVerifying ? 'Verifying...' : 'Verify & Unlock'}
           </button>
-          {error && <p className="text-red-400 text-[10px] font-black uppercase tracking-widest animate-bounce mt-2">Invalid Key Provided</p>}
+          {error && <p className="text-red-400 text-[10px] font-black uppercase tracking-widest animate-bounce mt-2">Invalid Activation Key</p>}
         </div>
       </div>
     </div>
