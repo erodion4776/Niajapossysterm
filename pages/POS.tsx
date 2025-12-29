@@ -7,11 +7,13 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, 
   MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, 
   Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight,
-  BookOpen, CreditCard, AlertCircle, Banknote, Landmark, CreditCard as CardIcon
+  BookOpen, CreditCard, AlertCircle, Banknote, Landmark, CreditCard as CardIcon,
+  ShieldCheck, HelpCircle
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
 import { formatReceipt } from '../utils/receiptFormatter.ts';
+import { SoftPOSTerminal } from '../components/SoftPOSTerminal.tsx';
 
 interface POSProps {
   user: DBUser;
@@ -34,6 +36,10 @@ export const POS: React.FC<POSProps> = ({ user }) => {
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [saveChangeToWallet, setSaveChangeToWallet] = useState(false);
 
+  // Soft POS States
+  const [showSoftPOSTerminal, setShowSoftPOSTerminal] = useState(false);
+  const [bankDetails, setBankDetails] = useState<{bankName: string, accountNumber: string, accountName: string} | null>(null);
+
   // Printing States
   const [isPrinting, setIsPrinting] = useState(false);
   const [printerName, setPrinterName] = useState(() => localStorage.getItem('last_printer_name'));
@@ -42,6 +48,22 @@ export const POS: React.FC<POSProps> = ({ user }) => {
   const [isScanning, setIsScanning] = useState(false);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = "reader";
+
+  useEffect(() => {
+    const loadBankDetails = async () => {
+      const bn = await db.settings.get('soft_pos_bank');
+      const an = await db.settings.get('soft_pos_acc_num');
+      const anm = await db.settings.get('soft_pos_acc_name');
+      if (bn && an && anm) {
+        setBankDetails({
+          bankName: bn.value,
+          accountNumber: an.value,
+          accountName: anm.value
+        });
+      }
+    };
+    loadBankDetails();
+  }, []);
 
   const filteredItems = inventory?.filter(item => 
     (item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -99,6 +121,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     setAmountPaid('');
     setSaveChangeToWallet(false);
     setPaymentMode('Cash');
+    setShowSoftPOSTerminal(false);
   };
 
   const togglePaymentMode = (mode: 'Cash' | 'Transfer' | 'Card' | 'Debt') => {
@@ -142,15 +165,17 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     }
   }, [customerPhone]);
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (explicitMode?: string) => {
     if (cart.length === 0) return;
     
-    if (paymentMode === 'Debt') {
+    if (paymentMode === 'Debt' && !explicitMode) {
       if (!selectedCustomer) {
         alert("Select or search for a customer before recording a debt!");
         return;
       }
     }
+
+    const modeToSave = explicitMode || paymentMode;
 
     const sale: Sale = {
       uuid: crypto.randomUUID(),
@@ -159,7 +184,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
       walletUsed: paymentMode !== 'Debt' ? walletCreditApplied : 0,
       walletSaved: paymentMode !== 'Debt' && saveChangeToWallet ? changeDue : 0,
-      paymentMethod: paymentMode,
+      paymentMethod: (modeToSave === 'Soft POS' ? 'Transfer' : modeToSave) as any,
       timestamp: Date.now(),
       staff_id: String(user.id || user.role),
       staff_name: user.name || user.role,
@@ -168,7 +193,6 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
     try {
       await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
-        // 1. Inventory Logic
         for (const item of cart) {
           if (!item.id) continue;
           const invItem = await db.inventory.get(item.id);
@@ -189,7 +213,6 @@ export const POS: React.FC<POSProps> = ({ user }) => {
           }
         }
 
-        // 2. Customer Ledger
         if (selectedCustomer) {
           if (paymentMode === 'Debt') {
             const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
@@ -223,6 +246,14 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     } catch (error: any) {
       alert('Checkout failed: ' + error.message);
     }
+  };
+
+  const triggerSoftPOSTerminal = () => {
+    if (!bankDetails) {
+      alert("Setup Bank Details in Admin Settings first!");
+      return;
+    }
+    setShowSoftPOSTerminal(true);
   };
 
   const handlePrint = async () => {
@@ -276,6 +307,15 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
   return (
     <div className="flex flex-col h-full bg-[#fcfcfc] dark:bg-emerald-950 relative transition-colors duration-300">
+      {showSoftPOSTerminal && bankDetails && (
+        <SoftPOSTerminal 
+          amount={total} 
+          bankDetails={bankDetails} 
+          onConfirm={() => handleCheckout('Soft POS (Transfer)')} 
+          onCancel={() => setShowSoftPOSTerminal(false)} 
+        />
+      )}
+
       <div className={`p-4 space-y-4 flex-1 overflow-auto transition-all ${cart.length > 0 ? 'pb-40' : 'pb-24'}`}>
         <header className="flex justify-between items-center">
           <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Quick POS</h1>
@@ -356,8 +396,12 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                   <button onClick={() => togglePaymentMode('Cash')} className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter ${paymentMode === 'Cash' ? 'bg-white dark:bg-emerald-800 text-emerald-600 shadow-sm' : 'text-slate-400'}`}>
                     <Banknote size={16} className="mb-1" /> Cash
                   </button>
-                  <button onClick={() => togglePaymentMode('Transfer')} className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter ${paymentMode === 'Transfer' ? 'bg-white dark:bg-emerald-800 text-blue-600 shadow-sm' : 'text-slate-400'}`}>
-                    <Landmark size={16} className="mb-1" /> Transfer
+                  <button 
+                    onClick={() => togglePaymentMode('Transfer')} 
+                    className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter transition-all relative ${paymentMode === 'Transfer' ? 'bg-white dark:bg-emerald-800 text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                  >
+                    {!bankDetails && <div className="absolute -top-1 -right-1"><AlertCircle size={10} className="text-red-500" /></div>}
+                    <Landmark size={16} className="mb-1" /> Soft POS
                   </button>
                   <button onClick={() => togglePaymentMode('Card')} className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter ${paymentMode === 'Card' ? 'bg-white dark:bg-emerald-800 text-purple-600 shadow-sm' : 'text-slate-400'}`}>
                     <CardIcon size={16} className="mb-1" /> POS Card
@@ -407,10 +451,25 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                     <div className="flex justify-between text-xs font-black uppercase text-slate-400"><span>Grand Total</span><span className="text-slate-800 dark:text-emerald-50">{formatNaira(total)}</span></div>
                     {walletCreditApplied > 0 && <div className="flex justify-between text-[10px] font-bold uppercase text-emerald-600"><span>Wallet Credit Applied</span><span>-{formatNaira(walletCreditApplied)}</span></div>}
                     
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-emerald-600 uppercase ml-2 flex items-center gap-1"><Banknote size={10}/> Cash Received (₦)</label>
-                      <input type="number" inputMode="decimal" placeholder="0.00" className="w-full p-4 bg-white dark:bg-emerald-900 border-2 border-emerald-100 rounded-2xl font-black text-2xl text-emerald-600 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
-                    </div>
+                    {paymentMode === 'Cash' && (
+                       <div className="space-y-1 animate-in slide-in-from-top duration-300">
+                        <label className="text-[10px] font-black text-emerald-600 uppercase ml-2 flex items-center gap-1"><Banknote size={10}/> Cash Received (₦)</label>
+                        <input type="number" inputMode="decimal" placeholder="0.00" className="w-full p-4 bg-white dark:bg-emerald-900 border-2 border-emerald-100 rounded-2xl font-black text-2xl text-emerald-600 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
+                      </div>
+                    )}
+
+                    {paymentMode === 'Transfer' && (
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 space-y-3 animate-in slide-in-from-top duration-300">
+                         <div className="flex items-center gap-2">
+                           <ShieldCheck size={14} className="text-blue-600" />
+                           <p className="text-[9px] font-black text-blue-600 uppercase">Transfer Verification Required</p>
+                         </div>
+                         <p className="text-[10px] font-bold text-blue-800 dark:text-blue-300 leading-relaxed">
+                           System will show your bank details to customer on next screen.
+                         </p>
+                      </div>
+                    )}
+
                     {changeDue > 0 && (
                       <div className="flex flex-col gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 rounded-2xl animate-in slide-in-from-top duration-300">
                         <div className="flex justify-between items-center"><span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Change Due</span><span className="text-2xl font-black text-amber-700">{formatNaira(changeDue)}</span></div>
@@ -428,8 +487,11 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <button onClick={() => setIsCartExpanded(false)} className="bg-slate-100 dark:bg-emerald-800 text-slate-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">Cancel</button>
-                  <button onClick={handleCheckout} className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-all ${paymentMode === 'Debt' ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-emerald-600 text-white shadow-emerald-200'}`}>
-                    {paymentMode === 'Debt' ? 'Record Debt' : 'Finish Sale'} <ArrowRight size={16} />
+                  <button 
+                    onClick={() => paymentMode === 'Transfer' ? triggerSoftPOSTerminal() : handleCheckout()} 
+                    className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-all ${paymentMode === 'Debt' ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-emerald-600 text-white shadow-emerald-200'}`}
+                  >
+                    {paymentMode === 'Debt' ? 'Record Debt' : (paymentMode === 'Transfer' ? 'Open Soft POS' : 'Finish Sale')} <ArrowRight size={16} />
                   </button>
                 </div>
               </div>

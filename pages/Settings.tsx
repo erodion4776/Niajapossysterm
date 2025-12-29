@@ -15,7 +15,7 @@ import {
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
   Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert, Wifi, TrendingUp, AlertTriangle, 
-  ChevronRight, MapPin, Phone, Receipt, Info, LogOut
+  ChevronRight, MapPin, Phone, Receipt, Info, LogOut, Landmark, CreditCard
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -37,6 +37,11 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const [shopName, setShopName] = useState(() => localStorage.getItem('shop_name') || 'NaijaShop');
   const [shopInfo, setShopInfo] = useState(() => localStorage.getItem('shop_info') || 'Address, City, Phone');
   const [receiptFooter, setReceiptFooter] = useState(() => localStorage.getItem('receipt_footer') || 'Thank you for your patronage!');
+
+  // Soft POS State
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [accountName, setAccountName] = useState('');
 
   // UI States
   const [showAddUser, setShowAddUser] = useState(false);
@@ -69,6 +74,18 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const printerName = localStorage.getItem('last_printer_name');
 
   useEffect(() => {
+    const loadBankDetails = async () => {
+      const bn = await db.settings.get('soft_pos_bank');
+      const an = await db.settings.get('soft_pos_acc_num');
+      const anm = await db.settings.get('soft_pos_acc_name');
+      if (bn) setBankName(bn.value);
+      if (an) setAccountNumber(an.value);
+      if (anm) setAccountName(anm.value);
+    };
+    loadBankDetails();
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem('shop_name', shopName);
   }, [shopName]);
 
@@ -79,6 +96,13 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   useEffect(() => {
     localStorage.setItem('receipt_footer', receiptFooter);
   }, [receiptFooter]);
+
+  const saveBankDetails = async () => {
+    await db.settings.put({ key: 'soft_pos_bank', value: bankName });
+    await db.settings.put({ key: 'soft_pos_acc_num', value: accountNumber });
+    await db.settings.put({ key: 'soft_pos_acc_name', value: accountName });
+    alert("Soft POS Bank Details Saved!");
+  };
 
   const handleBackup = async () => {
     setIsBackingUp(true);
@@ -195,7 +219,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       const updated = itemsToUpdate.map(item => {
         let current = bulkData.targetField === 'Selling Price' ? item.sellingPrice : item.costPrice;
         let newValue = bulkData.updateType === 'Percentage' ? current * (1 + bulkData.value / 100) : current + bulkData.value;
-        newValue = Math.ceil(newValue / 50) * 50; // Smart Rounding for Nigerian context
+        newValue = Math.ceil(newValue / 50) * 50; 
         return { 
           ...item, 
           [bulkData.targetField === 'Selling Price' ? 'sellingPrice' : 'costPrice']: newValue 
@@ -230,6 +254,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   };
 
   const faqItems = [
+    { id: 'softpos', title: 'What is Soft POS?', content: 'Soft POS allows you to accept bank transfers as if you had a physical POS terminal. It displays your bank details to customers on a high-end screen and requires you to verify the credit alert before completing the sale.' },
     { id: 'staff', title: 'How to Setup Staff', content: '1. Add a Staff member in Settings. 2. Tap "Invite" (Share Icon) to get a code. 3. Send that code to your staff via WhatsApp. 4. They open the app on their phone, tap "Import Code / Sync", and paste the code.' },
     { id: 'offline', title: 'Daily Offline Use', content: 'Record all sales offline. At the end of the day, have your staff click "Send Report" in Sales History to send you a sync file via WhatsApp. Use "Merge Staff" here to sync their sales.' },
     { id: 'backup', title: 'Data Safety', content: 'Backup your shop daily. The backup file is saved to your phone\'s Downloads. We recommend emailing it to yourself or saving to Google Drive for 100% safety.' },
@@ -254,6 +279,38 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           </button>
         </div>
       </header>
+
+      {/* Soft POS Setup */}
+      <section className="bg-slate-900 text-white p-6 rounded-[32px] shadow-xl space-y-4 border border-emerald-500/20">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400">
+            <CreditCard size={18} />
+          </div>
+          <div>
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Soft POS Setup</h2>
+            <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Customer Bank Transfers</p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Bank Name</label>
+            <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="e.g. OPay / Access Bank" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Account Number</label>
+            <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-mono font-black text-lg outline-none focus:ring-2 focus:ring-emerald-500" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder="0123456789" maxLength={10} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Account Name</label>
+            <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500" value={accountName} onChange={e => setAccountName(e.target.value)} placeholder="e.g. AL-BARAKAH VENTURES" />
+          </div>
+          <button onClick={saveBankDetails} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">Save Bank Details</button>
+          <div className="bg-white/5 p-3 rounded-2xl flex gap-2 items-center">
+            <Info size={12} className="text-emerald-500 flex-shrink-0" />
+            <p className="text-[8px] font-bold text-slate-400 uppercase leading-relaxed">These details will be shown to customers during Soft POS transfers.</p>
+          </div>
+        </div>
+      </section>
 
       {/* Shop Branding Section */}
       <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
@@ -407,7 +464,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
               <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900 flex items-center justify-center mb-2">
                 <RefreshCw className={`text-emerald-400 ${isMerging ? 'animate-spin' : ''}`} size={20}/>
               </div>
-              <span className="text-[8px] font-black uppercase tracking-widest text-emerald-400">Merge Staff Report</span>
+              <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Merge Staff Report</span>
             </label>
           </div>
           
@@ -516,7 +573,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       {/* Inflation Protector (Bulk Update) Modal */}
       {showBulkModal && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-md rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-md rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
              <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-3">
                    <div className="p-2 bg-amber-50 dark:bg-amber-900 rounded-xl text-amber-600"><TrendingUp size={20}/></div>
