@@ -111,7 +111,7 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(16).stores({
+dexieDb.version(17).stores({
   inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock',
   categories: '++id, name',
   customers: '++id, &phone, name, walletBalance',
@@ -136,6 +136,13 @@ export async function initTrialDate() {
   const dbTrialStart = await db.settings.get('trial_start');
   if (!dbTrialStart) {
     await db.settings.put({ key: 'trial_start', value: trialStartValue });
+  }
+
+  // Update max seen date for clock-tamper protection
+  const now = Date.now();
+  const maxDateSetting = await db.settings.get('max_date_recorded');
+  if (!maxDateSetting || now > maxDateSetting.value) {
+    await db.settings.put({ key: 'max_date_recorded', value: now });
   }
 
   if (navigator.storage && navigator.storage.persist) {

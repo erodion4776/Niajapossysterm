@@ -1,83 +1,56 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NaijaShop | License Generator</title>
+    <title>NaijaShop | Subscription Key Gen</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@500;800&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #022c22; /* emerald-950 */
-            color: #ecfdf5;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #022c22; color: #ecfdf5; }
         .mono { font-family: 'JetBrains Mono', monospace; }
-        .glass {
-            background: rgba(6, 78, 59, 0.4);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-        }
-        .neon-border {
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.1), inset 0 0 15px rgba(16, 185, 129, 0.1);
-        }
+        .glass { background: rgba(6, 78, 59, 0.4); backdrop-filter: blur(12px); border: 1px solid rgba(16, 185, 129, 0.2); }
     </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-6">
     <div class="w-full max-w-md space-y-8">
         <div class="text-center space-y-2">
-            <div class="inline-flex p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-            </div>
-            <h1 class="text-3xl font-black uppercase tracking-tighter">License Generator</h1>
-            <p class="text-emerald-500/60 text-xs font-bold uppercase tracking-[0.2em]">NaijaShop POS Admin Tool</p>
+            <h1 class="text-3xl font-black uppercase tracking-tighter italic">NaijaKey v2.0</h1>
+            <p class="text-emerald-500/60 text-xs font-bold uppercase tracking-[0.2em]">Subscription License Generator</p>
         </div>
 
-        <div class="glass p-8 rounded-[40px] neon-border space-y-6">
+        <div class="glass p-8 rounded-[40px] space-y-6">
             <div class="space-y-2">
                 <label class="text-[10px] font-black text-emerald-500 uppercase tracking-widest ml-2">Request Code</label>
-                <input 
-                    type="text" 
-                    id="requestCode"
-                    placeholder="NG-XX-XXX"
-                    class="w-full bg-black/20 border border-emerald-800/50 rounded-2xl px-5 py-4 mono text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all uppercase placeholder:opacity-20"
-                >
+                <input type="text" id="requestCode" placeholder="NG-XX-XXX" class="w-full bg-black/20 border border-emerald-800/50 rounded-2xl px-5 py-4 mono text-emerald-400 focus:outline-none uppercase">
+            </div>
+
+            <div class="space-y-2">
+                <label class="text-[10px] font-black text-emerald-500 uppercase tracking-widest ml-2">Subscription Months</label>
+                <select id="months" class="w-full bg-black/20 border border-emerald-800/50 rounded-2xl px-5 py-4 mono text-emerald-400 focus:outline-none">
+                    <option value="12">12 Months (₦10,000)</option>
+                    <option value="24">24 Months (₦18,000)</option>
+                    <option value="1">1 Month (Trial)</option>
+                </select>
             </div>
 
             <div class="space-y-2">
                 <label class="text-[10px] font-black text-emerald-500 uppercase tracking-widest ml-2">Secret Salt</label>
-                <input 
-                    type="password" 
-                    id="salt"
-                    placeholder="Enter VITE_APP_SALT"
-                    class="w-full bg-black/20 border border-emerald-800/50 rounded-2xl px-5 py-4 mono text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all placeholder:opacity-20"
-                >
+                <input type="password" id="salt" placeholder="VITE_APP_SALT" class="w-full bg-black/20 border border-emerald-800/50 rounded-2xl px-5 py-4 mono text-emerald-400 focus:outline-none">
             </div>
 
-            <button 
-                onclick="generateKey()"
-                class="w-full bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black py-5 rounded-2xl shadow-xl shadow-emerald-500/10 active:scale-[0.98] transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2"
-            >
-                Generate Activation Key
+            <button onclick="generateKey()" class="w-full bg-emerald-500 text-emerald-950 font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2">
+                Generate Yearly Key
             </button>
         </div>
 
-        <div id="resultContainer" class="hidden animate-in fade-in zoom-in duration-300">
+        <div id="resultContainer" class="hidden">
             <div class="glass p-8 rounded-[40px] border-emerald-500/40 text-center space-y-4">
-                <p class="text-[10px] font-black text-emerald-500/60 uppercase tracking-[0.3em]">Valid Activation Key</p>
-                <div class="relative group cursor-pointer" onclick="copyKey()">
-                    <div id="resultKey" class="text-4xl font-black mono tracking-widest text-white py-2">XXXXX-XXXXX</div>
-                    <div class="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/5 transition-colors rounded-xl flex items-center justify-center">
-                        <span id="copyHint" class="text-[10px] font-black uppercase tracking-widest text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity bg-emerald-950/80 px-4 py-2 rounded-full border border-emerald-500/20">Click to Copy</span>
-                    </div>
-                </div>
+                <p class="text-[10px] font-black text-emerald-500/60 uppercase tracking-[0.3em]">Timed Activation Key</p>
+                <div id="resultKey" class="text-2xl font-black mono tracking-widest text-white py-2 break-all cursor-pointer" onclick="copyKey()">XXXXX-XXXXX</div>
+                <p id="expiryPreview" class="text-[9px] font-bold text-emerald-400 uppercase"></p>
             </div>
-        </div>
-
-        <div class="text-center">
-            <p class="text-[10px] font-bold text-emerald-900 uppercase tracking-widest">Confidential Developer Property</p>
         </div>
     </div>
 
@@ -90,37 +63,33 @@
         }
 
         async function generateKey() {
-            const requestCode = document.getElementById('requestCode').value.trim().toUpperCase();
+            const code = document.getElementById('requestCode').value.trim().toUpperCase();
+            const months = parseInt(document.getElementById('months').value);
             const salt = document.getElementById('salt').value.trim();
 
-            if (!requestCode || !salt) {
-                alert("Please fill in both Request Code and Salt.");
-                return;
-            }
+            if (!code || !salt) return alert("Fill all fields");
 
-            // Must match utils/security.ts: RequestCode + Salt
-            const combo = requestCode + salt;
-            const secretHash = await hashString(combo);
-            
-            // First 10 chars, uppercase
-            const finalKey = secretHash.substring(0, 10).toUpperCase();
+            // Calculate Expiry
+            const expiryDate = new Date();
+            expiryDate.setMonth(expiryDate.getMonth() + months);
+            const expiryTs = expiryDate.getTime();
+            const expiryHex = expiryTs.toString(16).toUpperCase();
+
+            // Hash(Code + ExpiryHex + Salt)
+            const signatureHash = await hashString(code + expiryHex + salt);
+            const signature = signatureHash.substring(0, 10).toUpperCase();
+
+            const finalKey = `${signature}-${expiryHex}`;
 
             document.getElementById('resultKey').innerText = finalKey;
+            document.getElementById('expiryPreview').innerText = "Expires: " + expiryDate.toLocaleDateString();
             document.getElementById('resultContainer').classList.remove('hidden');
         }
 
         function copyKey() {
             const key = document.getElementById('resultKey').innerText;
             navigator.clipboard.writeText(key);
-            
-            const hint = document.getElementById('copyHint');
-            hint.innerText = "COPIED!";
-            hint.classList.add('text-white', 'bg-emerald-500');
-            
-            setTimeout(() => {
-                hint.innerText = "Click to Copy";
-                hint.classList.remove('text-white', 'bg-emerald-500');
-            }, 2000);
+            alert("Copied!");
         }
     </script>
 </body>

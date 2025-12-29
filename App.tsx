@@ -19,7 +19,10 @@ import { RoleSelection } from './components/RoleSelection.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
 import { ThemeProvider } from './ThemeContext.tsx';
-import { LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, Receipt, ShieldAlert, Users, Wallet, BookOpen } from 'lucide-react';
+import { 
+  LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, 
+  Receipt, ShieldAlert, Users, Wallet, BookOpen, AlertTriangle, MessageCircle, Clock
+} from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
 const TRIAL_DURATION = 259200000; 
@@ -29,6 +32,7 @@ const AppContent: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPirated, setIsPirated] = useState(false);
+  const [isClockTampered, setIsClockTampered] = useState(false);
   
   const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock' | 'expiring'>('all');
 
@@ -39,8 +43,17 @@ const AppContent: React.FC = () => {
   const [deviceRole, setDeviceRole] = useState<DeviceRole | null>(() => localStorage.getItem('device_role') as DeviceRole);
   const [showRoleSelection, setShowRoleSelection] = useState(false);
 
+  // Subscription State
+  const [expiryDate, setExpiryDate] = useState<number | null>(() => {
+    const saved = localStorage.getItem('subscription_expiry');
+    return saved ? parseInt(saved) : null;
+  });
+
   const trialStartDate = localStorage.getItem('trial_start_date');
   const isTrialValid = trialStartDate ? (Date.now() - parseInt(trialStartDate)) < TRIAL_DURATION : false;
+  
+  const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+  const isExpired = expiryDate ? Date.now() > expiryDate : false;
 
   const syncStateFromUrl = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
@@ -83,6 +96,29 @@ const AppContent: React.FC = () => {
       }
       
       await initTrialDate();
+
+      // 1. Clock Tamper Check
+      const maxDateSetting = await db.settings.get('max_date_recorded');
+      if (maxDateSetting && Date.now() < maxDateSetting.value) {
+        setIsClockTampered(true);
+      } else {
+        await db.settings.put({ key: 'max_date_recorded', value: Date.now() });
+      }
+
+      // 2. License Wipe Protection Sync
+      const dbLicense = await db.settings.get('subscription_expiry');
+      const lsLicense = localStorage.getItem('subscription_expiry');
+      
+      if (dbLicense?.value && !lsLicense) {
+        localStorage.setItem('subscription_expiry', dbLicense.value.toString());
+        localStorage.setItem('is_activated', 'true');
+        setExpiryDate(dbLicense.value);
+        setIsActivated(true);
+      } else if (lsLicense && !dbLicense?.value) {
+        await db.settings.put({ key: 'subscription_expiry', value: parseInt(lsLicense) });
+        await db.settings.put({ key: 'is_activated', value: true });
+      }
+
       syncStateFromUrl();
       
       const dbActivated = await db.settings.get('is_activated');
@@ -138,13 +174,27 @@ const AppContent: React.FC = () => {
     );
   }
 
+  if (isClockTampered) {
+    return (
+      <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
+        <Clock size={80} className="text-amber-500 mb-6 animate-bounce" />
+        <h1 className="text-3xl font-black mb-4 uppercase leading-none">Clock Tamper Detected</h1>
+        <p className="text-slate-300 max-w-sm font-medium mb-8">Your phone's system time has been moved backward. Please correct your date and time settings to use the app.</p>
+        <button onClick={() => window.location.reload()} className="bg-emerald-600 px-8 py-4 rounded-2xl font-black uppercase text-xs">Verify Time Again</button>
+      </div>
+    );
+  }
+
   if (!isInitialized) return null;
 
   if (isAtLanding && !isActivated && !isTrialing && !showRoleSelection) return <LandingPage onStartTrial={handleStartTrial} />;
   if (showRoleSelection) return <RoleSelection onSelect={handleRoleSelection} />;
   
   if (deviceRole === 'Owner') {
-    if (!isActivated && (!isTrialing || !isTrialValid)) return <LockScreen onUnlock={() => window.location.reload()} />;
+    // If not activated OR if subscription has expired, show lock
+    if ((!isActivated && (!isTrialing || !isTrialValid)) || isExpired) {
+      return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
+    }
     if (isSetupPending) return <Onboarding onComplete={() => window.location.reload()} />;
   }
   
@@ -183,6 +233,20 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500 transition-colors duration-300">
+      
+      {/* Grace Period Banner */}
+      {expiryDate && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 7 && (
+        <div className="bg-amber-500 text-white px-4 py-2 text-[10px] font-black uppercase flex items-center justify-between sticky top-0 z-[60]">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={14} />
+            <span>Subscription expires in {daysUntilExpiry} days.</span>
+          </div>
+          <a href="https://wa.me/2347062228026" target="_blank" className="bg-white text-amber-600 px-3 py-1 rounded-full flex items-center gap-1">
+             <MessageCircle size={10} /> Renew
+          </a>
+        </div>
+      )}
+
       <main className="flex-1 overflow-auto">{renderPage()}</main>
       
       {!isStaffDevice && <BackupReminder />}
