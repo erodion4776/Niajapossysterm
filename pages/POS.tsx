@@ -17,9 +17,10 @@ import { SoftPOSTerminal } from '../components/SoftPOSTerminal.tsx';
 
 interface POSProps {
   user: DBUser;
+  setNavHidden?: (hidden: boolean) => void;
 }
 
-export const POS: React.FC<POSProps> = ({ user }) => {
+export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<(SaleItem & { image?: string })[]>([]);
@@ -122,6 +123,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     setSaveChangeToWallet(false);
     setPaymentMode('Cash');
     setShowSoftPOSTerminal(false);
+    if (setNavHidden) setNavHidden(false);
   };
 
   const togglePaymentMode = (mode: 'Cash' | 'Transfer' | 'Card' | 'Debt') => {
@@ -184,7 +186,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
       walletUsed: paymentMode !== 'Debt' ? walletCreditApplied : 0,
       walletSaved: paymentMode !== 'Debt' && saveChangeToWallet ? changeDue : 0,
-      paymentMethod: (modeToSave === 'Soft POS' ? 'Transfer' : modeToSave) as any,
+      paymentMethod: (modeToSave === 'Soft POS (Transfer)' ? 'Transfer' : (modeToSave === 'Soft POS' ? 'Transfer' : modeToSave)) as any,
       timestamp: Date.now(),
       staff_id: String(user.id || user.role),
       staff_name: user.name || user.role,
@@ -254,6 +256,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       return;
     }
     setShowSoftPOSTerminal(true);
+    if (setNavHidden) setNavHidden(true);
   };
 
   const handlePrint = async () => {
@@ -312,7 +315,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
           amount={total} 
           bankDetails={bankDetails} 
           onConfirm={() => handleCheckout('Soft POS (Transfer)')} 
-          onCancel={() => setShowSoftPOSTerminal(false)} 
+          onCancel={() => { setShowSoftPOSTerminal(false); if(setNavHidden) setNavHidden(false); }} 
         />
       )}
 
