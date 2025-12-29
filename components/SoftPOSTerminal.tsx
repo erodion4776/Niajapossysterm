@@ -143,7 +143,7 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
         </div>
 
         {/* Bank Details Card */}
-        <div className="w-full max-w-sm bg-white rounded-[48px] p-8 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] space-y-8 text-slate-900 relative overflow-hidden">
+        <div className="w-full max-w-sm bg-white rounded-[48px] p-8 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] space-y-8 text-slate-900 relative overflow-hidden border border-slate-200">
           <div className="absolute top-0 right-0 p-8 opacity-5">
              <Landmark size={120} />
           </div>
@@ -151,14 +151,20 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
           <div className="space-y-6 relative z-10">
             <div className="space-y-1">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bank Name</p>
-              <p className="text-2xl font-black uppercase tracking-tight">{bankDetails.bankName}</p>
+              <p className="text-2xl font-black uppercase tracking-tight text-slate-900">{bankDetails.bankName || "NOT SET"}</p>
             </div>
 
             <div className="space-y-2">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account Number</p>
               <div className="flex items-center justify-between bg-slate-100 p-5 rounded-[24px] border border-slate-200">
-                <span className="text-3xl font-mono font-black tracking-[0.1em]">{bankDetails.accountNumber}</span>
-                <button onClick={handleCopy} className="p-3 bg-white rounded-2xl shadow-md hover:scale-110 transition-transform active:scale-95 border border-slate-100">
+                <span className="text-3xl font-mono font-black tracking-[0.1em] text-slate-900">
+                  {bankDetails.accountNumber || "0000000000"}
+                </span>
+                <button 
+                  onClick={handleCopy} 
+                  disabled={!bankDetails.accountNumber}
+                  className="p-3 bg-white rounded-2xl shadow-md hover:scale-110 transition-transform active:scale-95 border border-slate-100 disabled:opacity-50"
+                >
                   {copied ? <Check size={20} className="text-emerald-600" /> : <Copy size={20} className="text-slate-400" />}
                 </button>
               </div>
@@ -166,7 +172,7 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
 
             <div className="space-y-1">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account Name</p>
-              <p className="text-base font-black uppercase text-slate-700 leading-tight">{bankDetails.accountName}</p>
+              <p className="text-base font-black uppercase text-slate-700 leading-tight">{bankDetails.accountName || "NOT CONFIGURED"}</p>
             </div>
           </div>
         </div>

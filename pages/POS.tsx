@@ -24,6 +24,23 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const categories = useLiveQuery(() => db.categories.toArray());
   
+  // Reactive Bank Details for Soft POS
+  const softPosSettings = useLiveQuery(() => 
+    db.settings.where('key').anyOf(['soft_pos_bank', 'soft_pos_acc_num', 'soft_pos_acc_name']).toArray()
+  );
+
+  const bankDetails = useMemo(() => {
+    if (!softPosSettings || softPosSettings.length < 3) return null;
+    const details = {
+      bankName: softPosSettings.find(s => s.key === 'soft_pos_bank')?.value || '',
+      accountNumber: softPosSettings.find(s => s.key === 'soft_pos_acc_num')?.value || '',
+      accountName: softPosSettings.find(s => s.key === 'soft_pos_acc_name')?.value || '',
+    };
+    // Only return valid if all fields have content
+    if (!details.bankName || !details.accountNumber || !details.accountName) return null;
+    return details;
+  }, [softPosSettings]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [cart, setCart] = useState<(SaleItem & { image?: string })[]>([]);
@@ -40,9 +57,8 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [saveChangeToWallet, setSaveChangeToWallet] = useState(false);
 
-  // Soft POS States
+  // Soft POS UI State
   const [showSoftPOSTerminal, setShowSoftPOSTerminal] = useState(false);
-  const [bankDetails, setBankDetails] = useState<{bankName: string, accountNumber: string, accountName: string} | null>(null);
 
   // Printing States
   const [isPrinting, setIsPrinting] = useState(false);
@@ -52,22 +68,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const [isScanning, setIsScanning] = useState(false);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = "reader";
-
-  useEffect(() => {
-    const loadBankDetails = async () => {
-      const bn = await db.settings.get('soft_pos_bank');
-      const an = await db.settings.get('soft_pos_acc_num');
-      const anm = await db.settings.get('soft_pos_acc_name');
-      if (bn && an && anm) {
-        setBankDetails({
-          bankName: bn.value,
-          accountNumber: an.value,
-          accountName: anm.value
-        });
-      }
-    };
-    loadBankDetails();
-  }, []);
 
   const filteredItems = useMemo(() => {
     if (!inventory) return [];
@@ -264,7 +264,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
 
   const triggerSoftPOSTerminal = () => {
     if (!bankDetails) {
-      alert("Setup Bank Details in Admin Settings first!");
+      alert("Missing or Incomplete Bank Details! Go to Admin Settings > Soft POS Setup and fill all fields (Bank, Number, Name).");
       return;
     }
     setShowSoftPOSTerminal(true);

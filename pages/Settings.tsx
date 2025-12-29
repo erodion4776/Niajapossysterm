@@ -74,7 +74,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const printerName = localStorage.getItem('last_printer_name');
 
   useEffect(() => {
-    const loadBankDetails = async () => {
+    const loadSettings = async () => {
       const bn = await db.settings.get('soft_pos_bank');
       const an = await db.settings.get('soft_pos_acc_num');
       const anm = await db.settings.get('soft_pos_acc_name');
@@ -82,7 +82,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       if (an) setAccountNumber(an.value);
       if (anm) setAccountName(anm.value);
     };
-    loadBankDetails();
+    loadSettings();
   }, []);
 
   useEffect(() => {
@@ -98,10 +98,14 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   }, [receiptFooter]);
 
   const saveBankDetails = async () => {
-    await db.settings.put({ key: 'soft_pos_bank', value: bankName });
-    await db.settings.put({ key: 'soft_pos_acc_num', value: accountNumber });
-    await db.settings.put({ key: 'soft_pos_acc_name', value: accountName });
-    alert("Soft POS Bank Details Saved!");
+    if (!bankName.trim() || !accountNumber.trim() || !accountName.trim()) {
+      alert("Please fill all bank details fields!");
+      return;
+    }
+    await db.settings.put({ key: 'soft_pos_bank', value: bankName.trim() });
+    await db.settings.put({ key: 'soft_pos_acc_num', value: accountNumber.trim() });
+    await db.settings.put({ key: 'soft_pos_acc_name', value: accountName.trim() });
+    alert("Soft POS Bank Details Updated Successfully!");
   };
 
   const handleBackup = async () => {
@@ -314,7 +318,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Account Number</label>
-            <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-mono font-black text-lg outline-none focus:ring-2 focus:ring-emerald-500" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder="0123456789" maxLength={10} />
+            <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-mono font-black text-lg outline-none focus:ring-2 focus:ring-emerald-500" value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g,''))} placeholder="0123456789" maxLength={10} inputMode="numeric" />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Account Name</label>
