@@ -19,6 +19,7 @@ import { RoleSelection } from './components/RoleSelection.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
 import { ThemeProvider } from './ThemeContext.tsx';
+import { getRequestCode, validateStoredLicense } from './utils/security.ts';
 import { 
   LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, 
   Receipt, ShieldAlert, Users, Wallet, BookOpen, AlertTriangle, MessageCircle, Clock
@@ -55,7 +56,6 @@ const AppContent: React.FC = () => {
   const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - Date.now()) / (1000 * 60 * 60 * 24)) : null;
   const isExpired = expiryDate ? Date.now() > expiryDate : false;
 
-  // Fix: Use ReturnType<typeof setInterval> instead of NodeJS.Timeout for browser compatibility
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const syncStateFromUrl = useCallback(() => {
@@ -91,9 +91,20 @@ const AppContent: React.FC = () => {
     window.history.pushState({}, '', url.toString());
   }, []);
 
-  const updateMonotonicClock = async () => {
+  /**
+   * Heartbeat Function: Saves current timestamp to security table.
+   * Part of Monotonic Clock Check to prevent backward time shifting.
+   */
+  const saveHeartbeat = async () => {
     const now = Date.now();
-    await db.security.put({ key: 'max_date_recorded', value: now });
+    const maxDateSetting = await db.security.get('max_date_recorded');
+    
+    // Only update if current time is strictly greater or if it doesn't exist
+    if (!maxDateSetting || now > maxDateSetting.value) {
+      await db.security.put({ key: 'max_date_recorded', value: now });
+    } else if (now < maxDateSetting.value - 60000) { // Allow 1-minute jitter for battery/perf
+      setIsClockTampered(true);
+    }
   };
 
   useEffect(() => {
@@ -105,45 +116,68 @@ const AppContent: React.FC = () => {
       
       await initTrialDate();
 
-      // 1. Monotonic Clock Tamper Check
+      // 1. Initial Monotonic Clock Check
       const maxDateSetting = await db.security.get('max_date_recorded');
       const now = Date.now();
       if (maxDateSetting && now < maxDateSetting.value) {
         setIsClockTampered(true);
         return;
       }
-      await updateMonotonicClock();
+      await saveHeartbeat();
 
-      // 2. Wipe Protection / License Sync (LS <-> DB)
-      const dbLicense = await db.security.get('subscription_expiry');
-      const lsLicense = localStorage.getItem('subscription_expiry');
+      // 2. Wipe Protection / License Recovery (Double-Lock Sync)
+      const requestCode = await getRequestCode();
+      const dbLicenseKey = await db.security.get('activation_key');
+      const dbExpiry = await db.security.get('subscription_expiry');
+      const lsLicenseKey = localStorage.getItem('activation_key');
+      const lsExpiry = localStorage.getItem('subscription_expiry');
       
-      if (dbLicense?.value && !lsLicense) {
-        localStorage.setItem('subscription_expiry', dbLicense.value.toString());
+      let validKey = '';
+      let validExpiry = 0;
+
+      // Try to validate IndexedDB license
+      if (dbLicenseKey?.value && dbExpiry?.value) {
+        const isValid = await validateStoredLicense(requestCode, dbLicenseKey.value, dbExpiry.value);
+        if (isValid) {
+          validKey = dbLicenseKey.value;
+          validExpiry = dbExpiry.value;
+        }
+      }
+
+      // If DB failed, try LocalStorage
+      if (!validKey && lsLicenseKey && lsExpiry) {
+        const isValid = await validateStoredLicense(requestCode, lsLicenseKey, parseInt(lsExpiry));
+        if (isValid) {
+          validKey = lsLicenseKey;
+          validExpiry = parseInt(lsExpiry);
+        }
+      }
+
+      // Sync and Restore if we found a valid license anywhere
+      if (validKey && validExpiry) {
+        // Restore LS
+        localStorage.setItem('activation_key', validKey);
+        localStorage.setItem('subscription_expiry', validExpiry.toString());
         localStorage.setItem('is_activated', 'true');
-        setExpiryDate(dbLicense.value);
+        
+        // Restore DB
+        await db.security.put({ key: 'activation_key', value: validKey });
+        await db.security.put({ key: 'subscription_expiry', value: validExpiry });
+        await db.settings.put({ key: 'is_activated', value: true });
+
+        setExpiryDate(validExpiry);
         setIsActivated(true);
-      } else if (lsLicense && !dbLicense?.value) {
-        await db.security.put({ key: 'subscription_expiry', value: parseInt(lsLicense) });
-        await db.security.put({ key: 'is_activated', value: true });
-        setExpiryDate(parseInt(lsLicense));
-        setIsActivated(true);
-      } else if (lsLicense && dbLicense?.value) {
-        setExpiryDate(dbLicense.value);
-        setIsActivated(true);
+      } else {
+        // Corrupt or missing license
+        setIsActivated(false);
+        localStorage.setItem('is_activated', 'false');
       }
 
       syncStateFromUrl();
-      
-      const dbActivated = await db.security.get('is_activated');
-      if (dbActivated?.value === true && !isActivated) {
-        localStorage.setItem('is_activated', 'true');
-        setIsActivated(true);
-      }
       setIsInitialized(true);
 
-      // Start Heartbeat: Update security clock every 5 minutes
-      heartbeatRef.current = setInterval(updateMonotonicClock, 5 * 60 * 1000);
+      // Start Heartbeat: Every 5 minutes
+      heartbeatRef.current = setInterval(saveHeartbeat, 5 * 60 * 1000);
     };
     startup();
 
@@ -152,7 +186,7 @@ const AppContent: React.FC = () => {
       window.removeEventListener('popstate', syncStateFromUrl);
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
-  }, [isActivated, syncStateFromUrl]);
+  }, [syncStateFromUrl]);
 
   const handleStartTrial = () => {
     setShowRoleSelection(true);
@@ -198,9 +232,9 @@ const AppContent: React.FC = () => {
     return (
       <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
         <Clock size={80} className="text-amber-500 mb-6 animate-bounce" />
-        <h1 className="text-3xl font-black mb-4 uppercase leading-none">Clock Tamper Detected</h1>
-        <p className="text-slate-300 max-w-sm font-medium mb-8">Your phone's system time has been moved backward. Please correct your date and time settings to use the app.</p>
-        <button onClick={() => window.location.reload()} className="bg-emerald-600 px-8 py-4 rounded-2xl font-black uppercase text-xs">Verify Time Again</button>
+        <h1 className="text-3xl font-black mb-4 uppercase leading-none text-amber-500 italic">Time-Tamper Lock</h1>
+        <p className="text-slate-300 max-w-sm font-medium mb-8">System time has been moved backward. Correct your device clock to continue using the app.</p>
+        <button onClick={() => window.location.reload()} className="bg-amber-600 px-10 py-5 rounded-[24px] font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Verify Clock Now</button>
       </div>
     );
   }
@@ -211,7 +245,6 @@ const AppContent: React.FC = () => {
   if (showRoleSelection) return <RoleSelection onSelect={handleRoleSelection} />;
   
   if (deviceRole === 'Owner') {
-    // If not activated OR if subscription has expired, show lock
     if ((!isActivated && (!isTrialing || !isTrialValid)) || isExpired) {
       return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
     }
@@ -221,7 +254,6 @@ const AppContent: React.FC = () => {
   if (!currentUser) return <LoginScreen onLogin={handleLogin} deviceRole={deviceRole || 'StaffDevice'} />;
 
   const isStaffDevice = deviceRole === 'StaffDevice';
-  const isAdminUser = currentUser.role === 'Admin' && !isStaffDevice;
 
   const renderPage = () => {
     switch (currentPage) {
@@ -256,12 +288,12 @@ const AppContent: React.FC = () => {
       
       {/* Background Grace Period Banner */}
       {expiryDate && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 7 && (
-        <div className="bg-amber-500 text-white px-4 py-2 text-[10px] font-black uppercase flex items-center justify-between sticky top-0 z-[60] shadow-lg">
+        <div className="bg-amber-500 text-white px-4 py-3 text-[10px] font-black uppercase flex items-center justify-between sticky top-0 z-[60] shadow-lg border-b border-amber-600/20">
           <div className="flex items-center gap-2">
             <AlertTriangle size={14} className="animate-pulse" />
             <span>Your subscription expires in {daysUntilExpiry} days. Contact developer to renew.</span>
           </div>
-          <a href="https://wa.me/2347062228026" target="_blank" className="bg-white text-amber-600 px-3 py-1 rounded-full flex items-center gap-1 active:scale-95 transition-all">
+          <a href="https://wa.me/2347062228026" target="_blank" className="bg-white text-amber-600 px-4 py-1.5 rounded-full flex items-center gap-1 active:scale-95 transition-all shadow-sm">
              <MessageCircle size={10} /> Renew
           </a>
         </div>
@@ -296,7 +328,7 @@ const AppContent: React.FC = () => {
           <Wallet size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Wallet</span>
         </button>
         
-        {isAdminUser && (
+        {!isStaffDevice && currentUser?.role === 'Admin' && (
           <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
             <SettingsIcon size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Admin</span>
           </button>

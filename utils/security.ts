@@ -66,3 +66,12 @@ export async function verifyActivationKey(requestCode: string, enteredKey: strin
   
   return { isValid: false };
 }
+
+/**
+ * Helper to check if a saved key actually belongs to this device and matches the expiry.
+ * Prevents users from manually editing the subscription_expiry value in IndexedDB.
+ */
+export async function validateStoredLicense(requestCode: string, savedKey: string, savedExpiry: number): Promise<boolean> {
+  const result = await verifyActivationKey(requestCode, savedKey);
+  return result.isValid && result.expiry === savedExpiry;
+}

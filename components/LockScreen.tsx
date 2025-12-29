@@ -38,12 +38,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
     
     if (result.isValid && result.expiry) {
       // 1. Wipe Protection Sync (LS + DB Security Table)
+      // Save both the raw key and expiry for monotonic/integrity verification later
+      localStorage.setItem('activation_key', activationKey.trim().toUpperCase());
       localStorage.setItem('subscription_expiry', result.expiry.toString());
       localStorage.setItem('is_activated', 'true');
       localStorage.removeItem('is_trialing');
       
+      await db.security.put({ key: 'activation_key', value: activationKey.trim().toUpperCase() });
       await db.security.put({ key: 'subscription_expiry', value: result.expiry });
-      await db.security.put({ key: 'is_activated', value: true });
+      await db.settings.put({ key: 'is_activated', value: true });
 
       // If it was just an expiry renewal, we don't need onboarding again
       const isFirstTime = localStorage.getItem('is_setup_pending') !== 'false';
