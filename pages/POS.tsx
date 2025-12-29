@@ -26,18 +26,16 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   
   // Reactive Bank Details for Soft POS
   const softPosSettings = useLiveQuery(() => 
-    db.settings.where('key').anyOf(['soft_pos_bank', 'soft_pos_acc_num', 'soft_pos_acc_name']).toArray()
+    db.settings.where('key').anyOf(['softPosBank', 'softPosNumber', 'softPosAccount']).toArray()
   );
 
   const bankDetails = useMemo(() => {
-    if (!softPosSettings || softPosSettings.length < 3) return null;
+    if (!softPosSettings) return null;
     const details = {
-      bankName: softPosSettings.find(s => s.key === 'soft_pos_bank')?.value || '',
-      accountNumber: softPosSettings.find(s => s.key === 'soft_pos_acc_num')?.value || '',
-      accountName: softPosSettings.find(s => s.key === 'soft_pos_acc_name')?.value || '',
+      bankName: softPosSettings.find(s => s.key === 'softPosBank')?.value || '',
+      accountNumber: softPosSettings.find(s => s.key === 'softPosNumber')?.value || '',
+      accountName: softPosSettings.find(s => s.key === 'softPosAccount')?.value || '',
     };
-    // Only return valid if all fields have content
-    if (!details.bankName || !details.accountNumber || !details.accountName) return null;
     return details;
   }, [softPosSettings]);
 
@@ -263,10 +261,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   };
 
   const triggerSoftPOSTerminal = () => {
-    if (!bankDetails) {
-      alert("Missing or Incomplete Bank Details! Go to Admin Settings > Soft POS Setup and fill all fields (Bank, Number, Name).");
-      return;
-    }
     setShowSoftPOSTerminal(true);
     if (setNavHidden) setNavHidden(true);
   };

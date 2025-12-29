@@ -14,7 +14,7 @@ interface SoftPOSTerminalProps {
     bankName: string;
     accountNumber: string;
     accountName: string;
-  };
+  } | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -46,17 +46,18 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(bankDetails.accountNumber);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    if (navigator.vibrate) navigator.vibrate(50);
+    if (bankDetails?.accountNumber) {
+      navigator.clipboard.writeText(bankDetails.accountNumber);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      if (navigator.vibrate) navigator.vibrate(50);
+    }
   };
 
   const playChaChing = () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       
-      // First note (High)
       const osc1 = audioCtx.createOscillator();
       const gain1 = audioCtx.createGain();
       osc1.type = 'triangle';
@@ -68,7 +69,6 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
       osc1.start();
       osc1.stop(audioCtx.currentTime + 0.2);
 
-      // Second note (Higher)
       const osc2 = audioCtx.createOscillator();
       const gain2 = audioCtx.createGain();
       osc2.type = 'triangle';
@@ -80,7 +80,6 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
       gain2.connect(audioCtx.destination);
       osc2.start(audioCtx.currentTime + 0.1);
       osc2.stop(audioCtx.currentTime + 0.4);
-
     } catch (e) {
       console.warn("Audio feedback failed");
     }
@@ -90,12 +89,12 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
     setIsSuccess(true);
     playChaChing();
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    
-    // Allow animation to play for 2 seconds before closing
     setTimeout(() => {
       onConfirm();
     }, 2000);
   };
+
+  const isConfigMissing = !bankDetails || !bankDetails.bankName || !bankDetails.accountNumber || !bankDetails.accountName;
 
   if (isSuccess) {
     return (
@@ -125,7 +124,7 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
             <h2 className={`text-[10px] font-black uppercase tracking-[0.3em] leading-none ${isTimedOut ? 'text-red-400' : 'text-emerald-500'}`}>
               {isTimedOut ? 'Session Expired' : 'Official Transfer Terminal'}
             </h2>
-            <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-1">System Version 2.6 • Offline Verified</p>
+            <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-1">System Version 2.7 • Secure Offline</p>
           </div>
         </div>
         <button onClick={onCancel} className="p-2.5 bg-red-500/10 rounded-2xl hover:bg-red-500/20 transition-colors group">
@@ -133,77 +132,90 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
         </button>
       </header>
 
-      <main className="flex-1 flex flex-col p-8 items-center justify-center space-y-8 overflow-y-auto">
+      <main className="flex-1 flex flex-col p-8 items-center justify-center space-y-10 overflow-y-auto">
         {/* Amount Display */}
         <div className="text-center space-y-2">
-          <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Total Amount Due</p>
-          <h1 className="text-6xl font-black text-emerald-400 tracking-tighter drop-shadow-[0_0_20px_rgba(52,211,153,0.4)]">
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Pay Exactly</p>
+          <h1 className="text-7xl font-black text-emerald-400 tracking-tighter drop-shadow-[0_0_20px_rgba(52,211,153,0.4)]">
             {formatNaira(amount)}
           </h1>
         </div>
 
         {/* Bank Details Card */}
-        <div className="w-full max-w-sm bg-white rounded-[48px] p-8 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] space-y-8 text-slate-900 relative overflow-hidden border border-slate-200">
+        <div className="w-full max-w-sm bg-white rounded-[48px] p-10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] space-y-8 text-slate-900 relative overflow-hidden border border-slate-200">
           <div className="absolute top-0 right-0 p-8 opacity-5">
-             <Landmark size={120} />
+             <Landmark size={140} />
           </div>
           
-          <div className="space-y-6 relative z-10">
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bank Name</p>
-              <p className="text-2xl font-black uppercase tracking-tight text-slate-900">{bankDetails.bankName || "NOT SET"}</p>
+          {isConfigMissing ? (
+            <div className="flex flex-col items-center justify-center text-center py-4 space-y-4">
+               <div className="bg-red-50 p-4 rounded-3xl text-red-500">
+                  <AlertCircle size={48} />
+               </div>
+               <div className="space-y-1">
+                  <h3 className="text-lg font-black text-red-600 uppercase tracking-tight">Configuration Missing</h3>
+                  <p className="text-xs font-bold text-slate-400 leading-relaxed uppercase">Go to Settings to add your Account Details.</p>
+               </div>
             </div>
+          ) : (
+            <div className="space-y-8 relative z-10">
+              <div className="space-y-1 text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bank Name</p>
+                <p className="text-2xl font-black uppercase tracking-tight text-emerald-600">{bankDetails.bankName}</p>
+              </div>
 
-            <div className="space-y-2">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account Number</p>
-              <div className="flex items-center justify-between bg-slate-100 p-5 rounded-[24px] border border-slate-200">
-                <span className="text-3xl font-mono font-black tracking-[0.1em] text-slate-900">
-                  {bankDetails.accountNumber || "0000000000"}
-                </span>
-                <button 
-                  onClick={handleCopy} 
-                  disabled={!bankDetails.accountNumber}
-                  className="p-3 bg-white rounded-2xl shadow-md hover:scale-110 transition-transform active:scale-95 border border-slate-100 disabled:opacity-50"
-                >
-                  {copied ? <Check size={20} className="text-emerald-600" /> : <Copy size={20} className="text-slate-400" />}
-                </button>
+              <div className="space-y-3 text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account Number</p>
+                <div className="flex items-center justify-center gap-4 bg-slate-100 p-6 rounded-[32px] border border-slate-200 shadow-inner group active:scale-[0.98] transition-all" onClick={handleCopy}>
+                  <span className="text-4xl font-mono font-black tracking-[0.1em] text-slate-900">
+                    {bankDetails.accountNumber}
+                  </span>
+                  <div className="p-3 bg-white rounded-2xl shadow-md border border-slate-100 text-slate-400">
+                    {copied ? <Check size={20} className="text-emerald-600" /> : <Copy size={20} />}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1 text-center border-t border-slate-50 pt-6">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account Name</p>
+                <p className="text-lg font-black uppercase text-slate-800 leading-tight italic tracking-tight">
+                  {bankDetails.accountName.toUpperCase()}
+                </p>
               </div>
             </div>
-
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account Name</p>
-              <p className="text-base font-black uppercase text-slate-700 leading-tight">{bankDetails.accountName || "NOT CONFIGURED"}</p>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Status indicator */}
         <div className="flex flex-col items-center gap-4 w-full">
-          <div className={`px-8 py-3.5 rounded-full flex items-center gap-3 border transition-all duration-500 ${isTimedOut ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/10'}`}>
-             <Timer size={18} className={isTimedOut ? 'text-red-400' : 'text-emerald-500'} />
-             <span className={`text-base font-mono font-black ${isTimedOut ? 'text-red-400' : 'text-emerald-400'}`}>
+          <div className={`px-8 py-4 rounded-full flex items-center gap-3 border transition-all duration-500 ${isTimedOut ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/10 shadow-lg'}`}>
+             <Timer size={20} className={isTimedOut ? 'text-red-400' : 'text-emerald-500'} />
+             <span className={`text-xl font-mono font-black ${isTimedOut ? 'text-red-400' : 'text-emerald-400'}`}>
                {isTimedOut ? '0:00' : formatTime(timeLeft)}
              </span>
-             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-               {isTimedOut ? 'Session Timeout' : 'Time Remaining'}
+             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+               {isTimedOut ? 'Session Timeout' : 'Remaining'}
              </span>
           </div>
           
           {isTimedOut && (
-            <p className="text-[10px] font-black text-red-400 uppercase tracking-widest animate-pulse">
-              Did you receive the alert? Confirm manually below.
-            </p>
+            <div className="bg-red-500/20 border border-red-500/40 px-6 py-3 rounded-2xl animate-pulse">
+               <p className="text-[10px] font-black text-red-400 uppercase tracking-widest">
+                Did you receive the alert? Confirm manually.
+              </p>
+            </div>
           )}
         </div>
       </main>
 
       {/* Immediate Action Buttons */}
-      <footer className="p-8 bg-slate-900/80 border-t border-white/5 space-y-4">
+      <footer className="p-8 bg-slate-900/90 backdrop-blur-md border-t border-white/5 space-y-4">
         <button 
           onClick={handleConfirm}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-6 rounded-[32px] shadow-[0_20px_40px_-10px_rgba(16,185,129,0.4)] active:scale-[0.98] transition-all uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 group"
+          disabled={isConfigMissing}
+          className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white font-black py-7 rounded-[32px] shadow-[0_20px_40px_-10px_rgba(16,185,129,0.4)] active:scale-[0.98] transition-all uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-4 group"
         >
-          <CheckCircle size={22} className="group-hover:scale-110 transition-transform" />
+          <CheckCircle size={24} className="group-hover:scale-110 transition-transform" />
           YES, ALERT RECEIVED
         </button>
         

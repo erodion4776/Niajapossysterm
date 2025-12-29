@@ -75,9 +75,9 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
   useEffect(() => {
     const loadSettings = async () => {
-      const bn = await db.settings.get('soft_pos_bank');
-      const an = await db.settings.get('soft_pos_acc_num');
-      const anm = await db.settings.get('soft_pos_acc_name');
+      const bn = await db.settings.get('softPosBank');
+      const an = await db.settings.get('softPosNumber');
+      const anm = await db.settings.get('softPosAccount');
       if (bn) setBankName(bn.value);
       if (an) setAccountNumber(an.value);
       if (anm) setAccountName(anm.value);
@@ -102,9 +102,9 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       alert("Please fill all bank details fields!");
       return;
     }
-    await db.settings.put({ key: 'soft_pos_bank', value: bankName.trim() });
-    await db.settings.put({ key: 'soft_pos_acc_num', value: accountNumber.trim() });
-    await db.settings.put({ key: 'soft_pos_acc_name', value: accountName.trim() });
+    await db.settings.put({ key: 'softPosBank', value: bankName.trim() });
+    await db.settings.put({ key: 'softPosNumber', value: accountNumber.trim() });
+    await db.settings.put({ key: 'softPosAccount', value: accountName.trim() });
     alert("Soft POS Bank Details Updated Successfully!");
   };
 
