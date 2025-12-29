@@ -60,7 +60,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     stock: 0,
     minStock: 5,
     expiryDate: '',
-    category: 'General',
+    category: 'Uncategorized',
     barcode: '',
     image: ''
   });
@@ -118,7 +118,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       });
     });
 
-    setFormData({ name: '', costPrice: 0, sellingPrice: 0, stock: 0, minStock: 5, expiryDate: '', category: 'General', barcode: '', image: '' });
+    setFormData({ name: '', costPrice: 0, sellingPrice: 0, stock: 0, minStock: 5, expiryDate: '', category: 'Uncategorized', barcode: '', image: '' });
     setShowAddModal(false);
   };
 
@@ -176,8 +176,14 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
 
   const handleDeleteCat = async (id: number | string) => {
     if (!isAdmin) return;
-    if (confirm("Delete this category? Products inside will remain.")) {
-      await db.categories.delete(id);
+    if (confirm("Delete this category? All products inside will be moved to 'Uncategorized'.")) {
+      const cat = categories?.find(c => c.id === id);
+      if (cat) {
+        await db.transaction('rw', [db.inventory, db.categories], async () => {
+          await db.inventory.where('category').equals(cat.name).modify({ category: 'Uncategorized' });
+          await db.categories.delete(id);
+        });
+      }
       setEditingCat(null);
     }
   };
@@ -560,7 +566,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
         </div>
       )}
 
-      {/* Category Modal - Refined to use dateCreated */}
+      {/* Category Modal */}
       {showCatModal && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
@@ -622,7 +628,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
               </div>
               <div className="grid grid-cols-1 gap-2">
                 <button type="submit" className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] active:scale-[0.98] transition-all">Update Name</button>
-                {editingCat.name !== 'General' && (
+                {editingCat.name !== 'Uncategorized' && editingCat.name !== 'General' && (
                   <button type="button" onClick={() => editingCat.id && handleDeleteCat(editingCat.id)} className="w-full py-3 text-red-300 font-bold uppercase text-[8px] tracking-widest hover:text-red-500">Delete Category</button>
                 )}
               </div>

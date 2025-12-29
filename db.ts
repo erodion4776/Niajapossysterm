@@ -165,7 +165,7 @@ export async function initTrialDate() {
   const catCount = await db.categories.count();
   if (catCount === 0) {
     await db.categories.bulkAdd([
-      { name: 'General', dateCreated: Date.now() },
+      { name: 'Uncategorized', dateCreated: Date.now() },
       { name: 'Drinks', dateCreated: Date.now() },
       { name: 'Food', dateCreated: Date.now() },
       { name: 'Medicine', dateCreated: Date.now() }

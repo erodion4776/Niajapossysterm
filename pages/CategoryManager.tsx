@@ -55,17 +55,39 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({ setPage }) => 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCat || !editingCat.name) return;
-    await db.categories.update(editingCat.id!, {
-      name: editingCat.name,
-      image: editingCat.image
-    });
+
+    // Logic: If renaming, update all items in inventory too
+    const original = categories?.find(c => c.id === editingCat.id);
+    if (original && original.name !== editingCat.name) {
+      await db.transaction('rw', [db.inventory, db.categories], async () => {
+        await db.inventory.where('category').equals(original.name).modify({ category: editingCat.name });
+        await db.categories.update(editingCat.id!, {
+          name: editingCat.name,
+          image: editingCat.image
+        });
+      });
+    } else {
+      await db.categories.update(editingCat.id!, {
+        name: editingCat.name,
+        image: editingCat.image
+      });
+    }
     setEditingCat(null);
   };
 
   const handleDelete = async (id: string | number, name: string) => {
-    if (name === 'General') return alert("Cannot delete the General category.");
-    if (confirm(`Delete category "${name}"? Items inside will remain.`)) {
-      await db.categories.delete(id);
+    if (name === 'Uncategorized' || name === 'General') return alert("Cannot delete this core category.");
+    if (confirm(`Delete category "${name}"? All products inside will be moved to "Uncategorized".`)) {
+      try {
+        await db.transaction('rw', [db.inventory, db.categories], async () => {
+          // Move items to Uncategorized
+          await db.inventory.where('category').equals(name).modify({ category: 'Uncategorized' });
+          // Delete the category
+          await db.categories.delete(id);
+        });
+      } catch (err) {
+        alert("Failed to delete category properly.");
+      }
     }
   };
 
@@ -108,7 +130,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({ setPage }) => 
               <button onClick={() => setEditingCat(cat)} className="p-3 bg-slate-50 dark:bg-emerald-800 text-emerald-600 rounded-xl active:scale-90 transition-all">
                 <Edit3 size={18} />
               </button>
-              {cat.name !== 'General' && (
+              {cat.name !== 'Uncategorized' && cat.name !== 'General' && (
                 <button onClick={() => handleDelete(cat.id!, cat.name)} className="p-3 bg-red-50 dark:bg-red-900/20 text-red-400 rounded-xl active:scale-90 transition-all">
                   <Trash2 size={18} />
                 </button>
