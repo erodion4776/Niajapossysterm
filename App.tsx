@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
-const TRIAL_DURATION = 259200000; // 3 Days
+const TRIAL_DURATION = 0; // Disabled free trial
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);

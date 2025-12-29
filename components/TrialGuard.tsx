@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { db } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -7,8 +8,8 @@ interface TrialGuardProps {
   children: (isExpired: boolean) => React.ReactNode;
 }
 
-// Set to 3 days (3 * 24 * 60 * 60 * 1000)
-const TRIAL_DURATION_MS = 259200000; 
+// Set to 0 to disable trial period
+const TRIAL_DURATION_MS = 0; 
 
 export const TrialGuard: React.FC<TrialGuardProps> = ({ children }) => {
   const trialStart = useLiveQuery(() => db.settings.get('trial_start'));

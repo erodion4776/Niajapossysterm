@@ -56,10 +56,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial }) => {
             onClick={onStartTrial}
             className="w-full sm:w-auto bg-emerald-600 text-white font-black px-10 py-6 rounded-[32px] text-lg shadow-2xl shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-3 group"
           >
-            Start 3-Day Free Trial <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+            Setup My Shop <ArrowRight className="group-hover:translate-x-1 transition-transform" />
           </button>
           <button 
-            onClick={() => window.open('https://wa.me/2347062228026?text=' + encodeURIComponent("I have tested the trial and I'm ready to pay ₦5,000 for my Lifetime Activation Key. My Request Code is: [Enter Code from Lock Screen]"), '_blank')}
+            onClick={() => window.open('https://wa.me/2347062228026?text=' + encodeURIComponent("I'm ready to pay ₦5,000 for my Lifetime Activation Key. My Request Code is: [Enter Code from Lock Screen]"), '_blank')}
             className="w-full sm:w-auto bg-white border-2 border-gray-100 text-gray-800 font-black px-10 py-6 rounded-[32px] text-lg hover:border-emerald-200 active:scale-95 transition-all"
           >
             Pay ₦5,000 & Get My Key
@@ -160,7 +160,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial }) => {
             </div>
 
             <button 
-              onClick={() => window.open('https://wa.me/2347062228026?text=' + encodeURIComponent("I have tested the trial and I'm ready to pay ₦5,000 for my Lifetime Activation Key. My Request Code is: [Enter Code from Lock Screen]"), '_blank')}
+              onClick={() => window.open('https://wa.me/2347062228026?text=' + encodeURIComponent("I'm ready to pay ₦5,000 for my Lifetime Activation Key. My Request Code is: [Enter Code from Lock Screen]"), '_blank')}
               className="w-full py-6 rounded-[32px] bg-emerald-500 text-white font-black text-sm uppercase tracking-widest active:scale-[0.98] transition-all shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3"
             >
               Pay ₦5,000 & Get My Key <ArrowRight size={20} />
@@ -224,7 +224,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial }) => {
                 onClick={onStartTrial}
                 className="w-full sm:w-auto bg-emerald-600 text-white font-black px-12 py-6 rounded-[32px] active:scale-95 transition-all flex items-center justify-center gap-3 shadow-2xl shadow-emerald-200"
               >
-                Launch 3-Day Free Trial <ArrowRight size={20} />
+                Launch My Shop <ArrowRight size={20} />
              </button>
              <button 
                 onClick={() => window.open('https://wa.me/2347062228026', '_blank')}
@@ -235,9 +235,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial }) => {
           </div>
 
           <div className="bg-gray-50 p-8 rounded-[40px] border border-gray-100 space-y-4">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em]">3-Day Risk-Free Trial</p>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em]">Secure Activation Required</p>
             <p className="text-sm font-bold text-gray-600 leading-relaxed italic">
-              "If you don't love how easy it is to manage your shop offline, you don't pay a single kobo. No credit card required to start."
+              "If you don't love how easy it is to manage your shop offline, you don't pay a single kobo. No credit card required to start setup."
             </p>
           </div>
 
