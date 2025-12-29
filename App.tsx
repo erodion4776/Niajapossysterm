@@ -70,13 +70,13 @@ const AppContent: React.FC = () => {
     setIsVerifyingTime(true);
     try {
       const response = await fetch('https://worldtimeapi.org/api/timezone/Africa/Lagos');
-      if (!response.ok) throw new Error("API Offline");
+      if (!response.ok) throw new Error("Time API Offline");
       const data = await response.json();
       const networkTime = new Date(data.datetime).getTime();
       
       const lastRecorded = await db.security.get('max_date_recorded');
       
-      // If network time is behind our recorded history, it's a massive tamper
+      // If network time is behind our recorded history, someone shifted the system clock
       if (lastRecorded && networkTime < lastRecorded.value - 600000) { // 10 min tolerance
         setIsClockTampered(true);
       } else {
@@ -86,7 +86,7 @@ const AppContent: React.FC = () => {
         setIsClockTampered(false);
       }
     } catch (e) {
-      console.error("Time verification failed", e);
+      console.error("Online time sync failed", e);
     } finally {
       setIsVerifyingTime(false);
     }
@@ -94,20 +94,20 @@ const AppContent: React.FC = () => {
 
   /**
    * Heartbeat: Saves current timestamp every 5 mins.
-   * Ensures system time can only move forward (Monotonic Clock).
+   * Part of Monotonic Clock Check to prevent backward time shifting.
    */
   const saveHeartbeat = async () => {
     const now = Date.now();
     const lastRecorded = await db.security.get('max_date_recorded');
     
-    // Check for backward movement
-    if (lastRecorded && now < lastRecorded.value - 60000) { // 1 min jitter allowance
+    // Check for backward movement (more than 1 min jitter)
+    if (lastRecorded && now < lastRecorded.value - 60000) {
       setIsClockTampered(true);
     } else {
       await db.security.put({ key: 'max_date_recorded', value: Math.max(now, lastRecorded?.value || 0) });
     }
     
-    // Check offline threshold (30 days)
+    // Check if we need an online sync (every 30 days)
     const lastOnline = await db.security.get('last_online_verification');
     if (lastOnline && now - lastOnline.value > OFFLINE_LIMIT_MS) {
       setIsOfflineTooLong(true);
@@ -164,7 +164,7 @@ const AppContent: React.FC = () => {
         return;
       }
       
-      // 2. Initialize Online Tracker if missing
+      // 2. Offline Threshold Check
       const lastOnline = await db.security.get('last_online_verification');
       if (!lastOnline) {
         await db.security.put({ key: 'last_online_verification', value: now });
@@ -174,7 +174,7 @@ const AppContent: React.FC = () => {
 
       await saveHeartbeat();
 
-      // 3. License Signature Check (Anti-Tamper & Device Tie)
+      // 3. License Recovery & Signature Validation (Double-Lock)
       const requestCode = await getRequestCode();
       const dbKey = await db.security.get('activation_key');
       const dbExp = await db.security.get('subscription_expiry');
@@ -184,7 +184,7 @@ const AppContent: React.FC = () => {
       let validKey = '';
       let validExp = 0;
 
-      // Validate DB License
+      // Try validating IndexedDB license
       if (dbKey?.value && dbExp?.value) {
         const isValid = await validateLicenseIntegrity(requestCode, dbKey.value, dbExp.value);
         if (isValid) {
@@ -193,7 +193,7 @@ const AppContent: React.FC = () => {
         }
       }
 
-      // If DB corrupted or empty, try LS
+      // If DB failed (cleared or tampered), try LocalStorage
       if (!validKey && lsKey && lsExp) {
         const isValid = await validateLicenseIntegrity(requestCode, lsKey, parseInt(lsExp));
         if (isValid) {
@@ -202,17 +202,22 @@ const AppContent: React.FC = () => {
         }
       }
 
-      // Sync and Set
+      // Sync and Restore if we found a valid license anywhere
       if (validKey && validExp) {
+        // Restore LS
         localStorage.setItem('activation_key', validKey);
         localStorage.setItem('subscription_expiry', validExp.toString());
         localStorage.setItem('is_activated', 'true');
+        
+        // Restore DB
         await db.security.put({ key: 'activation_key', value: validKey });
         await db.security.put({ key: 'subscription_expiry', value: validExp });
         await db.settings.put({ key: 'is_activated', value: true });
+
         setExpiryDate(validExp);
         setIsActivated(true);
       } else {
+        // No valid signed license found
         setIsActivated(false);
         localStorage.setItem('is_activated', 'false');
       }
@@ -223,6 +228,7 @@ const AppContent: React.FC = () => {
       // Start 5-min Heartbeat
       heartbeatRef.current = setInterval(saveHeartbeat, 5 * 60 * 1000);
       
+      // Auto-verify if online
       if (navigator.onLine) verifyOnlineTime();
     };
     startup();
@@ -281,7 +287,7 @@ const AppContent: React.FC = () => {
       <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
         <Clock size={80} className="text-amber-500 mb-6 animate-bounce" />
         <h1 className="text-3xl font-black mb-4 uppercase leading-none text-amber-500 italic tracking-tighter">Time-Tamper Lock</h1>
-        <p className="text-slate-300 max-w-sm font-medium mb-8">Phone clock has been moved backward. Please correct your device date and time settings to unlock.</p>
+        <p className="text-slate-300 max-w-sm font-medium mb-8">Your phone clock has been moved backward. Please correct your device date and time settings to unlock the app.</p>
         <button onClick={() => window.location.reload()} className="bg-amber-600 px-10 py-5 rounded-[24px] font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Verify Clock Now</button>
       </div>
     );
@@ -334,7 +340,7 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500 transition-colors duration-300">
       
-      {/* 30-Day Offline Mandatory Check Overlay */}
+      {/* 30-Day Offline Security Check Mandatory Overlay */}
       {isOfflineTooLong && (
         <div className="fixed inset-0 z-[2000] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-white text-center">
            <div className="w-24 h-24 bg-amber-500/20 rounded-[40px] flex items-center justify-center mb-8 border border-amber-500/30">
@@ -342,7 +348,7 @@ const AppContent: React.FC = () => {
            </div>
            <h1 className="text-3xl font-black mb-4 uppercase tracking-tighter">Security Check</h1>
            <p className="text-slate-300 mb-8 max-w-xs font-medium leading-relaxed">
-             Security Policy: You have been offline for 30 days. Please turn on data for 10 seconds to verify your license.
+             Security Policy: You have been offline for 30 days. Please turn on data for 10 seconds to verify your license and system clock.
            </p>
            <button 
              onClick={verifyOnlineTime}

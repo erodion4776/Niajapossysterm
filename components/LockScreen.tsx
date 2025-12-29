@@ -37,19 +37,20 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
     const result = await verifyActivationKey(requestCode, activationKey);
     
     if (result.isValid && result.expiry) {
-      // 1. Wipe Protection & Multi-Storage Save
-      // Save both the raw activation key string AND the decoded expiry.
-      // App.tsx uses validateLicenseIntegrity(ID, Key, Exp) to prevent IndexedDB hacking.
-      localStorage.setItem('activation_key', activationKey.trim().toUpperCase());
+      // 1. Wipe Protection & Device Tie Save
+      // Save raw key + signed expiry for background integrity checks
+      const keyToSave = activationKey.trim().toUpperCase();
+      
+      localStorage.setItem('activation_key', keyToSave);
       localStorage.setItem('subscription_expiry', result.expiry.toString());
       localStorage.setItem('is_activated', 'true');
       localStorage.removeItem('is_trialing');
       
-      await db.security.put({ key: 'activation_key', value: activationKey.trim().toUpperCase() });
+      await db.security.put({ key: 'activation_key', value: keyToSave });
       await db.security.put({ key: 'subscription_expiry', value: result.expiry });
       await db.settings.put({ key: 'is_activated', value: true });
 
-      // Check if this is a fresh setup or a renewal
+      // Check if this is a fresh setup or just a renewal
       const isSetupDone = localStorage.getItem('is_setup_pending') === 'false';
       
       if (!isSetupDone) {

@@ -70,8 +70,10 @@ export async function verifyActivationKey(requestCode: string, enteredKey: strin
 /**
  * Validates integrity of stored license values.
  * If user edits 'subscription_expiry' manually in IndexedDB, the hash check will fail.
+ * This effectively "signs" the database record.
  */
 export async function validateLicenseIntegrity(requestCode: string, savedKey: string, savedExpiry: number): Promise<boolean> {
+  if (!savedKey || !savedExpiry) return false;
   const result = await verifyActivationKey(requestCode, savedKey);
   return result.isValid && result.expiry === savedExpiry;
 }
