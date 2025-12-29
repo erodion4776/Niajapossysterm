@@ -15,7 +15,7 @@ import {
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
   Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert, Wifi, TrendingUp, AlertTriangle, 
-  ChevronRight, MapPin, Phone, Receipt, Info, LogOut, Landmark, CreditCard
+  ChevronRight, MapPin, Phone, Receipt, Info, LogOut, Landmark, CreditCard, Tag
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -279,6 +279,22 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           </button>
         </div>
       </header>
+
+      {/* Primary Actions */}
+      <div className="grid grid-cols-1 gap-4">
+        <button onClick={() => setPage(Page.CATEGORY_MANAGER)} className="w-full flex items-center justify-between p-6 bg-white dark:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800/40 rounded-[32px] shadow-sm active:scale-95 transition-all">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+              <Tag size={24} />
+            </div>
+            <div className="text-left">
+              <h3 className="font-black text-slate-800 dark:text-emerald-50 text-base uppercase italic">Category Lab</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Manage Shop Folders</p>
+            </div>
+          </div>
+          <ChevronRight size={20} className="text-slate-300" />
+        </button>
+      </div>
 
       {/* Soft POS Setup */}
       <section className="bg-slate-900 text-white p-6 rounded-[32px] shadow-xl space-y-4 border border-emerald-500/20">

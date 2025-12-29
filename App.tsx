@@ -12,6 +12,7 @@ import { Settings } from './pages/Settings.tsx';
 import { FAQ } from './pages/FAQ.tsx';
 import { Customers } from './pages/Customers.tsx';
 import { StockLogs } from './pages/StockLogs.tsx';
+import { CategoryManager } from './pages/CategoryManager.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
@@ -273,6 +274,7 @@ const AppContent: React.FC = () => {
       case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={(p) => navigateTo(p)} />;
       case Page.FAQ: return <FAQ setPage={(p) => navigateTo(p)} />;
       case Page.CUSTOMERS: return <Customers setPage={(p) => navigateTo(p)} role={isStaffDevice ? 'Staff' : currentUser.role} />;
+      case Page.CATEGORY_MANAGER: return <CategoryManager setPage={(p) => navigateTo(p)} />;
       default: return <Dashboard setPage={(p) => navigateTo(p)} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
     }
   };

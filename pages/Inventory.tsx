@@ -31,6 +31,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
   const [activeTab, setActiveTab] = useState<'products' | 'categories'>('products');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentFilter, setCurrentFilter] = useState<'all' | 'low-stock' | 'expiring'>(initialFilter);
+  const [selectedCat, setSelectedCat] = useState<string>('All');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => (localStorage.getItem('inventory_view') as any) || 'grid');
   
   const [showAddModal, setShowAddModal] = useState(false);
@@ -161,7 +162,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
   const handleAddCat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
-    await db.categories.add(catFormData);
+    await db.categories.add({ ...catFormData, dateCreated: Date.now() });
     setCatFormData({ name: '', image: '' });
     setShowCatModal(false);
   };
@@ -175,7 +176,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
 
   const handleDeleteCat = async (id: number | string) => {
     if (!isAdmin) return;
-    if (confirm("Delete this category? Products inside will remain in 'General' category.")) {
+    if (confirm("Delete this category? Products inside will remain.")) {
       await db.categories.delete(id);
       setEditingCat(null);
     }
@@ -232,11 +233,13 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     if (currentFilter === 'low-stock') items = items.filter(i => i.stock <= (i.minStock || 5));
     else if (currentFilter === 'expiring') items = items.filter(i => i.expiryDate && new Date(i.expiryDate) <= weekOut);
 
+    if (selectedCat !== 'All') items = items.filter(i => i.category === selectedCat);
+
     return items.filter(item => 
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       (item.barcode && item.barcode.includes(searchTerm))
     );
-  }, [inventory, searchTerm, currentFilter]);
+  }, [inventory, searchTerm, currentFilter, selectedCat]);
 
   const filteredCats = useMemo(() => {
     return categories?.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())) || [];
@@ -295,6 +298,15 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
           <Tag size={16} /> Categories
         </button>
       </div>
+
+      {activeTab === 'products' && (
+        <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar scroll-smooth no-scrollbar">
+          <button onClick={() => setSelectedCat('All')} className={`flex-shrink-0 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${selectedCat === 'All' ? 'bg-emerald-600 text-white border-emerald-600 shadow-md' : 'bg-white dark:bg-emerald-900 border-slate-100 dark:border-emerald-800 text-slate-400'}`}>All</button>
+          {categories?.map(c => (
+            <button key={c.id} onClick={() => setSelectedCat(c.name)} className={`flex-shrink-0 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${selectedCat === c.name ? 'bg-emerald-600 text-white border-emerald-600 shadow-md' : 'bg-white dark:bg-emerald-900 border-slate-100 dark:border-emerald-800 text-slate-400'}`}>{c.name}</button>
+          ))}
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300 dark:text-emerald-800" size={18} />
@@ -548,7 +560,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
         </div>
       )}
 
-      {/* Category Modal */}
+      {/* Category Modal - Refined to use dateCreated */}
       {showCatModal && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">

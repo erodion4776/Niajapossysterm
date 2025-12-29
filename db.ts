@@ -5,6 +5,7 @@ export interface Category {
   id?: string | number;
   name: string;
   image?: string; 
+  dateCreated?: number;
 }
 
 export interface InventoryItem {
@@ -117,7 +118,7 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(19).stores({
+dexieDb.version(20).stores({
   inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock',
   categories: '++id, name',
   customers: '++id, &phone, name, walletBalance',
@@ -164,10 +165,10 @@ export async function initTrialDate() {
   const catCount = await db.categories.count();
   if (catCount === 0) {
     await db.categories.bulkAdd([
-      { name: 'General' },
-      { name: 'Drinks' },
-      { name: 'Food' },
-      { name: 'Medicine' }
+      { name: 'General', dateCreated: Date.now() },
+      { name: 'Drinks', dateCreated: Date.now() },
+      { name: 'Food', dateCreated: Date.now() },
+      { name: 'Medicine', dateCreated: Date.now() }
     ]);
   }
 }

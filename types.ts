@@ -10,7 +10,8 @@ export enum Page {
   DEBTS = 'DEBTS',
   EXPENSES = 'EXPENSES',
   CUSTOMERS = 'CUSTOMERS',
-  STOCK_LOGS = 'STOCK_LOGS'
+  STOCK_LOGS = 'STOCK_LOGS',
+  CATEGORY_MANAGER = 'CATEGORY_MANAGER'
 }
 
 export type Role = 'Admin' | 'Staff';

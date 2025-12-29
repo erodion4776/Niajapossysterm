@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, SaleItem, Sale, InventoryItem, User as DBUser, Customer, Debt } from '../db.ts';
+import { db, SaleItem, Sale, InventoryItem, User as DBUser, Customer, Debt, Category } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
 import { 
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, 
   MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, 
   Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight,
   BookOpen, CreditCard, AlertCircle, Banknote, Landmark, CreditCard as CardIcon,
-  ShieldCheck, HelpCircle
+  ShieldCheck, HelpCircle, ChevronLeft, Tag
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
@@ -22,7 +22,10 @@ interface POSProps {
 
 export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const inventory = useLiveQuery(() => db.inventory.toArray());
+  const categories = useLiveQuery(() => db.categories.toArray());
+  
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [cart, setCart] = useState<(SaleItem & { image?: string })[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
@@ -66,11 +69,19 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
     loadBankDetails();
   }, []);
 
-  const filteredItems = inventory?.filter(item => 
-    (item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-     (item.barcode && item.barcode.includes(searchTerm))) && 
-    item.stock > 0
-  ) || [];
+  const filteredItems = useMemo(() => {
+    if (!inventory) return [];
+    let items = inventory;
+    if (searchTerm) {
+      items = items.filter(item => 
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (item.barcode && item.barcode.includes(searchTerm))
+      );
+    } else if (selectedCategory) {
+      items = items.filter(item => item.category === selectedCategory);
+    }
+    return items.filter(item => item.stock > 0);
+  }, [inventory, searchTerm, selectedCategory]);
 
   const addToCart = (item: InventoryItem) => {
     setCart(prev => {
@@ -87,6 +98,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
         image: item.image
       }];
     });
+    if (navigator.vibrate) navigator.vibrate(50);
   };
 
   const removeFromCart = (id: string | number) => {
@@ -289,7 +301,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             const item = await db.inventory.where('barcode').equals(decodedText).first();
             if (item) {
               addToCart(item);
-              if (navigator.vibrate) navigator.vibrate(50);
             }
           },
           () => {}
@@ -321,7 +332,16 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
 
       <div className={`p-4 space-y-4 flex-1 overflow-auto transition-all ${cart.length > 0 ? 'pb-40' : 'pb-24'}`}>
         <header className="flex justify-between items-center">
-          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Quick POS</h1>
+          <div className="flex items-center gap-3">
+             {selectedCategory && !searchTerm && (
+                <button onClick={() => setSelectedCategory(null)} className="p-2 bg-emerald-50 dark:bg-emerald-900 rounded-xl text-emerald-600 dark:text-emerald-400">
+                   <ChevronLeft size={20} />
+                </button>
+             )}
+             <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">
+               {selectedCategory && !searchTerm ? selectedCategory : 'Quick POS'}
+             </h1>
+          </div>
           <div className="flex items-center gap-3">
             <button onClick={startScanner} className="bg-emerald-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 transition-all">
               <Scan size={20} />
@@ -337,38 +357,70 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" placeholder="Search catalog or barcode..."
-            className="w-full pl-12 pr-4 py-4 bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none font-medium text-slate-900 dark:text-emerald-50"
+            className="w-full pl-12 pr-4 py-4 bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none font-medium text-slate-900 dark:text-emerald-50 shadow-sm"
             value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {filteredItems.map(item => (
-            <button key={item.id} onClick={() => addToCart(item)} className="bg-white dark:bg-emerald-900/40 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 text-left shadow-sm active:scale-95 transition-all flex flex-col overflow-hidden">
-              <div className="h-24 w-full bg-slate-100 dark:bg-emerald-950/40 relative flex-shrink-0">
-                {item.image ? (
-                  <img src={item.image} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-black text-2xl uppercase">
-                    {item.name.charAt(0)}
-                  </div>
-                )}
-              </div>
-              <div className="p-3 flex flex-col flex-1 justify-between">
-                <div>
-                  <h3 className="font-bold text-slate-800 dark:text-emerald-50 text-xs line-clamp-1">{item.name}</h3>
-                  <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm mt-0.5">{formatNaira(item.sellingPrice)}</p>
-                </div>
-                <div className="mt-2 pt-2 border-t border-slate-50 dark:border-emerald-800/20 flex justify-between items-center">
-                  <span className="text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest bg-slate-50 dark:bg-emerald-950 text-slate-400">
-                    {item.stock} left
-                  </span>
-                  <Plus size={12} className="text-emerald-600" />
-                </div>
-              </div>
-            </button>
+        {/* Category Chips */}
+        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
+          <button onClick={() => { setSelectedCategory(null); setSearchTerm(''); }} className={`flex-shrink-0 px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${!selectedCategory && !searchTerm ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-emerald-900 text-slate-400 border-slate-100 dark:border-emerald-800'}`}>All</button>
+          {categories?.map(c => (
+            <button key={c.id} onClick={() => { setSelectedCategory(c.name); setSearchTerm(''); }} className={`flex-shrink-0 px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${selectedCategory === c.name && !searchTerm ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-emerald-900 text-slate-400 border-slate-100 dark:border-emerald-800'}`}>{c.name}</button>
           ))}
         </div>
+
+        {/* Dynamic Display: Categories or Products */}
+        {!searchTerm && !selectedCategory ? (
+          <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
+             {categories?.map(cat => (
+                <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} className="bg-white dark:bg-emerald-900/40 p-4 rounded-[40px] border border-slate-50 dark:border-emerald-800/20 shadow-sm flex flex-col items-center gap-4 active:scale-95 transition-all text-center">
+                  <div className="w-full aspect-square rounded-[32px] overflow-hidden bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center border border-emerald-100 dark:border-emerald-800">
+                    {cat.image ? (
+                      <img src={cat.image} className="w-full h-full object-cover" alt="" />
+                    ) : (
+                      <span className="text-4xl font-black text-emerald-600 dark:text-emerald-400 uppercase">{cat.name.charAt(0)}</span>
+                    )}
+                  </div>
+                  <p className="font-black text-xs text-slate-800 dark:text-emerald-50 uppercase tracking-widest">{cat.name}</p>
+                </button>
+             ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 animate-in fade-in duration-300">
+            {filteredItems.map(item => (
+              <button key={item.id} onClick={() => addToCart(item)} className="bg-white dark:bg-emerald-900/40 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 text-left shadow-sm active:scale-95 transition-all flex flex-col overflow-hidden">
+                <div className="h-24 w-full bg-slate-100 dark:bg-emerald-950/40 relative flex-shrink-0">
+                  {item.image ? (
+                    <img src={item.image} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-black text-2xl uppercase">
+                      {item.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+                <div className="p-3 flex flex-col flex-1 justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 dark:text-emerald-50 text-xs line-clamp-1">{item.name}</h3>
+                    <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm mt-0.5">{formatNaira(item.sellingPrice)}</p>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-50 dark:border-emerald-800/20 flex justify-between items-center">
+                    <span className="text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest bg-slate-50 dark:bg-emerald-950 text-slate-400">
+                      {item.stock} left
+                    </span>
+                    <Plus size={12} className="text-emerald-600" />
+                  </div>
+                </div>
+              </button>
+            ))}
+            {filteredItems.length === 0 && (
+              <div className="col-span-full py-20 text-center opacity-30">
+                 <Package size={48} className="mx-auto mb-2" />
+                 <p className="text-xs font-black uppercase tracking-widest">No products in this folder</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {isScanning && (
