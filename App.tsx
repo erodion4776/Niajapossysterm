@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page, Role, DeviceRole } from './types.ts';
 import { initTrialDate, User, db } from './db.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
@@ -55,6 +55,9 @@ const AppContent: React.FC = () => {
   const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - Date.now()) / (1000 * 60 * 60 * 24)) : null;
   const isExpired = expiryDate ? Date.now() > expiryDate : false;
 
+  // Fix: Use ReturnType<typeof setInterval> instead of NodeJS.Timeout for browser compatibility
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const syncStateFromUrl = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page')?.toUpperCase();
@@ -88,6 +91,11 @@ const AppContent: React.FC = () => {
     window.history.pushState({}, '', url.toString());
   }, []);
 
+  const updateMonotonicClock = async () => {
+    const now = Date.now();
+    await db.security.put({ key: 'max_date_recorded', value: now });
+  };
+
   useEffect(() => {
     const startup = async () => {
       const hostname = window.location.hostname;
@@ -97,16 +105,17 @@ const AppContent: React.FC = () => {
       
       await initTrialDate();
 
-      // 1. Clock Tamper Check
-      const maxDateSetting = await db.settings.get('max_date_recorded');
-      if (maxDateSetting && Date.now() < maxDateSetting.value) {
+      // 1. Monotonic Clock Tamper Check
+      const maxDateSetting = await db.security.get('max_date_recorded');
+      const now = Date.now();
+      if (maxDateSetting && now < maxDateSetting.value) {
         setIsClockTampered(true);
-      } else {
-        await db.settings.put({ key: 'max_date_recorded', value: Date.now() });
+        return;
       }
+      await updateMonotonicClock();
 
-      // 2. License Wipe Protection Sync
-      const dbLicense = await db.settings.get('subscription_expiry');
+      // 2. Wipe Protection / License Sync (LS <-> DB)
+      const dbLicense = await db.security.get('subscription_expiry');
       const lsLicense = localStorage.getItem('subscription_expiry');
       
       if (dbLicense?.value && !lsLicense) {
@@ -115,23 +124,34 @@ const AppContent: React.FC = () => {
         setExpiryDate(dbLicense.value);
         setIsActivated(true);
       } else if (lsLicense && !dbLicense?.value) {
-        await db.settings.put({ key: 'subscription_expiry', value: parseInt(lsLicense) });
-        await db.settings.put({ key: 'is_activated', value: true });
+        await db.security.put({ key: 'subscription_expiry', value: parseInt(lsLicense) });
+        await db.security.put({ key: 'is_activated', value: true });
+        setExpiryDate(parseInt(lsLicense));
+        setIsActivated(true);
+      } else if (lsLicense && dbLicense?.value) {
+        setExpiryDate(dbLicense.value);
+        setIsActivated(true);
       }
 
       syncStateFromUrl();
       
-      const dbActivated = await db.settings.get('is_activated');
+      const dbActivated = await db.security.get('is_activated');
       if (dbActivated?.value === true && !isActivated) {
         localStorage.setItem('is_activated', 'true');
         setIsActivated(true);
       }
       setIsInitialized(true);
+
+      // Start Heartbeat: Update security clock every 5 minutes
+      heartbeatRef.current = setInterval(updateMonotonicClock, 5 * 60 * 1000);
     };
     startup();
 
     window.addEventListener('popstate', syncStateFromUrl);
-    return () => window.removeEventListener('popstate', syncStateFromUrl);
+    return () => {
+      window.removeEventListener('popstate', syncStateFromUrl);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
   }, [isActivated, syncStateFromUrl]);
 
   const handleStartTrial = () => {
@@ -234,14 +254,14 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500 transition-colors duration-300">
       
-      {/* Grace Period Banner */}
+      {/* Background Grace Period Banner */}
       {expiryDate && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 7 && (
-        <div className="bg-amber-500 text-white px-4 py-2 text-[10px] font-black uppercase flex items-center justify-between sticky top-0 z-[60]">
+        <div className="bg-amber-500 text-white px-4 py-2 text-[10px] font-black uppercase flex items-center justify-between sticky top-0 z-[60] shadow-lg">
           <div className="flex items-center gap-2">
-            <AlertTriangle size={14} />
-            <span>Subscription expires in {daysUntilExpiry} days.</span>
+            <AlertTriangle size={14} className="animate-pulse" />
+            <span>Your subscription expires in {daysUntilExpiry} days. Contact developer to renew.</span>
           </div>
-          <a href="https://wa.me/2347062228026" target="_blank" className="bg-white text-amber-600 px-3 py-1 rounded-full flex items-center gap-1">
+          <a href="https://wa.me/2347062228026" target="_blank" className="bg-white text-amber-600 px-3 py-1 rounded-full flex items-center gap-1 active:scale-95 transition-all">
              <MessageCircle size={10} /> Renew
           </a>
         </div>

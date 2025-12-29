@@ -37,13 +37,13 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
     const result = await verifyActivationKey(requestCode, activationKey);
     
     if (result.isValid && result.expiry) {
-      // 1. Double-Lock Persistence (LS + DB)
+      // 1. Wipe Protection Sync (LS + DB Security Table)
       localStorage.setItem('subscription_expiry', result.expiry.toString());
       localStorage.setItem('is_activated', 'true');
       localStorage.removeItem('is_trialing');
       
-      await db.settings.put({ key: 'subscription_expiry', value: result.expiry });
-      await db.settings.put({ key: 'is_activated', value: true });
+      await db.security.put({ key: 'subscription_expiry', value: result.expiry });
+      await db.security.put({ key: 'is_activated', value: true });
 
       // If it was just an expiry renewal, we don't need onboarding again
       const isFirstTime = localStorage.getItem('is_setup_pending') !== 'false';
@@ -88,7 +88,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
   }
 
   return (
-    <div className="fixed inset-0 z-[500] bg-emerald-950 flex flex-col items-center justify-center p-6 text-white text-center">
+    <div className="fixed inset-0 z-[500] bg-emerald-950 flex flex-col items-center justify-center p-6 text-white text-center overflow-y-auto">
       <div className="w-20 h-20 bg-emerald-500/20 rounded-[24px] flex items-center justify-center mb-6 border border-emerald-500/30 shadow-2xl">
         {isExpired ? <ShieldAlert size={40} className="text-amber-400" /> : <Lock size={40} className="text-emerald-400" />}
       </div>
@@ -107,7 +107,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
           <p className="text-emerald-500/60 text-[10px] font-black uppercase tracking-[0.2em]">Request Code</p>
           <div className="flex items-center justify-center gap-3">
             <span className="text-2xl font-mono font-black tracking-widest text-white">{requestCode}</span>
-            <button onClick={handleCopy} className="p-2 bg-emerald-800/50 hover:bg-emerald-700/50 rounded-lg">
+            <button onClick={handleCopy} className="p-2 bg-emerald-800/50 hover:bg-emerald-700/50 rounded-lg active:scale-90 transition-all">
               {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} className="text-emerald-500" />}
             </button>
           </div>
