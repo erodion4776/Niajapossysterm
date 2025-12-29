@@ -7,7 +7,8 @@
 const getSalt = (): string => {
   const env = (import.meta as any).env;
   const proc = (typeof process !== 'undefined') ? (process as any).env : {};
-  return env?.VITE_APP_SALT || proc?.VITE_APP_SALT || 'NAIJA_SECURE_2025';
+  // Aligned with Oga's requested commercial salt
+  return env?.VITE_APP_SALT || proc?.VITE_APP_SALT || 'NaijaPOS_2025_Secret_Keep_Safe_99';
 };
 
 /**
@@ -56,7 +57,6 @@ export async function verifyActivationKey(requestCode: string, enteredKey: strin
   const validSignature = secretHash.substring(0, 10).toUpperCase();
   
   if (signature === validSignature) {
-    // Decode expiry timestamp from Hex
     const expiryTimestamp = parseInt(expiryHex, 16);
     return { 
       isValid: true, 
@@ -69,11 +69,9 @@ export async function verifyActivationKey(requestCode: string, enteredKey: strin
 
 /**
  * Validates integrity of stored license values.
- * Used for Wipe Protection and Device-ID mismatch detection.
  */
 export async function validateLicenseIntegrity(requestCode: string, savedKey: string, savedExpiry: number): Promise<boolean> {
   if (!savedKey || !savedExpiry) return false;
   const result = await verifyActivationKey(requestCode, savedKey);
-  // Key must match current device ID AND the stored expiry must match the signed expiry inside the key
   return result.isValid && result.expiry === savedExpiry;
 }

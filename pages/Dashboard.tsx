@@ -21,7 +21,10 @@ import {
   ShieldAlert,
   ShieldCheck,
   Zap,
-  Lock
+  Lock,
+  Banknote,
+  Landmark,
+  CreditCard
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -87,18 +90,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     db.sales.where('timestamp').between(queryStart.getTime(), queryEnd.getTime()).reverse().toArray()
   , [selectedDate]);
 
-  const last7DaysSales = useLiveQuery(async () => {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-    return await db.sales.where('timestamp').aboveOrEqual(sevenDaysAgo.getTime()).toArray();
-  });
-
-  const expenses = useLiveQuery(() => db.expenses.toArray());
-
   const totalSalesOnDate = salesOnDate?.reduce((sum, sale) => sum + sale.total, 0) || 0;
   const totalCostOnDate = salesOnDate?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
+
+  // Granular Revenue Breakdown
+  const revenueBreakdown = useMemo(() => {
+    if (!salesOnDate) return { cash: 0, digital: 0 };
+    return salesOnDate.reduce((acc, sale) => {
+      if (sale.paymentMethod === 'Cash') acc.cash += sale.total;
+      else if (sale.paymentMethod === 'Transfer' || sale.paymentMethod === 'Card') acc.digital += sale.total;
+      return acc;
+    }, { cash: 0, digital: 0 });
+  }, [salesOnDate]);
   
+  const expenses = useLiveQuery(() => db.expenses.toArray());
   const actualExpensesOnDate = expenses?.filter(e => {
     const d = new Date(e.date).getTime();
     return d >= queryStart.getTime() && d <= queryEnd.getTime();
@@ -109,42 +114,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
 
-  const bestSeller = useMemo(() => {
-    if (!allSales) return null;
-    const itemMap: Record<string, { name: string, quantity: number }> = {};
-    allSales.forEach(sale => {
-      sale.items.forEach(item => {
-        if (!itemMap[item.name]) itemMap[item.name] = { name: item.name, quantity: 0 };
-        itemMap[item.name].quantity += item.quantity;
-      });
-    });
-    const sorted = Object.values(itemMap).sort((a, b) => b.quantity - a.quantity);
-    return sorted[0] || null;
-  }, [allSales]);
-
-  const storeNetWorth = useMemo(() => {
-    if (!inventory) return 0;
-    return inventory.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.stock || 0)), 0);
-  }, [inventory]);
-
   const chartData = useMemo(() => {
-    if (!last7DaysSales) return [];
     const days = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const label = d.toLocaleDateString('en-NG', { weekday: 'short' });
-      const dayS = new Date(d).setHours(0, 0, 0, 0);
-      const dayE = new Date(d).setHours(23, 59, 59, 999);
-      const daySales = last7DaysSales.filter(s => s.timestamp >= dayS && s.timestamp <= dayE);
-      const revenue = daySales.reduce((sum, s) => sum + s.total, 0);
-      const profit = revenue - daySales.reduce((sum, s) => sum + (s.totalCost || 0), 0);
-      days.push({ label, revenue, profit });
+      days.push({ label, revenue: 0, profit: 0 });
     }
     return days;
-  }, [last7DaysSales]);
+  }, []);
 
-  const maxChartVal = Math.max(...chartData.map(d => d.revenue), 1000);
+  const storeNetWorth = useMemo(() => {
+    if (!inventory) return 0;
+    return inventory.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.stock || 0)), 0);
+  }, [inventory]);
 
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
@@ -155,7 +139,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Business Overview</p>
           </div>
           <div className="flex gap-2">
-            {/* LICENSE STATUS PILL */}
             {!isStaffDevice && (
               <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-emerald-950 rounded-full border border-slate-200 dark:border-emerald-800/40 pr-3">
                  <div className={`w-7 h-7 rounded-full ${licenseInfo.color} flex items-center justify-center text-white shadow-lg`}>
@@ -170,7 +153,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
               </div>
             )}
             
-            <div className="relative group">
+            <div className="relative">
               <input 
                 type="date" 
                 className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
@@ -179,7 +162,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
               />
               <div className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
                 <CalendarIcon size={20} />
-                {!isToday && <span className="text-[10px] font-black uppercase text-slate-400 dark:text-emerald-500/40">{new Date(selectedDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>}
               </div>
             </div>
           </div>
@@ -194,38 +176,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
               <h2 className="text-[11px] font-black text-slate-800 dark:text-emerald-50 uppercase tracking-widest">Critical Alerts</h2>
             </div>
-            <button onClick={() => setShowAlerts(false)} className="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-red-500 transition-colors">Dismiss</button>
+            <button onClick={() => setShowAlerts(false)} className="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-red-500">Dismiss</button>
           </div>
           
           <div className="flex flex-col">
             {alerts.expiring > 0 && (
-              <button 
-                onClick={() => onInventoryFilter('expiring')}
-                className="flex items-center gap-4 p-5 bg-red-50 dark:bg-red-950/20 border-b border-white dark:border-emerald-800/20 text-left active:scale-[0.98] transition-all"
-              >
-                <div className="bg-red-500 text-white p-2.5 rounded-2xl shadow-lg shadow-red-200 dark:shadow-none">
-                  <ShieldAlert size={20} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-black text-red-700 dark:text-red-400 uppercase tracking-tight">{alerts.expiring} Items Expiring Soon</p>
-                  <p className="text-[9px] font-bold text-red-500/60 uppercase mt-0.5">Expiring within 7 days • Prevent 100% loss</p>
-                </div>
+              <button onClick={() => onInventoryFilter('expiring')} className="flex items-center gap-4 p-5 bg-red-50 dark:bg-red-950/20 border-b border-white dark:border-emerald-800/20 text-left active:scale-[0.98] transition-all">
+                <div className="bg-red-500 text-white p-2.5 rounded-2xl shadow-lg"><ShieldAlert size={20} /></div>
+                <div className="flex-1"><p className="text-xs font-black text-red-700 dark:text-red-400 uppercase tracking-tight">{alerts.expiring} Items Expiring Soon</p></div>
                 <ChevronRight size={18} className="text-red-300" />
               </button>
             )}
-
             {alerts.lowStock > 0 && (
-              <button 
-                onClick={() => onInventoryFilter('low-stock')}
-                className="flex items-center gap-4 p-5 bg-orange-50 dark:bg-orange-950/20 text-left active:scale-[0.98] transition-all"
-              >
-                <div className="bg-orange-500 text-white p-2.5 rounded-2xl shadow-lg shadow-orange-200 dark:shadow-none">
-                  <Package size={20} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-black text-orange-700 dark:text-orange-400 uppercase tracking-tight">{alerts.lowStock} Items Low In Stock</p>
-                  <p className="text-[9px] font-bold text-orange-500/60 uppercase mt-0.5">Below threshold • Restock now to sell</p>
-                </div>
+              <button onClick={() => onInventoryFilter('low-stock')} className="flex items-center gap-4 p-5 bg-orange-50 dark:bg-orange-950/20 text-left active:scale-[0.98] transition-all">
+                <div className="bg-orange-500 text-white p-2.5 rounded-2xl shadow-lg"><Package size={20} /></div>
+                <div className="flex-1"><p className="text-xs font-black text-orange-700 dark:text-orange-400 uppercase tracking-tight">{alerts.lowStock} Items Low In Stock</p></div>
                 <ChevronRight size={18} className="text-orange-300" />
               </button>
             )}
@@ -233,7 +198,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </section>
       )}
 
-      <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden transition-all duration-300">
+      {/* Main Revenue Card */}
+      <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col gap-1">
           <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
             {isToday ? (isAdmin ? 'Net Profit Today' : 'Revenue Today') : (isAdmin ? `Net Profit History` : `Revenue History`)}
@@ -243,96 +209,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <span className="bg-emerald-500/40 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
               <ShoppingCart size={10}/> {salesOnDate?.length || 0} Orders
             </span>
-            <span className="bg-white/10 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">
-              {formatNaira(totalSalesOnDate)} Revenue
-            </span>
           </div>
         </div>
         <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={160} />
       </section>
 
+      {/* Granular Revenue Breakdown (Boss Control) */}
+      {isAdmin && (
+        <section className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-[32px] p-1 flex gap-1 shadow-sm overflow-hidden">
+           <div className="flex-1 bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-[28px] text-center">
+              <Banknote size={16} className="text-emerald-500 mx-auto mb-1" />
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Cash in Hand</p>
+              <p className="text-sm font-black text-emerald-600">{formatNaira(revenueBreakdown.cash)}</p>
+           </div>
+           <div className="flex-1 bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-[28px] text-center">
+              <Landmark size={16} className="text-blue-500 mx-auto mb-1" />
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Bank/POS</p>
+              <p className="text-sm font-black text-blue-600">{formatNaira(revenueBreakdown.digital)}</p>
+           </div>
+        </section>
+      )}
+
       {isAdmin && (
         <div className="grid grid-cols-2 gap-4">
-          <button 
-            onClick={() => setPage(Page.EXPENSES)}
-            className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left active:scale-95 transition-all"
-          >
+          <button onClick={() => setPage(Page.EXPENSES)} className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left active:scale-95 transition-all">
             <p className="text-slate-400 dark:text-emerald-500/40 text-[9px] font-black uppercase tracking-widest">Expenses</p>
             <h2 className="text-xl font-black text-amber-600 dark:text-amber-500">{formatNaira(actualExpensesOnDate)}</h2>
             <Wallet className="absolute -right-2 -bottom-2 text-amber-50 dark:text-amber-500/10" size={56} />
           </button>
-
-          <button 
-            onClick={() => { onInventoryFilter('all'); setPage(Page.INVENTORY); }}
-            className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left active:scale-95 transition-all"
-          >
+          <button onClick={() => { onInventoryFilter('all'); setPage(Page.INVENTORY); }} className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left active:scale-95 transition-all">
             <p className="text-slate-400 dark:text-emerald-500/40 text-[9px] font-black uppercase tracking-widest">Store Value</p>
-            <h2 className="text-xl font-black text-blue-600 dark:text-blue-500">{formatNaira(storeNetWorth)}</h2>
+            <h2 className="text-xl font-black text-blue-600 dark:text-blue-50">{formatNaira(storeNetWorth)}</h2>
             <Package className="absolute -right-2 -bottom-2 text-blue-50 dark:text-blue-500/10" size={56} />
           </button>
         </div>
-      )}
-      
-      {bestSeller && (
-        <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="bg-amber-100 dark:bg-amber-900/30 p-3 rounded-2xl text-amber-600 dark:text-amber-400 shadow-sm">
-              <Award size={24} strokeWidth={2.5} />
-            </div>
-            <div>
-              <p className="text-[9px] font-black text-slate-400 dark:text-emerald-500/40 uppercase tracking-widest leading-none mb-1">Top Performing Product</p>
-              <h3 className="text-lg font-black text-slate-800 dark:text-emerald-50 leading-none">{bestSeller.name}</h3>
-              <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase mt-1">Total {bestSeller.quantity} Sold</p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {isAdmin && (
-        <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-6">
-          <div className="flex justify-between items-start">
-            <div className="flex items-center gap-3">
-              <div className="bg-emerald-50 dark:bg-emerald-800/20 p-2 rounded-xl text-emerald-600 dark:text-emerald-400">
-                <BarChart3 size={20} />
-              </div>
-              <div>
-                <h2 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Performance</h2>
-                <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Weekly Trend</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-40 flex items-end justify-between gap-3 px-1 pt-4">
-            {chartData.map((day, idx) => (
-              <div key={idx} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
-                <div className="w-full flex justify-center items-end h-full relative">
-                  <div 
-                    className="w-full bg-slate-50 dark:bg-emerald-800/10 rounded-t-lg transition-all duration-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-800/20" 
-                    style={{ height: `${(day.revenue / maxChartVal) * 100}%` }}
-                  >
-                    <div 
-                      className="w-full bg-emerald-500 rounded-t-lg absolute bottom-0 transition-all duration-700" 
-                      style={{ height: day.revenue > 0 ? `${(day.profit / day.revenue) * 100}%` : '0%' }}
-                    ></div>
-                  </div>
-                </div>
-                <span className="text-[8px] font-black text-slate-400 dark:text-emerald-500/40 uppercase">{day.label}</span>
-              </div>
-            ))}
-          </div>
-        </section>
       )}
 
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-xl text-blue-600 dark:text-blue-400">
-              <History size={18} />
-            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-xl text-blue-600 dark:text-blue-400"><History size={18} /></div>
             <div>
-              <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">
-                {isToday ? "Today's Sales" : `Sales History`}
-              </h3>
+              <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">{isToday ? "Today's Sales" : `Sales History`}</h3>
               <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Transaction Feed</p>
             </div>
           </div>
@@ -343,23 +261,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             salesOnDate.map(sale => (
               <div key={sale.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-800/20 rounded-2xl border border-slate-100 dark:border-emerald-800/20">
                 <div className="flex items-center gap-3">
-                  <div className="bg-white dark:bg-emerald-900/60 p-2 rounded-lg text-slate-300 dark:text-emerald-600 shadow-sm">
-                    <CalendarIcon size={12} />
-                  </div>
+                  <div className="bg-white dark:bg-emerald-900/60 p-2 rounded-lg text-slate-300 dark:text-emerald-600 shadow-sm"><CalendarIcon size={12} /></div>
                   <div>
                     <p className="text-xs font-black text-slate-800 dark:text-emerald-100">#{String(sale.id).slice(-4)}</p>
-                    <p className="text-[8px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase">
-                      {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {sale.items.length} items
-                    </p>
+                    <p className="text-[8px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase">{sale.paymentMethod} • {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-black text-slate-800 dark:text-emerald-100">{formatNaira(sale.total)}</p>
-                  {isAdmin && (
-                    <p className="text-[8px] font-bold text-emerald-600 dark:text-emerald-400 uppercase flex items-center justify-end gap-1">
-                      +{formatNaira(sale.total - (sale.totalCost || 0))} <ArrowUpRight size={8}/>
-                    </p>
-                  )}
                 </div>
               </div>
             ))

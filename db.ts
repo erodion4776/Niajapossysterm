@@ -53,7 +53,7 @@ export interface Sale {
   totalCost: number;
   walletUsed?: number;
   walletSaved?: number;
-  paymentMethod?: 'Cash' | 'Wallet' | 'Debt';
+  paymentMethod: 'Cash' | 'Transfer' | 'Card' | 'Wallet' | 'Debt';
   timestamp: number;
   staff_id: string;
   staff_name: string;

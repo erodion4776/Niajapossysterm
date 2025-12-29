@@ -7,7 +7,7 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, 
   MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, 
   Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight,
-  BookOpen, CreditCard, AlertCircle
+  BookOpen, CreditCard, AlertCircle, Banknote, Landmark, CreditCard as CardIcon
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
@@ -26,7 +26,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
   const [isCartExpanded, setIsCartExpanded] = useState(false);
   
   // Checkout Configuration
-  const [paymentMode, setPaymentMode] = useState<'Immediate' | 'Debt'>('Immediate');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Transfer' | 'Card' | 'Debt'>('Cash');
   const [customerPhone, setCustomerPhone] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
@@ -86,7 +86,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const total = paymentMode === 'Immediate' 
+  const total = paymentMode !== 'Debt' 
     ? Math.max(0, cartSubtotal - walletCreditApplied)
     : cartSubtotal;
 
@@ -98,10 +98,10 @@ export const POS: React.FC<POSProps> = ({ user }) => {
     setWalletCreditApplied(0);
     setAmountPaid('');
     setSaveChangeToWallet(false);
-    setPaymentMode('Immediate');
+    setPaymentMode('Cash');
   };
 
-  const togglePaymentMode = (mode: 'Immediate' | 'Debt') => {
+  const togglePaymentMode = (mode: 'Cash' | 'Transfer' | 'Card' | 'Debt') => {
     setPaymentMode(mode);
     if (mode === 'Debt') {
       setWalletCreditApplied(0);
@@ -150,10 +150,6 @@ export const POS: React.FC<POSProps> = ({ user }) => {
         alert("Select or search for a customer before recording a debt!");
         return;
       }
-      if (total <= 0) {
-        alert("Cannot record a ₦0 debt.");
-        return;
-      }
     }
 
     const sale: Sale = {
@@ -161,9 +157,9 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       items: cart.map(({image, ...rest}) => rest), 
       total,
       totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
-      walletUsed: paymentMode === 'Immediate' ? walletCreditApplied : 0,
-      walletSaved: paymentMode === 'Immediate' && saveChangeToWallet ? changeDue : 0,
-      paymentMethod: paymentMode === 'Debt' ? 'Debt' : 'Cash',
+      walletUsed: paymentMode !== 'Debt' ? walletCreditApplied : 0,
+      walletSaved: paymentMode !== 'Debt' && saveChangeToWallet ? changeDue : 0,
+      paymentMethod: paymentMode,
       timestamp: Date.now(),
       staff_id: String(user.id || user.role),
       staff_name: user.name || user.role,
@@ -172,16 +168,14 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
     try {
       await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
-        // 1. Inventory Logic + Logging
+        // 1. Inventory Logic
         for (const item of cart) {
           if (!item.id) continue;
           const invItem = await db.inventory.get(item.id);
           if (invItem) {
-            if (invItem.stock < item.quantity) throw new Error(`Insufficient stock for ${invItem.name}`);
             const newStock = invItem.stock - item.quantity;
             await db.inventory.update(item.id, { stock: newStock });
             
-            // LOG THE DEDUCTION
             await db.stock_logs.add({
               item_id: item.id,
               itemName: invItem.name,
@@ -195,7 +189,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
           }
         }
 
-        // 2. Ledger/Wallet Logic
+        // 2. Customer Ledger
         if (selectedCustomer) {
           if (paymentMode === 'Debt') {
             const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
@@ -218,7 +212,6 @@ export const POS: React.FC<POSProps> = ({ user }) => {
           }
         }
 
-        // 3. Complete Sale Record
         const saleId = await db.sales.add(sale);
         setLastSale({ ...sale, id: saleId as number });
       });
@@ -345,7 +338,7 @@ export const POS: React.FC<POSProps> = ({ user }) => {
       {cart.length > 0 && (
         <>
           {isCartExpanded && <div className="fixed inset-0 bg-black/20 dark:bg-black/60 z-40" onClick={() => setIsCartExpanded(false)} />}
-          <div className={`fixed bottom-16 inset-x-0 bg-white dark:bg-emerald-900 border-t-2 border-emerald-500 z-[45] flex flex-col rounded-t-[40px] transition-all duration-300 ${isCartExpanded ? 'max-h-[90vh] h-auto p-6' : 'max-h-24 p-4'}`}>
+          <div className={`fixed bottom-16 inset-x-0 bg-white dark:bg-emerald-900 border-t-2 border-emerald-500 z-[45] flex flex-col rounded-t-[40px] transition-all duration-300 ${isCartExpanded ? 'max-h-[95vh] h-auto p-6' : 'max-h-24 p-4'}`}>
             <button onClick={() => setIsCartExpanded(!isCartExpanded)} className={`w-full flex flex-col items-center mb-2`}>
               <div className="w-12 h-1 bg-slate-200 dark:bg-emerald-800 rounded-full mb-3" />
               <div className="w-full flex justify-between items-center">
@@ -358,21 +351,34 @@ export const POS: React.FC<POSProps> = ({ user }) => {
             </button>
 
             {isCartExpanded && (
-              <div className="flex-1 overflow-y-auto space-y-6 pt-2">
-                <div className="bg-slate-100 dark:bg-emerald-950 p-1 rounded-2xl flex gap-1">
-                  <button onClick={() => togglePaymentMode('Immediate')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 ${paymentMode === 'Immediate' ? 'bg-white dark:bg-emerald-800 text-emerald-600' : 'text-slate-400'}`}><CreditCard size={14} /> Paid Now</button>
-                  <button onClick={() => togglePaymentMode('Debt')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 ${paymentMode === 'Debt' ? 'bg-amber-500 text-white' : 'text-slate-400'}`}><BookOpen size={14} /> Record Debt</button>
+              <div className="flex-1 overflow-y-auto space-y-6 pt-2 custom-scrollbar">
+                <div className="grid grid-cols-4 gap-1.5 bg-slate-100 dark:bg-emerald-950 p-1 rounded-2xl">
+                  <button onClick={() => togglePaymentMode('Cash')} className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter ${paymentMode === 'Cash' ? 'bg-white dark:bg-emerald-800 text-emerald-600 shadow-sm' : 'text-slate-400'}`}>
+                    <Banknote size={16} className="mb-1" /> Cash
+                  </button>
+                  <button onClick={() => togglePaymentMode('Transfer')} className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter ${paymentMode === 'Transfer' ? 'bg-white dark:bg-emerald-800 text-blue-600 shadow-sm' : 'text-slate-400'}`}>
+                    <Landmark size={16} className="mb-1" /> Transfer
+                  </button>
+                  <button onClick={() => togglePaymentMode('Card')} className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter ${paymentMode === 'Card' ? 'bg-white dark:bg-emerald-800 text-purple-600 shadow-sm' : 'text-slate-400'}`}>
+                    <CardIcon size={16} className="mb-1" /> POS Card
+                  </button>
+                  <button onClick={() => togglePaymentMode('Debt')} className={`flex flex-col items-center py-3 rounded-xl text-[8px] font-black uppercase tracking-tighter ${paymentMode === 'Debt' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400'}`}>
+                    <BookOpen size={16} className="mb-1" /> Debt
+                  </button>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex gap-2">
-                    <input type="tel" placeholder="Customer Phone..." className="flex-1 px-4 py-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
-                    <button onClick={() => handleLookupCustomer()} className="px-4 bg-emerald-100 dark:bg-emerald-800 text-emerald-600 rounded-2xl active:scale-90">{isSearchingCustomer ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}</button>
+                    <input type="tel" placeholder="Customer Phone..." className="flex-1 px-4 py-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                    <button onClick={() => handleLookupCustomer()} className="px-4 bg-emerald-100 dark:bg-emerald-800 text-emerald-600 rounded-2xl active:scale-90 transition-all">{isSearchingCustomer ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}</button>
                   </div>
                   {selectedCustomer && (
-                    <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-100 flex justify-between items-center">
-                      <span className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase">{selectedCustomer.name}</span>
-                      {paymentMode === 'Immediate' && selectedCustomer.walletBalance > 0 && walletCreditApplied === 0 && <button onClick={() => setWalletCreditApplied(Math.min(selectedCustomer.walletBalance, cartSubtotal))} className="text-[9px] font-black text-white bg-emerald-600 px-3 py-1.5 rounded-lg uppercase">Use Wallet Credits</button>}
+                    <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-100 flex justify-between items-center animate-in zoom-in duration-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-[10px] font-black">{selectedCustomer.name.charAt(0)}</div>
+                        <span className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase">{selectedCustomer.name}</span>
+                      </div>
+                      {paymentMode !== 'Debt' && selectedCustomer.walletBalance > 0 && walletCreditApplied === 0 && <button onClick={() => setWalletCreditApplied(Math.min(selectedCustomer.walletBalance, cartSubtotal))} className="text-[9px] font-black text-white bg-emerald-600 px-3 py-1.5 rounded-lg uppercase shadow-lg shadow-emerald-200">Use Wallet Credit (₦{selectedCustomer.walletBalance})</button>}
                     </div>
                   )}
                 </div>
@@ -385,43 +391,45 @@ export const POS: React.FC<POSProps> = ({ user }) => {
                         <p className="text-[10px] text-slate-400 font-bold">{formatNaira(item.price)} each</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center bg-white dark:bg-emerald-900 border rounded-xl overflow-hidden">
-                          <button onClick={() => updateQuantity(item.id, -1)} className="p-2 text-slate-400"><Minus size={16}/></button>
+                        <div className="flex items-center bg-white dark:bg-emerald-900 border rounded-xl overflow-hidden shadow-sm">
+                          <button onClick={() => updateQuantity(item.id, -1)} className="p-2 text-slate-400 active:bg-slate-50"><Minus size={16}/></button>
                           <span className="font-black px-2 text-sm dark:text-emerald-50">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.id, 1)} className="p-2 text-slate-400"><Plus size={16}/></button>
+                          <button onClick={() => updateQuantity(item.id, 1)} className="p-2 text-slate-400 active:bg-slate-50"><Plus size={16}/></button>
                         </div>
-                        <button onClick={() => removeFromCart(item.id)} className="text-red-300"><Trash2 size={18}/></button>
+                        <button onClick={() => removeFromCart(item.id)} className="text-red-300 hover:text-red-500"><Trash2 size={18}/></button>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {paymentMode === 'Immediate' ? (
-                  <div className="bg-slate-50 dark:bg-emerald-950/40 p-5 rounded-[32px] border border-slate-100 dark:border-emerald-800/20 space-y-4">
-                    <div className="flex justify-between text-xs font-bold uppercase text-slate-400"><span>Grand Total</span><span className="text-slate-800 dark:text-emerald-50">{formatNaira(total)}</span></div>
+                {paymentMode !== 'Debt' ? (
+                  <div className="bg-slate-50 dark:bg-emerald-950/40 p-5 rounded-[32px] border border-slate-100 dark:border-emerald-800/20 space-y-4 shadow-inner">
+                    <div className="flex justify-between text-xs font-black uppercase text-slate-400"><span>Grand Total</span><span className="text-slate-800 dark:text-emerald-50">{formatNaira(total)}</span></div>
+                    {walletCreditApplied > 0 && <div className="flex justify-between text-[10px] font-bold uppercase text-emerald-600"><span>Wallet Credit Applied</span><span>-{formatNaira(walletCreditApplied)}</span></div>}
+                    
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-emerald-600 uppercase ml-2">Cash Received (₦)</label>
-                      <input type="number" inputMode="decimal" placeholder="0.00" className="w-full p-4 bg-white dark:bg-emerald-900 border border-emerald-100 rounded-2xl font-black text-xl text-emerald-600" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
+                      <label className="text-[10px] font-black text-emerald-600 uppercase ml-2 flex items-center gap-1"><Banknote size={10}/> Cash Received (₦)</label>
+                      <input type="number" inputMode="decimal" placeholder="0.00" className="w-full p-4 bg-white dark:bg-emerald-900 border-2 border-emerald-100 rounded-2xl font-black text-2xl text-emerald-600 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
                     </div>
                     {changeDue > 0 && (
-                      <div className="flex flex-col gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 rounded-2xl">
-                        <div className="flex justify-between items-center"><span className="text-[10px] font-black text-amber-700 uppercase">Change Due</span><span className="text-xl font-black text-amber-700">{formatNaira(changeDue)}</span></div>
-                        {selectedCustomer && <button onClick={() => setSaveChangeToWallet(!saveChangeToWallet)} className={`w-full py-3 rounded-xl font-black text-[10px] uppercase transition-all ${saveChangeToWallet ? 'bg-emerald-600 text-white' : 'bg-white text-emerald-600 border border-emerald-200'}`}>{saveChangeToWallet ? '✓ Saving Change' : 'Save Change to Wallet'}</button>}
+                      <div className="flex flex-col gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 rounded-2xl animate-in slide-in-from-top duration-300">
+                        <div className="flex justify-between items-center"><span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Change Due</span><span className="text-2xl font-black text-amber-700">{formatNaira(changeDue)}</span></div>
+                        {selectedCustomer && <button onClick={() => setSaveChangeToWallet(!saveChangeToWallet)} className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm ${saveChangeToWallet ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-white text-emerald-600 border border-emerald-200'}`}>{saveChangeToWallet ? '✓ Saving Change to Wallet' : 'Save Change to Wallet'}</button>}
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="bg-amber-50 dark:bg-amber-900/20 p-6 rounded-[32px] border-2 border-dashed border-amber-300 text-center space-y-2">
-                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Debit Amount</p>
-                    <p className="text-3xl font-black text-amber-800 dark:text-emerald-50">{formatNaira(total)}</p>
-                    <p className="text-[9px] font-bold text-amber-600 uppercase">Post this sale to customer's debt book</p>
+                  <div className="bg-amber-50 dark:bg-amber-900/20 p-6 rounded-[32px] border-2 border-dashed border-amber-300 text-center space-y-2 animate-in pulse duration-1000">
+                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest leading-none">Credit Sales Amount</p>
+                    <p className="text-4xl font-black text-amber-800 dark:text-emerald-50 tracking-tighter">{formatNaira(total)}</p>
+                    <p className="text-[9px] font-bold text-amber-600 uppercase tracking-wide">Record this sale in Customer Ledger</p>
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-3 pt-2">
-                  <button onClick={() => setIsCartExpanded(false)} className="bg-slate-100 dark:bg-emerald-800 text-slate-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px]">Back</button>
-                  <button onClick={handleCheckout} className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 ${paymentMode === 'Debt' ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'}`}>
-                    {paymentMode === 'Debt' ? 'Post to Ledger' : 'Confirm Pay'} <CheckCircle size={16} />
+                  <button onClick={() => setIsCartExpanded(false)} className="bg-slate-100 dark:bg-emerald-800 text-slate-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">Cancel</button>
+                  <button onClick={handleCheckout} className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-all ${paymentMode === 'Debt' ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-emerald-600 text-white shadow-emerald-200'}`}>
+                    {paymentMode === 'Debt' ? 'Record Debt' : 'Finish Sale'} <ArrowRight size={16} />
                   </button>
                 </div>
               </div>
@@ -432,22 +440,22 @@ export const POS: React.FC<POSProps> = ({ user }) => {
 
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-6 text-center shadow-2xl border dark:border-emerald-800">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-6 text-center shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${lastSale?.paymentMethod === 'Debt' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
               {lastSale?.paymentMethod === 'Debt' ? <BookOpen size={40} /> : <CheckCircle size={40} />}
             </div>
             <h2 className="text-2xl font-black mb-1 text-slate-800 dark:text-emerald-50 tracking-tight">{lastSale?.paymentMethod === 'Debt' ? 'Debt Recorded!' : 'Sale Successful!'}</h2>
             <div className="bg-slate-50 dark:bg-emerald-950/40 rounded-2xl p-5 text-left border border-slate-200 mb-6 space-y-2">
               <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase"><span>Total Amount</span><span>{formatNaira(lastSale?.total || 0)}</span></div>
-              <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase"><span>Method</span><span className="font-black text-slate-800 dark:text-emerald-50 uppercase">{lastSale?.paymentMethod || 'CASH'}</span></div>
+              <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase"><span>Method</span><span className="font-black text-slate-800 dark:text-emerald-50 uppercase tracking-widest">{lastSale?.paymentMethod || 'CASH'}</span></div>
             </div>
             <div className="grid grid-cols-1 gap-3">
-              <button onClick={handlePrint} disabled={isPrinting} className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 active:scale-95 shadow-xl text-xs uppercase">
+              <button onClick={handlePrint} disabled={isPrinting} className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 active:scale-95 shadow-xl text-xs uppercase tracking-widest">
                 {isPrinting ? <Loader2 size={20} className="animate-spin" /> : <Printer size={20} />} {isPrinting ? 'Printing...' : '🖨️ Print Receipt'}
               </button>
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)} className="w-full bg-emerald-50 text-emerald-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 border border-emerald-100 text-[10px] uppercase tracking-widest"><MessageCircle size={18} /> WhatsApp</button>
-                <button onClick={() => setShowSuccessModal(false)} className="w-full py-4 text-slate-400 font-bold uppercase text-[10px] tracking-widest bg-slate-50 dark:bg-emerald-800 rounded-2xl">Next Sale</button>
+                <button onClick={() => lastSale && shareReceiptToWhatsApp(lastSale)} className="w-full bg-emerald-50 text-emerald-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 border border-emerald-100 text-[10px] uppercase tracking-widest active:scale-95 transition-all"><MessageCircle size={18} /> WhatsApp</button>
+                <button onClick={() => setShowSuccessModal(false)} className="w-full py-4 text-slate-400 font-bold uppercase text-[10px] tracking-widest bg-slate-50 dark:bg-emerald-800 rounded-2xl active:scale-95 transition-all">Next Sale</button>
               </div>
             </div>
           </div>
