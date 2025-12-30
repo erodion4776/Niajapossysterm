@@ -1,18 +1,13 @@
 
 import React from 'react';
 import { 
-  ShieldCheck, 
-  Plane, 
-  MessageCircle, 
-  Lock, 
-  Smartphone, 
-  ArrowRight, 
-  CheckCircle2, 
-  Store, 
-  Zap,
-  TrendingUp,
-  XCircle,
-  AlertCircle
+  ShieldCheck, Plane, MessageCircle, Lock, 
+  Smartphone, ArrowRight, CheckCircle2, 
+  Store, Zap, TrendingUp, AlertCircle, 
+  Barcode, Receipt, Wallet, Printer, 
+  Clock, ShieldAlert, Users, Landmark,
+  // Added missing BookOpen import
+  BookOpen
 } from 'lucide-react';
 
 interface LandingPageProps {
@@ -21,234 +16,260 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial }) => {
   return (
-    <div className="bg-white min-h-screen text-gray-900 font-sans overflow-x-hidden">
+    <div className="bg-white min-h-screen text-slate-900 font-sans overflow-x-hidden selection:bg-emerald-100">
       {/* Navigation */}
-      <nav className="flex items-center justify-between p-6 max-w-7xl mx-auto border-b border-gray-50">
+      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="bg-emerald-600 p-2 rounded-xl text-white shadow-lg shadow-emerald-200">
             <Store size={20} />
           </div>
-          <span className="text-xl font-black tracking-tight text-gray-900">NaijaShop</span>
+          <span className="text-xl font-black tracking-tight text-slate-900 uppercase italic">NaijaShop<span className="text-emerald-600">App</span></span>
         </div>
         <button 
           onClick={() => window.open('https://wa.me/2347062228026', '_blank')}
-          className="text-emerald-600 font-bold text-sm flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 active:scale-95 transition-all"
+          className="text-emerald-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-50 active:scale-95 transition-all border border-emerald-100"
         >
-          <MessageCircle size={18} /> Support
+          <MessageCircle size={14} /> Get Support
         </button>
       </nav>
 
       {/* Hero Section */}
-      <section className="px-6 pt-16 pb-20 max-w-7xl mx-auto text-center">
-        <div className="inline-flex items-center gap-2 bg-amber-50 px-4 py-2 rounded-full text-amber-700 text-[10px] font-black uppercase tracking-widest mb-6 border border-amber-100 animate-pulse">
-          <Zap size={12} className="fill-amber-700" /> Launch Offer: First 100 Customers Only
-        </div>
-        <h1 className="text-5xl md:text-7xl font-black text-gray-900 tracking-tighter leading-[0.9] mb-6">
-          Unlock Your Business Growth <br className="hidden md:block" />
-          <span className="text-emerald-600">for the Price of Lunch.</span>
-        </h1>
-        <p className="text-gray-500 text-lg md:text-xl font-medium max-w-2xl mx-auto mb-10 leading-relaxed">
-          No Monthly Fees. No Data Costs. No Stress. <br className="hidden sm:block" />
-          Get the full Offline POS for a one-time payment of just <span className="text-gray-900 font-black">₦5,000.</span>
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <button 
-            onClick={onStartTrial}
-            className="w-full sm:w-auto bg-emerald-600 text-white font-black px-10 py-6 rounded-[32px] text-lg shadow-2xl shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-3 group"
-          >
-            Setup My Shop <ArrowRight className="group-hover:translate-x-1 transition-transform" />
-          </button>
-          <button 
-            onClick={() => window.open('https://wa.me/2347062228026?text=' + encodeURIComponent("I'm ready to pay ₦5,000 for my Lifetime Activation Key. My Request Code is: [Enter Code from Lock Screen]"), '_blank')}
-            className="w-full sm:w-auto bg-white border-2 border-gray-100 text-gray-800 font-black px-10 py-6 rounded-[32px] text-lg hover:border-emerald-200 active:scale-95 transition-all"
-          >
-            Pay ₦5,000 & Get My Key
-          </button>
-        </div>
-        <p className="mt-6 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">
-          Join 500+ Smart Shop Owners in Lagos, Kano & Abuja
-        </p>
-      </section>
-
-      {/* Magic Demo: Airplane Mode */}
-      <section className="px-6 py-20 bg-emerald-950 text-white overflow-hidden relative">
-        <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500/30"></div>
-        <div className="max-w-4xl mx-auto text-center space-y-12 relative z-10">
-          <div className="space-y-4">
-            <h2 className="text-3xl md:text-5xl font-black tracking-tight uppercase">Sell in Airplane Mode ✈️</h2>
-            <p className="text-emerald-100/60 max-w-xl mx-auto font-medium">
-              While other POS apps are saying "Searching for Network...", you are already attending to your next customer and counting your profit.
-            </p>
-          </div>
-          
-          <div className="relative inline-block group">
-            <div className="absolute -inset-4 bg-emerald-500/20 blur-2xl rounded-full"></div>
-            <div className="relative bg-black rounded-[48px] p-4 border-8 border-gray-800 shadow-2xl overflow-hidden w-full max-w-[300px] mx-auto aspect-[9/19]">
-              <div className="bg-emerald-900 h-full w-full rounded-[32px] flex flex-col p-4 relative">
-                <div className="flex justify-between items-center mb-6">
-                   <div className="flex items-center gap-1">
-                      <Plane size={14} className="text-white" />
-                      <span className="text-[10px] font-bold">Airplane Mode</span>
-                   </div>
-                   <div className="w-8 h-4 bg-white/20 rounded-full flex items-center px-0.5 justify-end">
-                      <div className="w-3 h-3 bg-white rounded-full"></div>
-                   </div>
-                </div>
-                <div className="space-y-4 flex-1">
-                  <div className="h-20 bg-emerald-800/50 rounded-2xl flex items-center justify-center text-xs font-black uppercase text-emerald-400 border border-emerald-700/50">POS Ready</div>
-                  <div className="space-y-2">
-                    <div className="h-10 bg-white/5 rounded-xl"></div>
-                    <div className="h-10 bg-white/5 rounded-xl"></div>
-                  </div>
-                </div>
-                <div className="bg-emerald-500 text-white py-3 rounded-xl font-black text-[10px] uppercase text-center shadow-lg">Confirm Sale ₦15,000</div>
-              </div>
-            </div>
-            <div className="mt-8 flex items-center justify-center gap-2 text-emerald-400 font-black uppercase text-xs tracking-widest">
-              <Zap size={14} /> 40% Longer Battery Life (No Data drain)
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Section - Single Unbeatable Offer */}
-      <section className="px-6 py-24 bg-gray-50">
-        <div className="text-center mb-16 space-y-2">
-          <h2 className="text-4xl font-black text-gray-900 tracking-tight uppercase">End Monthly Fees Forever</h2>
-          <p className="text-gray-500 font-medium">Simple. Transparent. One-time payment.</p>
+      <section className="px-6 pt-20 pb-24 max-w-5xl mx-auto text-center space-y-8">
+        <div className="inline-flex items-center gap-2 bg-emerald-50 px-5 py-2.5 rounded-full text-emerald-700 text-[10px] font-black uppercase tracking-[0.2em] border border-emerald-100 shadow-sm animate-bounce">
+          <Zap size={14} className="fill-emerald-700" /> Trusted by 1,000+ Nigerian Bosses
         </div>
         
-        <div className="max-w-xl mx-auto">
-          <div className="bg-emerald-950 border-4 border-emerald-500 p-10 rounded-[56px] flex flex-col relative text-white shadow-[0_40px_80px_-15px_rgba(5,150,105,0.3)] z-10">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-500 text-white text-[10px] font-black uppercase px-8 py-3 rounded-full tracking-widest shadow-xl flex items-center gap-2 whitespace-nowrap">
-              <Zap size={14} className="fill-white" /> Launch Special Special 🇳🇬
-            </div>
-            
-            <div className="text-center mb-10">
-              <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em] mb-4">The Lifetime License</h4>
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-6xl font-black tracking-tighter italic">₦5,000</span>
-              </div>
-              <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-widest mt-2">One-Time Activation Fee</p>
-            </div>
+        <h1 className="text-5xl md:text-7xl font-black text-slate-950 tracking-tighter leading-[0.85] uppercase italic">
+          Stop Running Your Shop on <br/>
+          <span className="text-emerald-600 underline decoration-emerald-200 underline-offset-8">Paper and Prayer.</span>
+        </h1>
 
-            <div className="grid grid-cols-1 gap-4 mb-10">
-              <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <CheckCircle2 size={24} className="text-emerald-400 flex-shrink-0" />
-                <span className="text-sm font-black text-emerald-50">100% Offline (No Data Needed)</span>
-              </div>
-              <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <CheckCircle2 size={24} className="text-emerald-400 flex-shrink-0" />
-                <span className="text-sm font-black text-emerald-50">Unlimited Sales & Inventory</span>
-              </div>
-              <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <CheckCircle2 size={24} className="text-emerald-400 flex-shrink-0" />
-                <span className="text-sm font-black text-emerald-50">Staff Anti-Theft Protection</span>
-              </div>
-              <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <CheckCircle2 size={24} className="text-emerald-400 flex-shrink-0" />
-                <span className="text-sm font-black text-emerald-50">WhatsApp Receipts & Backups</span>
-              </div>
-              <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <CheckCircle2 size={24} className="text-emerald-400 flex-shrink-0" />
-                <span className="text-sm font-black text-emerald-50">Profit & Debt Tracking</span>
-              </div>
-              <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                <CheckCircle2 size={24} className="text-emerald-400 flex-shrink-0" />
-                <span className="text-sm font-black text-emerald-50">Lifetime Updates Included</span>
-              </div>
-            </div>
-
+        <div className="max-w-2xl mx-auto space-y-6">
+          <p className="text-lg md:text-xl font-bold text-slate-500 leading-relaxed">
+            Tired of staff stealing? Tired of expensive POS data and "Network Failure" alerts? 
+            Get the #1 POS that works <span className="text-slate-900 font-black">100% Offline</span> on your Android phone.
+          </p>
+          
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <button 
-              onClick={() => window.open('https://wa.me/2347062228026?text=' + encodeURIComponent("I'm ready to pay ₦5,000 for my Lifetime Activation Key. My Request Code is: [Enter Code from Lock Screen]"), '_blank')}
-              className="w-full py-6 rounded-[32px] bg-emerald-500 text-white font-black text-sm uppercase tracking-widest active:scale-[0.98] transition-all shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3"
+              onClick={onStartTrial}
+              className="w-full sm:w-auto bg-emerald-600 text-white font-black px-12 py-7 rounded-[32px] text-xl shadow-2xl shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-3 group"
             >
-              Pay ₦5,000 & Get My Key <ArrowRight size={20} />
+              Start 3-Day Free Trial <ArrowRight className="group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
-          <div className="mt-8 text-center text-gray-400 font-black text-[10px] uppercase tracking-[0.4em]">Pay Once. Own it Forever. No Monthly Tax.</div>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">No Card Required • Set up in 60 seconds</p>
         </div>
       </section>
 
-      {/* Staff Lock / Anti-Theft */}
-      <section className="px-6 py-24 max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-16">
-        <div className="flex-1 space-y-8">
-           <div className="inline-block px-4 py-2 bg-amber-50 text-amber-700 font-black text-[10px] uppercase tracking-widest rounded-full border border-amber-100">Anti-Theft Security</div>
-           <h2 className="text-4xl md:text-5xl font-black tracking-tight leading-none uppercase">Sleep Better. <br/><span className="text-emerald-600">Your Staff is Locked.</span></h2>
-           <p className="text-gray-500 text-lg leading-relaxed font-medium">
-             Tired of staff "forgetting" to record sales or "reversing" transactions? Our system locks the Delete button. Only YOU (The Boss) can see the profit dashboard with your secret Admin PIN.
-           </p>
-           <ul className="space-y-4">
-              <li className="flex items-center gap-3 font-bold text-gray-700"><ShieldCheck className="text-emerald-500" size={20} /> Staff cannot see total profit</li>
-              <li className="flex items-center gap-3 font-bold text-gray-700"><ShieldCheck className="text-emerald-500" size={20} /> Every sale shows staff name</li>
-              <li className="flex items-center gap-3 font-bold text-gray-700"><ShieldCheck className="text-emerald-500" size={20} /> PIN-protected Inventory edits</li>
-           </ul>
+      {/* The Four Pillars */}
+      <section className="px-6 py-20 bg-slate-50">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-16 space-y-2">
+            <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">The Four Pillars of the Boss</h2>
+            <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em]">Why smart owners choose NaijaShop</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Pillar 1 */}
+            <div className="bg-white p-10 rounded-[48px] border border-slate-100 shadow-xl space-y-6 group hover:border-emerald-500 transition-all duration-500">
+               <div className="w-16 h-16 bg-emerald-600 rounded-3xl flex items-center justify-center text-white shadow-lg shadow-emerald-100 transform -rotate-6 group-hover:rotate-0 transition-transform">
+                  <Plane size={32} />
+               </div>
+               <div className="space-y-2">
+                  <h3 className="text-2xl font-black text-slate-900 uppercase italic leading-none">100% Offline Power</h3>
+                  <p className="text-slate-500 font-medium leading-relaxed">Sell in Airplane Mode. No network lag, zero data costs. Even if light is off for one week, your records are safe on your phone.</p>
+               </div>
+            </div>
+
+            {/* Pillar 2 */}
+            <div className="bg-white p-10 rounded-[48px] border border-slate-100 shadow-xl space-y-6 group hover:border-emerald-500 transition-all duration-500">
+               <div className="w-16 h-16 bg-blue-600 rounded-3xl flex items-center justify-center text-white shadow-lg shadow-blue-100 transform rotate-6 group-hover:rotate-0 transition-transform">
+                  <Lock size={32} />
+               </div>
+               <div className="space-y-2">
+                  <h3 className="text-2xl font-black text-slate-900 uppercase italic leading-none">Staff Anti-Theft Lock</h3>
+                  <p className="text-slate-500 font-medium leading-relaxed">Staff can record sales but they CANNOT delete them, change prices, or see your total profit. You hold the secret Admin PIN!</p>
+               </div>
+            </div>
+
+            {/* Pillar 3 */}
+            <div className="bg-white p-10 rounded-[48px] border border-slate-100 shadow-xl space-y-6 group hover:border-emerald-500 transition-all duration-500">
+               <div className="w-16 h-16 bg-amber-500 rounded-3xl flex items-center justify-center text-white shadow-lg shadow-amber-100 transform -rotate-3 group-hover:rotate-0 transition-transform">
+                  <Landmark size={32} />
+               </div>
+               <div className="space-y-2">
+                  <h3 className="text-2xl font-black text-slate-900 uppercase italic leading-none">The Transfer Terminal</h3>
+                  <p className="text-slate-500 font-medium leading-relaxed">A professional screen for bank transfers. Stop 'Confirming Alerts' for 10 minutes—our Soft POS shows your details clearly to the customer.</p>
+               </div>
+            </div>
+
+            {/* Pillar 4 */}
+            <div className="bg-white p-10 rounded-[48px] border border-slate-100 shadow-xl space-y-6 group hover:border-emerald-500 transition-all duration-500">
+               <div className="w-16 h-16 bg-red-600 rounded-3xl flex items-center justify-center text-white shadow-lg shadow-red-100 transform rotate-3 group-hover:rotate-0 transition-transform">
+                  <ShieldAlert size={32} />
+               </div>
+               <div className="space-y-2">
+                  <h3 className="text-2xl font-black text-slate-900 uppercase italic leading-none">Pharmacy-Grade Alerts</h3>
+                  <p className="text-slate-500 font-medium leading-relaxed">Use AI to snap and read expiry dates. The app shouts in <span className="text-red-600 font-bold">RED</span> 7 days before items expire. Never sell bad medicine or food again.</p>
+               </div>
+            </div>
+          </div>
         </div>
-        <div className="flex-1 w-full max-w-sm">
-           <div className="bg-gray-100 p-8 rounded-[48px] border-4 border-white shadow-2xl space-y-6">
-              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm"><Lock size={32} /></div>
-              <h3 className="text-2xl font-black text-gray-900">Admin Controls</h3>
-              <div className="space-y-3">
-                 <div className="h-14 bg-white rounded-2xl flex items-center px-4 justify-between border border-gray-200">
-                    <span className="text-xs font-black uppercase text-gray-400">Inventory Status</span>
-                    <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-black">LOCKED</span>
-                 </div>
-                 <div className="h-14 bg-white rounded-2xl flex items-center px-4 justify-between border border-gray-200">
-                    <span className="text-xs font-black uppercase text-gray-400">Net Profit</span>
-                    <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-black">BOSS ONLY</span>
-                 </div>
+      </section>
+
+      {/* Features List */}
+      <section className="px-6 py-24 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
+          <div className="space-y-8">
+            <h2 className="text-4xl font-black text-slate-950 uppercase italic leading-none">Everything You Need <br/>to <span className="text-emerald-600">Dominate</span> the Market</h2>
+            <div className="space-y-6">
+              {[
+                { icon: <Barcode className="text-emerald-500"/>, title: "Barcode Scanner", desc: "Point your camera, snap, and sell in 1 second." },
+                { icon: <MessageCircle className="text-emerald-500"/>, title: "WhatsApp Receipts", desc: "No printer? No problem. Send branded receipts to customers' phones." },
+                { icon: <BookOpen className="text-emerald-500" size={20}/>, title: "Debt & Wallet Book", desc: "Know who owes you money and send reminders in 1 click." },
+                { icon: <TrendingUp className="text-emerald-500"/>, title: "Bulk Inflation Protector", desc: "Fuel or Dollar go up? Increase all prices by 10% in 1 second." },
+                { icon: <Printer className="text-emerald-500"/>, title: "Bluetooth Printing", desc: "Connect your 58mm mini-printer and print like Shoprite." }
+              ].map((f, i) => (
+                <div key={i} className="flex gap-4 items-start">
+                  <div className="p-2 bg-emerald-50 rounded-xl mt-1">{f.icon}</div>
+                  <div>
+                    <h4 className="font-black text-slate-900 uppercase text-sm">{f.title}</h4>
+                    <p className="text-slate-500 text-sm font-medium">{f.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="relative">
+            <div className="absolute inset-0 bg-emerald-600/10 blur-[100px] rounded-full"></div>
+            <img src="https://i.ibb.co/XxDDvb3k/gemini-3-pro-image-preview-nano-banana-pro-a-A-high-quality-3-D-is.png" alt="POS Mockup" className="relative z-10 w-full rounded-[64px] shadow-2xl border-8 border-white" />
+          </div>
+        </div>
+      </section>
+
+      {/* Security Section */}
+      <section className="bg-emerald-950 py-24 px-6 text-white text-center overflow-hidden relative">
+        <div className="max-w-3xl mx-auto space-y-8 relative z-10">
+          <div className="w-20 h-20 bg-white/10 rounded-[32px] flex items-center justify-center mx-auto border border-white/20">
+            <ShieldCheck size={40} className="text-emerald-400" />
+          </div>
+          <h2 className="text-4xl font-black uppercase italic tracking-tighter">Security You Can Trust</h2>
+          <p className="text-emerald-100/70 text-lg font-medium leading-relaxed">
+            Your business is locked to YOUR phone using a <span className="text-white font-black">Unique Request Code.</span> 
+            Your data is encrypted and backed up to your private WhatsApp. We don't see your sales, 
+            and hackers can't touch your records. It's 100% private.
+          </p>
+          <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-center gap-8">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 size={24} className="text-emerald-400" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em]">Device Fingerprinting</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <CheckCircle2 size={24} className="text-emerald-400" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em]">Private Backups</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <CheckCircle2 size={24} className="text-emerald-400" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em]">Zero Cloud Access</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section className="py-24 px-6 bg-white">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-16 space-y-3">
+            <div className="inline-block bg-amber-500 text-white text-[10px] font-black uppercase px-6 py-2 rounded-full tracking-[0.3em] shadow-lg">New Year Special Special 🇳🇬</div>
+            <h2 className="text-5xl font-black text-slate-950 uppercase italic tracking-tighter">Own Your Shop Forever</h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {/* Standard */}
+            <div className="bg-slate-50 p-10 rounded-[56px] border border-slate-100 flex flex-col justify-between hover:scale-105 transition-transform">
+              <div className="space-y-6">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Growth Plan</p>
+                <div className="space-y-1">
+                   <h3 className="text-4xl font-black text-slate-950">₦10,000</h3>
+                   <p className="text-xs font-bold text-slate-400 uppercase">Per Year</p>
+                </div>
+                <ul className="space-y-3">
+                  <li className="flex items-center gap-2 text-xs font-bold text-slate-600"><CheckCircle2 size={16} className="text-emerald-600"/> 1-Year Full Support</li>
+                  <li className="flex items-center gap-2 text-xs font-bold text-slate-600"><CheckCircle2 size={16} className="text-emerald-600"/> All Pro Features</li>
+                  <li className="flex items-center gap-2 text-xs font-bold text-slate-600"><CheckCircle2 size={16} className="text-emerald-600"/> Daily WhatsApp Backups</li>
+                </ul>
               </div>
-           </div>
+              <button onClick={onStartTrial} className="mt-10 w-full bg-slate-900 text-white font-black py-5 rounded-[28px] uppercase tracking-widest text-xs active:scale-95 transition-all">Start Trial</button>
+            </div>
+
+            {/* Lifetime */}
+            <div className="bg-emerald-600 p-10 rounded-[56px] text-white flex flex-col justify-between relative shadow-2xl shadow-emerald-200 overflow-hidden hover:scale-105 transition-transform">
+              <div className="absolute top-0 right-0 p-8 opacity-10"><Zap size={100} /></div>
+              <div className="space-y-6 relative z-10">
+                <p className="text-[10px] font-black text-emerald-200 uppercase tracking-widest">Lifetime License</p>
+                <div className="space-y-1">
+                   <h3 className="text-4xl font-black text-white">₦25,000</h3>
+                   <p className="text-xs font-bold text-emerald-200 uppercase">Pay Once. Own Forever.</p>
+                </div>
+                <ul className="space-y-3">
+                  <li className="flex items-center gap-2 text-xs font-bold text-emerald-50"><CheckCircle2 size={16} className="text-white"/> Unlimited Staff Phones</li>
+                  <li className="flex items-center gap-2 text-xs font-bold text-emerald-50"><CheckCircle2 size={16} className="text-white"/> Lifetime Free Updates</li>
+                  <li className="flex items-center gap-2 text-xs font-bold text-emerald-50"><CheckCircle2 size={16} className="text-white"/> Priority Boss Support</li>
+                </ul>
+              </div>
+              <button 
+                onClick={() => window.open('https://wa.me/2347062228026?text=' + encodeURIComponent("I'm ready for the Lifetime License. Send me the payment link."), '_blank')}
+                className="mt-10 w-full bg-white text-emerald-600 font-black py-5 rounded-[28px] uppercase tracking-widest text-xs active:scale-95 transition-all shadow-xl"
+              >
+                Buy Lifetime Now
+              </button>
+            </div>
+          </div>
+          <p className="text-center mt-12 text-[9px] font-black text-slate-400 uppercase tracking-[0.4em]">Secure Payment via Paystack or WhatsApp</p>
         </div>
       </section>
 
-      {/* Trust Builder / Footer */}
-      <footer className="bg-white py-24 px-6 border-t border-gray-100">
-        <div className="max-w-4xl mx-auto text-center space-y-12">
-          <div className="flex justify-center -space-x-4 mb-8">
-            <img className="w-14 h-14 rounded-full border-4 border-white bg-gray-100" src="https://i.pravatar.cc/150?u=LagosBoss" alt="Avatar" />
-            <img className="w-14 h-14 rounded-full border-4 border-white bg-gray-100" src="https://i.pravatar.cc/150?u=KanoShop" alt="Avatar" />
-            <img className="w-14 h-14 rounded-full border-4 border-white bg-gray-100" src="https://i.pravatar.cc/150?u=AbujaPharm" alt="Avatar" />
-            <div className="w-14 h-14 rounded-full border-4 border-white bg-emerald-500 flex items-center justify-center text-white text-xs font-black shadow-lg shadow-emerald-200">+500</div>
-          </div>
-          
-          <div className="space-y-4">
-            <h2 className="text-3xl md:text-5xl font-black text-gray-900 tracking-tight leading-none uppercase">Trusted by 500+ <br/>Shop Owners in Nigeria</h2>
-            <p className="text-gray-500 text-lg font-medium max-w-2xl mx-auto leading-relaxed">
-              From Lagos Island to Kano Sabon Gari, business owners are saving data and making more profit every single day.
-            </p>
+      {/* Objection FAQ */}
+      <section className="px-6 py-24 bg-slate-950 text-white">
+        <div className="max-w-3xl mx-auto space-y-12">
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl font-black uppercase italic tracking-tighter">Oga, We Hear You.</h2>
+            <p className="text-emerald-500 font-bold uppercase text-[10px] tracking-[0.2em]">Common Questions from Shop Owners</p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+          <div className="space-y-4">
+            {[
+              { q: "What if my phone spoils or gets lost?", a: "Just install the app on your new phone and import your WhatsApp backup file. Everything—your products, sales, and debt records—will return in 10 seconds." },
+              { q: "Do I need a big laptop or expensive hardware?", a: "No! This app is designed for your Android phone or tablet. It fits in your pocket so you can sell from anywhere." },
+              { q: "Can I track my staff when I'm not in the shop?", a: "Yes! You can clone your inventory to their phones for free. At the end of the day, they send you a sync file via WhatsApp so you can see all sales from your house." },
+              { q: "Is it really 100% Offline?", a: "Yes. You only need data for the 5 seconds it takes to activate the app. After that, put your phone in Airplane Mode and start selling." }
+            ].map((faq, i) => (
+              <div key={i} className="p-8 rounded-[40px] bg-white/5 border border-white/10 space-y-4 group hover:bg-white/10 transition-all">
+                <h4 className="text-xl font-black uppercase italic tracking-tight text-emerald-400">"{faq.q}"</h4>
+                <p className="text-slate-400 font-medium leading-relaxed">{faq.a}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center pt-8">
              <button 
                 onClick={onStartTrial}
-                className="w-full sm:w-auto bg-emerald-600 text-white font-black px-12 py-6 rounded-[32px] active:scale-95 transition-all flex items-center justify-center gap-3 shadow-2xl shadow-emerald-200"
+                className="bg-emerald-600 text-white font-black px-12 py-7 rounded-[32px] text-xl shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 mx-auto"
               >
-                Launch My Shop <ArrowRight size={20} />
+                Launch My Shop Now <ArrowRight />
              </button>
-             <button 
-                onClick={() => window.open('https://wa.me/2347062228026', '_blank')}
-                className="w-full sm:w-auto bg-white text-emerald-600 font-black px-12 py-6 rounded-[32px] border-2 border-emerald-50 flex items-center justify-center gap-3 shadow-sm hover:border-emerald-200 active:scale-95 transition-all"
-              >
-                <MessageCircle size={24} /> Chat on WhatsApp
-             </button>
-          </div>
-
-          <div className="bg-gray-50 p-8 rounded-[40px] border border-gray-100 space-y-4">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.4em]">Secure Activation Required</p>
-            <p className="text-sm font-bold text-gray-600 leading-relaxed italic">
-              "If you don't love how easy it is to manage your shop offline, you don't pay a single kobo. No credit card required to start setup."
-            </p>
-          </div>
-
-          <div className="pt-16 border-t border-gray-100 flex flex-col md:flex-row justify-between items-center gap-6">
-             <div className="flex items-center gap-3">
-                <ShieldCheck size={20} className="text-emerald-500" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">100% Secure & Offline POS</span>
-             </div>
-             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">© 2025 NaijaShop POS Systems Nigeria 🇳🇬</p>
           </div>
         </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-12 border-t border-slate-100 text-center space-y-4">
+        <div className="flex items-center justify-center gap-2">
+          <ShieldCheck size={16} className="text-emerald-600" />
+          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">NaijaShop POS Systems Nigeria 🇳🇬</span>
+        </div>
+        <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">© 2025 Local Secure Software Solutions</p>
       </footer>
     </div>
   );
