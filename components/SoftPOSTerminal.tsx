@@ -128,13 +128,13 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-950 flex flex-col text-white animate-in slide-in-from-bottom duration-300">
+    <div className="fixed inset-0 z-[1000] bg-slate-950 flex flex-col text-white animate-in slide-in-from-bottom duration-300 pt-4">
       {/* Terminal Header */}
       <header className="p-5 flex justify-between items-center bg-slate-900 border-b border-white/5">
         <div className="flex items-center gap-3">
           <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_8px_#10b981] ${isTimedOut ? 'bg-red-500 shadow-red-500' : 'bg-emerald-500 animate-pulse'}`}></div>
           <div>
-            <h2 className={`text-[9px] font-black uppercase tracking-[0.2em] leading-none ${isTimedOut ? 'text-red-400' : 'text-emerald-500'}`}>
+            <h2 className={`text-[10px] font-black uppercase tracking-[0.2em] leading-none ${isTimedOut ? 'text-red-400' : 'text-emerald-500'}`}>
               {isTimedOut ? 'Session Expired' : 'Official Transfer Terminal'}
             </h2>
           </div>
@@ -144,100 +144,100 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
         </button>
       </header>
 
-      <main className="flex-1 flex flex-col p-6 items-center justify-center space-y-6 overflow-y-auto">
+      <main className="flex-1 flex flex-col p-6 items-center justify-start gap-y-10 overflow-y-auto">
         {/* Amount Display */}
         <div className="text-center space-y-1">
           <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em]">Amount Due</p>
-          <h1 className="text-5xl font-black text-emerald-400 tracking-tighter drop-shadow-[0_0_15px_rgba(52,211,153,0.3)]">
+          <h1 className="text-6xl font-black text-emerald-400 tracking-tighter drop-shadow-[0_0_15px_rgba(52,211,153,0.3)]">
             {formatNaira(amount)}
           </h1>
         </div>
 
         {/* Bank Details Card */}
-        <div className="w-full max-w-sm bg-white rounded-[40px] p-8 mb-6 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.4)] text-slate-900 relative overflow-hidden border border-slate-200">
+        <div className="w-full max-w-sm bg-white rounded-[48px] p-8 pb-12 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.4)] text-slate-900 relative overflow-hidden border border-slate-200 min-h-[300px] flex flex-col text-center">
           <div className="absolute top-0 right-0 p-6 opacity-[0.03]">
-             <Landmark size={100} />
+             <Landmark size={120} />
           </div>
           
           {isLoading ? (
-            <div className="flex justify-center py-8">
-               <Loader2 size={24} className="animate-spin text-emerald-600" />
+            <div className="flex-1 flex items-center justify-center py-8">
+               <Loader2 size={32} className="animate-spin text-emerald-600" />
             </div>
           ) : isConfigMissing ? (
-            <div className="flex flex-col items-center justify-center text-center py-2 space-y-3">
-               <div className="bg-red-50 p-3 rounded-2xl text-red-500">
-                  <AlertCircle size={32} />
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-4 space-y-4">
+               <div className="bg-red-50 p-4 rounded-3xl text-red-500">
+                  <AlertCircle size={40} />
                </div>
                <div className="space-y-1">
-                  <h3 className="text-base font-black text-red-600 uppercase tracking-tight">Configuration Missing</h3>
-                  <p className="text-[10px] font-bold text-slate-400 leading-relaxed uppercase">Update details in Admin Settings</p>
+                  <h3 className="text-lg font-black text-red-600 uppercase tracking-tight">Configuration Missing</h3>
+                  <p className="text-xs font-bold text-slate-400 leading-relaxed uppercase">Update details in Admin Settings</p>
                </div>
             </div>
           ) : (
-            <div className="space-y-6 relative z-10">
-              <div className="space-y-1 text-center">
+            <div className="space-y-8 relative z-10">
+              <div className="space-y-1">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Bank Name</p>
-                <p className="text-xl font-black uppercase tracking-tight text-emerald-600 leading-none">{details.bank}</p>
+                <p className="text-2xl font-black uppercase tracking-tight text-emerald-600 leading-none">{details.bank}</p>
               </div>
 
-              <div className="space-y-2 text-center">
+              <div className="space-y-2">
                 <p className="text-xs text-gray-400 font-black uppercase tracking-widest">Account Number</p>
-                <div className="flex items-center justify-center gap-3 bg-slate-100 p-5 rounded-[24px] border border-slate-200 shadow-inner group active:scale-[0.98] transition-all cursor-pointer" onClick={handleCopy}>
-                  <span className="text-3xl font-mono font-black tracking-[0.05em] text-emerald-950">
+                <div className="flex items-center justify-center gap-3 bg-slate-100 p-6 rounded-[32px] border border-slate-200 shadow-inner group active:scale-[0.98] transition-all cursor-pointer mb-4" onClick={handleCopy}>
+                  <span className="text-4xl font-mono font-black tracking-[0.05em] text-emerald-950">
                     {details.number}
                   </span>
-                  <div className="p-2.5 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-400 group-hover:text-emerald-600 transition-colors">
-                    {copied ? <Check size={18} className="text-emerald-600" /> : <Copy size={18} />}
+                  <div className="p-3 bg-white rounded-2xl shadow-md border border-slate-100 text-slate-400 group-hover:text-emerald-600 transition-colors">
+                    {copied ? <Check size={20} className="text-emerald-600" /> : <Copy size={20} />}
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-1 text-center border-t border-slate-50 pt-4 mt-2">
+              <div className="space-y-2 border-t border-slate-50 pt-6">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Account Name</p>
-                <p className="text-base font-black uppercase text-emerald-950 leading-tight italic tracking-tight">
+                <div className="text-lg font-black uppercase text-emerald-950 leading-relaxed italic tracking-tight px-2">
                   {details.name.toUpperCase()}
-                </p>
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Status indicator - Pushed down with mt-10 */}
-        <div className="flex flex-col items-center gap-4 w-full mt-10">
-          <div className={`px-6 py-2.5 rounded-full flex items-center gap-3 border transition-all duration-500 bg-white/5 ${isTimedOut ? 'border-red-500/20' : 'border-white/10 shadow-md'}`}>
-             <Timer size={16} className={isTimedOut ? 'text-red-400' : 'text-emerald-500'} />
-             <span className={`text-sm font-mono font-black ${isTimedOut ? 'text-red-400' : 'text-emerald-400'}`}>
+        {/* Status indicator - Large top margin to separate from card */}
+        <div className="flex flex-col items-center gap-4 w-full mt-12 mb-8">
+          <div className={`px-8 py-3 rounded-full flex items-center gap-4 border transition-all duration-500 bg-white/5 ${isTimedOut ? 'border-red-500/20' : 'border-white/10 shadow-lg'}`}>
+             <Timer size={18} className={isTimedOut ? 'text-red-400' : 'text-emerald-500'} />
+             <span className={`text-base font-mono font-black ${isTimedOut ? 'text-red-400' : 'text-emerald-400'}`}>
                {isTimedOut ? '0:00' : formatTime(timeLeft)}
              </span>
-             <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">
-               {isTimedOut ? 'Timeout' : 'Remaining'}
+             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+               {isTimedOut ? 'Timed Out' : 'Remaining'}
              </span>
           </div>
           
           {isTimedOut && (
-            <p className="text-[9px] font-black text-red-400 uppercase tracking-widest animate-pulse">
+            <p className="text-[10px] font-black text-red-400 uppercase tracking-widest animate-pulse">
               Verify alert received manually.
             </p>
           )}
         </div>
       </main>
 
-      {/* Immediate Action Buttons - Compact for mobile */}
-      <footer className="p-6 bg-slate-900/90 backdrop-blur-md border-t border-white/5 space-y-3">
+      {/* Immediate Action Buttons */}
+      <footer className="p-6 bg-slate-900/90 backdrop-blur-md border-t border-white/5 space-y-4">
         <button 
           onClick={handleConfirm}
           disabled={isLoading || isConfigMissing}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white font-black py-5 rounded-[28px] shadow-lg active:scale-[0.98] transition-all uppercase tracking-[0.15em] text-xs flex items-center justify-center gap-3 group"
+          className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white font-black py-6 rounded-[32px] shadow-lg active:scale-[0.98] transition-all uppercase tracking-[0.15em] text-sm flex items-center justify-center gap-3 group"
         >
-          <CheckCircle size={20} className="group-hover:scale-110 transition-transform" />
+          <CheckCircle size={22} className="group-hover:scale-110 transition-transform" />
           YES, ALERT RECEIVED
         </button>
         
         <button 
           onClick={onCancel}
-          className="w-full bg-white/5 border border-white/10 text-slate-400 font-black py-4 rounded-[24px] active:scale-[0.98] transition-all uppercase tracking-[0.15em] text-[9px] flex items-center justify-center gap-2 hover:text-red-400 hover:border-red-400/30"
+          className="w-full bg-white/5 border border-white/10 text-slate-400 font-black py-4 rounded-[24px] active:scale-[0.98] transition-all uppercase tracking-[0.15em] text-[10px] flex items-center justify-center gap-2 hover:text-red-400 hover:border-red-400/30"
         >
-          <ArrowLeft size={14} />
+          <ArrowLeft size={16} />
           CANCEL / GO BACK
         </button>
       </footer>
