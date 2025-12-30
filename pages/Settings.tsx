@@ -14,8 +14,8 @@ import pako from 'pako';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
-  Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert, Wifi, TrendingUp, AlertTriangle, 
-  ChevronRight, MapPin, Phone, Receipt, Info, LogOut, Landmark, CreditCard, Tag
+  Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert, Wifi, TrendingUp, AlertCircle, 
+  ChevronRight, MapPin, Phone, Receipt, Info, LogOut, Landmark, CreditCard, Tag, Download
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -38,7 +38,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const [shopInfo, setShopInfo] = useState(() => localStorage.getItem('shop_info') || 'Address, City, Phone');
   const [receiptFooter, setReceiptFooter] = useState(() => localStorage.getItem('receipt_footer') || 'Thank you for your patronage!');
 
-  // Soft POS State - Using exact keys: softPosBank, softPosNumber, softPosAccount
+  // Soft POS State
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
@@ -102,11 +102,21 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       alert("Please fill all bank details fields!");
       return;
     }
-    // EXACT KEY MATCHING
     await db.settings.put({ key: 'softPosBank', value: bankName.trim() });
     await db.settings.put({ key: 'softPosNumber', value: accountNumber.trim() });
     await db.settings.put({ key: 'softPosAccount', value: accountName.trim() });
     alert("Soft POS Bank Details Updated Successfully!");
+  };
+
+  const handleManualInstall = async () => {
+    const deferredPrompt = (window as any).deferredPWAPrompt;
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') (window as any).deferredPWAPrompt = null;
+    } else {
+      alert("To install NaijaShop:\n\n1. Click the 3 dots (⋮) in your browser corner.\n2. Select 'Install' or 'Add to Home Screen'.\n\nThis makes the app work perfectly offline.");
+    }
   };
 
   const handleBackup = async () => {
@@ -262,8 +272,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     { id: 'softpos', title: 'What is Soft POS?', content: 'Soft POS allows you to accept bank transfers as if you had a physical POS terminal. It displays your bank details to customers on a high-end screen and requires you to verify the credit alert before completing the sale.' },
     { id: 'staff', title: 'How to Setup Staff', content: '1. Add a Staff member in Settings. 2. Tap "Invite" (Share Icon) to get a code. 3. Send that code to your staff via WhatsApp. 4. They open the app on their phone, tap "Import Code / Sync", and paste the code.' },
     { id: 'offline', title: 'Daily Offline Use', content: 'Record all sales offline. At the end of the day, have your staff click "Send Report" in Sales History to send you a sync file via WhatsApp. Use "Merge Staff" here to sync their sales.' },
-    { id: 'backup', title: 'Data Safety', content: 'Backup your shop daily. The backup file is saved to your phone\'s Downloads. We recommend emailing it to yourself or saving to Google Drive for 100% safety.' },
-    { id: 'printer', title: 'Connecting Thermal Printer', content: 'Make sure your Bluetooth printer is on. Tap "Pair Printer". Select your printer from the list (usually name starts with MPT, TP, or BT). Once connected, the app will print receipts automatically after sales.' }
+    { id: 'backup', title: 'Data Safety', content: 'Backup your shop daily. The backup file is saved to your phone\'s Downloads. We recommend emailing it to yourself or saving to Google Drive for 100% safety.' }
   ];
 
   return (
@@ -284,6 +293,23 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           </button>
         </div>
       </header>
+
+      {/* App Install Helper */}
+      <button 
+        onClick={handleManualInstall}
+        className="w-full flex items-center justify-between p-6 bg-emerald-600 text-white rounded-[32px] shadow-lg shadow-emerald-200 active:scale-95 transition-all"
+      >
+        <div className="flex items-center gap-4 text-left">
+          <div className="p-3 bg-white/20 rounded-2xl">
+            <Smartphone size={24} />
+          </div>
+          <div>
+            <h3 className="font-black text-base uppercase italic leading-none">Add to Home Screen</h3>
+            <p className="text-[9px] font-bold uppercase tracking-widest opacity-70">Enable 100% Offline App Mode</p>
+          </div>
+        </div>
+        <Download size={20} />
+      </button>
 
       {/* Primary Actions */}
       <div className="grid grid-cols-1 gap-4">
@@ -440,19 +466,6 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         </div>
       </section>
 
-      {/* Inflation Protector / Bulk Update Tool */}
-      <button 
-        onClick={() => setShowBulkModal(true)}
-        className="w-full flex items-center gap-4 p-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 rounded-[32px] text-left active:scale-95 transition-all shadow-sm group"
-      >
-        <div className="bg-amber-500 text-white p-3.5 rounded-2xl group-hover:scale-110 transition-transform"><TrendingUp size={24}/></div>
-        <div className="flex-1">
-          <h3 className="font-black text-amber-900 dark:text-amber-50 leading-none">Inflation Protector</h3>
-          <p className="text-[10px] font-bold text-amber-600/60 uppercase mt-1 tracking-widest">Update Bulk Prices Fast</p>
-        </div>
-        <ChevronRight size={20} className="text-amber-300" />
-      </button>
-
       {/* Data Management Section */}
       <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-6">
         <div className="flex items-center gap-3">
@@ -587,87 +600,6 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
               </div>
               <button className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] shadow-xl shadow-emerald-100 dark:shadow-none uppercase tracking-widest text-xs active:scale-[0.98] transition-all">Create Account</button>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Inflation Protector (Bulk Update) Modal */}
-      {showBulkModal && (
-        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-md rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
-             <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-3">
-                   <div className="p-2 bg-amber-50 dark:bg-amber-900 rounded-xl text-amber-600"><TrendingUp size={20}/></div>
-                   <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 italic">Inflation Protector</h2>
-                </div>
-                <button onClick={() => setShowBulkModal(false)} className="p-2 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20}/></button>
-             </div>
-             
-             <div className="space-y-6">
-                <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-2xl flex items-start gap-3">
-                   <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={16} />
-                   <p className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase leading-relaxed">Increase prices for your whole shop in one second. All new prices round to the nearest ₦50.</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Category</label>
-                      <select 
-                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none"
-                        value={bulkData.targetCategory}
-                        onChange={e => setBulkData({...bulkData, targetCategory: e.target.value})}
-                      >
-                        <option value="All">All Items</option>
-                        {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                      </select>
-                   </div>
-                   <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Target Price</label>
-                      <select 
-                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none"
-                        value={bulkData.targetField}
-                        onChange={e => setBulkData({...bulkData, targetField: e.target.value as any})}
-                      >
-                        <option value="Selling Price">Selling Price</option>
-                        <option value="Cost Price">Cost Price</option>
-                      </select>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Increase Type</label>
-                      <select 
-                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none"
-                        value={bulkData.updateType}
-                        onChange={e => setBulkData({...bulkData, updateType: e.target.value as any})}
-                      >
-                        <option value="Percentage">% Percentage</option>
-                        <option value="Fixed">+ Fixed Amount (₦)</option>
-                      </select>
-                   </div>
-                   <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Amount</label>
-                      <div className="relative">
-                        <input 
-                          type="number"
-                          className="w-full p-4 pl-10 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-black text-amber-600 outline-none"
-                          value={bulkData.value || ''}
-                          onChange={e => setBulkData({...bulkData, value: Number(e.target.value)})}
-                          placeholder="0"
-                        />
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-amber-600/50">{bulkData.updateType === 'Percentage' ? '%' : '₦'}</span>
-                      </div>
-                   </div>
-                </div>
-
-                <button 
-                  onClick={handleApplyInflationProtection}
-                  className="w-full bg-amber-600 text-white font-black py-6 rounded-[28px] shadow-xl shadow-amber-100 dark:shadow-none uppercase tracking-widest text-xs active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-                >
-                  <TrendingUp size={20} /> Update Entire Stock
-                </button>
-             </div>
           </div>
         </div>
       )}

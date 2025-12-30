@@ -18,21 +18,7 @@ export default defineConfig({
               cacheName: 'google-fonts-cache',
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'gstatic-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+                maxAgeSeconds: 60 * 60 * 24 * 365,
               },
               cacheableResponse: {
                 statuses: [0, 200],
@@ -46,20 +32,10 @@ export default defineConfig({
               cacheName: 'tailwind-cdn-cache',
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                maxAgeSeconds: 60 * 60 * 24 * 30,
               },
               cacheableResponse: {
                 statuses: [0, 200],
-              },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/esm\.sh\/.*/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'esm-dependencies',
-              expiration: {
-                maxEntries: 50,
               },
             },
           }
@@ -67,27 +43,26 @@ export default defineConfig({
       },
       manifest: {
         short_name: "NaijaShop",
-        name: "NaijaShop Offline POS",
-        description: "Professional Offline Inventory and POS for Nigerian Businesses",
-        start_url: "/",
-        display: "standalone",
-        orientation: "portrait",
-        background_color: "#022c22",
-        theme_color: "#059669",
+        name: "NaijaShop POS Manager",
         icons: [
           {
             "src": "https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
             "sizes": "192x192",
             "type": "image/png",
-            "purpose": "any"
+            "purpose": "any maskable"
           },
           {
             "src": "https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
             "sizes": "512x512",
             "type": "image/png",
-            "purpose": "maskable"
+            "purpose": "any maskable"
           }
         ],
+        start_url: "/app",
+        display: "standalone",
+        orientation: "portrait",
+        background_color: "#022c22",
+        theme_color: "#059669"
       }
     })
   ]
