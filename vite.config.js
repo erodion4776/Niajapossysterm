@@ -72,7 +72,7 @@ export default defineConfig({
         start_url: "/",
         display: "standalone",
         orientation: "portrait",
-        background_color: "#064e3b",
+        background_color: "#022c22",
         theme_color: "#059669",
         icons: [
           {

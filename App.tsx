@@ -19,6 +19,7 @@ import { LoginScreen } from './components/LoginScreen.tsx';
 import { RoleSelection } from './components/RoleSelection.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
+import { InstallPrompt } from './components/InstallPrompt.tsx'; // Added
 import { ThemeProvider } from './ThemeContext.tsx';
 import { getRequestCode, validateLicenseIntegrity } from './utils/security.ts';
 import { 
@@ -282,6 +283,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500 transition-colors duration-300">
+      <InstallPrompt />
       <main className="flex-1 overflow-auto">{renderPage()}</main>
       {!isStaffDevice && !isNavHidden && <BackupReminder />}
       {!isNavHidden && (
