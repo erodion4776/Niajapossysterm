@@ -128,7 +128,7 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-slate-950 flex flex-col text-white animate-in slide-in-from-bottom duration-300 pt-4">
+    <div className="fixed inset-0 z-[1000] bg-slate-950 flex flex-col text-white animate-in slide-in-from-bottom duration-300 pt-10">
       {/* Terminal Header */}
       <header className="p-5 flex justify-between items-center bg-slate-900 border-b border-white/5">
         <div className="flex items-center gap-3">
@@ -144,9 +144,9 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
         </button>
       </header>
 
-      <main className="flex-1 flex flex-col p-6 items-center justify-start gap-y-10 overflow-y-auto">
+      <main className="flex-1 flex flex-col p-6 items-center justify-start overflow-y-auto">
         {/* Amount Display */}
-        <div className="text-center space-y-1">
+        <div className="text-center space-y-1 mb-10">
           <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em]">Amount Due</p>
           <h1 className="text-6xl font-black text-emerald-400 tracking-tighter drop-shadow-[0_0_15px_rgba(52,211,153,0.3)]">
             {formatNaira(amount)}
@@ -154,8 +154,8 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
         </div>
 
         {/* Bank Details Card */}
-        <div className="w-full max-w-sm bg-white rounded-[48px] p-8 pb-12 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.4)] text-slate-900 relative overflow-hidden border border-slate-200 min-h-[300px] flex flex-col text-center">
-          <div className="absolute top-0 right-0 p-6 opacity-[0.03]">
+        <div className="w-full max-w-sm bg-white rounded-[48px] p-8 pb-10 shadow-2xl text-slate-900 relative overflow-visible min-h-[320px] flex flex-col text-center border border-slate-200">
+          <div className="absolute top-0 right-0 p-6 opacity-[0.03] pointer-events-none">
              <Landmark size={120} />
           </div>
           
@@ -174,15 +174,17 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
                </div>
             </div>
           ) : (
-            <div className="space-y-8 relative z-10">
-              <div className="space-y-1">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Bank Name</p>
-                <p className="text-2xl font-black uppercase tracking-tight text-emerald-600 leading-none">{details.bank}</p>
+            <div className="relative z-10 flex flex-col">
+              {/* Bank Name Section */}
+              <div className="mb-6">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Bank Name</p>
+                <p className="text-2xl font-bold uppercase text-emerald-600 leading-none">{details.bank}</p>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-xs text-gray-400 font-black uppercase tracking-widest">Account Number</p>
-                <div className="flex items-center justify-center gap-3 bg-slate-100 p-6 rounded-[32px] border border-slate-200 shadow-inner group active:scale-[0.98] transition-all cursor-pointer mb-4" onClick={handleCopy}>
+              {/* Account Number Section */}
+              <div className="mb-6">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Number</p>
+                <div className="flex items-center justify-center gap-3 bg-slate-100 p-6 py-4 rounded-[32px] border border-slate-200 shadow-inner group active:scale-[0.98] transition-all cursor-pointer" onClick={handleCopy}>
                   <span className="text-4xl font-mono font-black tracking-[0.05em] text-emerald-950">
                     {details.number}
                   </span>
@@ -192,18 +194,22 @@ export const SoftPOSTerminal: React.FC<SoftPOSTerminalProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-2 border-t border-slate-50 pt-6">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Account Name</p>
-                <div className="text-lg font-black uppercase text-emerald-950 leading-relaxed italic tracking-tight px-2">
-                  {details.name.toUpperCase()}
-                </div>
+              {/* Account Name Section */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Account Name</p>
+                <p className="text-emerald-950 font-black text-xl leading-tight uppercase italic tracking-tight px-2 break-words">
+                  {details.name}
+                </p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Status indicator - Large top margin to separate from card */}
-        <div className="flex flex-col items-center gap-4 w-full mt-12 mb-8">
+        {/* Space shifter to push footer items down */}
+        <div className="flex-grow" />
+
+        {/* Status indicator - Pushed down towards buttons */}
+        <div className="flex flex-col items-center gap-4 w-full mt-20 mb-8">
           <div className={`px-8 py-3 rounded-full flex items-center gap-4 border transition-all duration-500 bg-white/5 ${isTimedOut ? 'border-red-500/20' : 'border-white/10 shadow-lg'}`}>
              <Timer size={18} className={isTimedOut ? 'text-red-400' : 'text-emerald-500'} />
              <span className={`text-base font-mono font-black ${isTimedOut ? 'text-red-400' : 'text-emerald-400'}`}>
