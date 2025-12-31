@@ -24,7 +24,8 @@ import {
   Lock,
   Banknote,
   Landmark,
-  CreditCard
+  CreditCard,
+  BookOpen
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -42,6 +43,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const allSales = useLiveQuery(() => db.sales.toArray());
+  const debts = useLiveQuery(() => db.debts.toArray());
   const securityTable = useLiveQuery(() => db.security.toArray());
 
   // License Visibility Logic
@@ -113,6 +115,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       return acc;
     }, { cash: 0, digital: 0 });
   }, [salesOnDate]);
+
+  const totalMoneyOutside = useMemo(() => {
+    if (!debts) return 0;
+    return debts.reduce((sum, d) => sum + (d.remainingBalance || 0), 0);
+  }, [debts]);
   
   const expenses = useLiveQuery(() => db.expenses.toArray());
   const actualExpensesOnDate = expenses?.filter(e => {
@@ -219,15 +226,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
       {isAdmin && (
         <section className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-[32px] p-1 flex gap-1 shadow-sm overflow-hidden">
-           <div className="flex-1 bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-[28px] text-center">
-              <Banknote size={16} className="text-emerald-500 mx-auto mb-1" />
-              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Cash in Hand</p>
-              <p className="text-sm font-black text-emerald-600">{formatNaira(revenueBreakdown.cash)}</p>
+           <div className="flex-1 bg-slate-50 dark:bg-emerald-950/40 p-3 rounded-[24px] text-center">
+              <Banknote size={14} className="text-emerald-500 mx-auto mb-1" />
+              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Cash in Hand</p>
+              <p className="text-xs font-black text-emerald-600">{formatNaira(revenueBreakdown.cash)}</p>
            </div>
-           <div className="flex-1 bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-[28px] text-center">
-              <Landmark size={16} className="text-blue-500 mx-auto mb-1" />
-              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Bank/POS</p>
-              <p className="text-sm font-black text-blue-600">{formatNaira(revenueBreakdown.digital)}</p>
+           <div className="flex-1 bg-slate-50 dark:bg-emerald-950/40 p-3 rounded-[24px] text-center">
+              <Landmark size={14} className="text-blue-500 mx-auto mb-1" />
+              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Bank/POS</p>
+              <p className="text-xs font-black text-blue-600">{formatNaira(revenueBreakdown.digital)}</p>
+           </div>
+           <div className="flex-1 bg-slate-50 dark:bg-emerald-950/40 p-3 rounded-[24px] text-center">
+              <BookOpen size={14} className="text-red-500 mx-auto mb-1" />
+              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-tight">Money Outside</p>
+              <p className="text-xs font-black text-red-500">{formatNaira(totalMoneyOutside)}</p>
            </div>
         </section>
       )}
