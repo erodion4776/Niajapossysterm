@@ -36,7 +36,7 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   message += `--------------------------\n`;
   
   // The "Smart" Receipt Breakdown
-  message += `💰 *Total Items: ${formatNaira(sale.total)}*\n`;
+  message += `💰 *Total Bill: ${formatNaira(sale.total)}*\n`;
 
   if (sale.walletUsed && sale.walletUsed > 0) {
     message += `💳 Paid from Wallet: -${formatNaira(sale.walletUsed)}\n`;
@@ -46,10 +46,11 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
     message += `💵 Cash Paid: -${formatNaira(sale.cashPaid)}\n`;
   }
   
-  if (sale.paymentMethod === 'Debt') {
+  if (sale.paymentMethod === 'Debt' || sale.paymentMethod === 'Partial') {
     const remainingDebt = Math.max(0, sale.total - (sale.walletUsed || 0) - (sale.cashPaid || 0));
     message += `--------------------------\n`;
-    message += `⚠️ *NEW DEBT RECORDED: ${formatNaira(remainingDebt)}*\n`;
+    message += `⚠️ *BALANCE OWED (DEBT): ${formatNaira(remainingDebt)}*\n`;
+    message += `*Please kindly clear your balance soon. Thank you!*\n`;
     message += `📌 Status: Partially Settled\n`;
   } else if (sale.paymentMethod === 'Wallet' && (sale.walletUsed || 0) + (sale.cashPaid || 0) >= sale.total) {
     message += `✅ Fully Settled via Wallet/Cash\n`;
