@@ -120,6 +120,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     if (!debts) return 0;
     return debts.reduce((sum, d) => sum + (d.remainingBalance || 0), 0);
   }, [debts]);
+
+  // Fast Movers Logic
+  const topProducts = useMemo(() => {
+    if (!salesOnDate) return [];
+    const counts: Record<string, number> = {};
+    salesOnDate.forEach(sale => {
+      sale.items.forEach(item => {
+        counts[item.name] = (counts[item.name] || 0) + item.quantity;
+      });
+    });
+    return Object.entries(counts)
+      .map(([name, qty]) => ({ name, qty }))
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 3);
+  }, [salesOnDate]);
   
   const expenses = useLiveQuery(() => db.expenses.toArray());
   const actualExpensesOnDate = expenses?.filter(e => {
@@ -290,6 +305,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
               <History size={40} className="mx-auto text-emerald-200 dark:text-emerald-800" />
               <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 dark:text-emerald-700">No sales recorded</p>
             </div>
+          )}
+        </div>
+      </section>
+
+      {/* TOP PRODUCTS SECTION */}
+      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-amber-50 dark:bg-amber-900/20 p-2 rounded-xl text-amber-600 dark:text-amber-400"><Zap size={18} /></div>
+          <div>
+            <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Top Products {isToday ? "Today" : ""}</h3>
+            <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Fast Movers</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {topProducts.length > 0 ? (
+            topProducts.map((product, idx) => (
+              <div key={idx} className="flex items-center justify-between p-4 bg-amber-50/30 dark:bg-emerald-800/10 rounded-2xl border border-amber-100/50 dark:border-emerald-800/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400 font-black text-[10px]">
+                    #{idx + 1}
+                  </div>
+                  <p className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight truncate max-w-[140px]">{product.name}</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                   <span className="text-xs font-black text-amber-600 dark:text-amber-400">{product.qty}</span>
+                   <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">sold</span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-center py-6 text-[9px] font-bold uppercase tracking-widest text-slate-300 dark:text-emerald-800">No data for this date</p>
           )}
         </div>
       </section>
