@@ -94,25 +94,62 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
     }
   };
 
+  /**
+   * VOID TRANSACTION SYSTEM
+   * 1. Reverts stock for every item sold.
+   * 2. Logs the recovery action.
+   * 3. Deletes the sale record atomically.
+   */
   const handleDeleteSale = async (sale: Sale) => {
-    if (!isAdmin) return;
-    if (!confirm(`⚠️ CRITICAL: Deleting this sale will ADD ${sale.items.reduce((sum, i) => sum + i.quantity, 0)} items back to your inventory stock. Proceed?`)) return;
+    // 3. Security (Admin Only)
+    if (!isAdmin) {
+      alert("Permission Denied: Only the Boss can void sales.");
+      return;
+    }
+
+    // 4. UI Feedback - Confirmation Dialog
+    const confirmed = confirm("Are you sure you want to VOID this sale? Stock will be returned to inventory and money removed from reports.");
+    if (!confirmed) return;
 
     try {
-      await db.transaction('rw', [db.inventory, db.sales], async () => {
+      // 2. Atomic Database Transaction
+      await db.transaction('rw', [db.inventory, db.sales, db.stock_logs], async () => {
+        // 1. The "Revert Stock" Logic
         for (const item of sale.items) {
+          // Fetch current item state from inventory
           const invItem = await db.inventory.get(item.id);
           if (invItem) {
-            await db.inventory.update(item.id, { 
-              stock: invItem.stock + item.quantity 
+            const previousStock = invItem.stock;
+            const newStock = previousStock + item.quantity;
+
+            // Inventory Return: Add quantity back to stock
+            await db.inventory.update(invItem.id!, { 
+              stock: newStock 
+            });
+
+            // Stock Log: Mark as recovery
+            await db.stock_logs.add({
+              item_id: invItem.id! as number,
+              itemName: invItem.name,
+              quantityChanged: item.quantity,
+              previousStock: previousStock,
+              newStock: newStock,
+              type: 'Addition' as any,
+              date: Date.now(),
+              staff_name: "VOIDED SALE RECOVERY"
             });
           }
         }
+        
+        // Finally, delete the record from sales
         await db.sales.delete(sale.id!);
       });
+
+      // 4. UI Feedback - Auto-Refresh
       setSelectedSale(null);
+      // Dexie useLiveQuery automatically updates the filteredSales list
     } catch (err) {
-      alert('Failed to delete sale: ' + (err as Error).message);
+      alert('Failed to void transaction: ' + (err as Error).message);
     }
   };
 
@@ -311,14 +348,13 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
                   <MessageCircle size={20} /> Share via WhatsApp
                 </button>
                 
-                {isAdmin && (
-                  <button 
-                    onClick={() => handleDeleteSale(selectedSale)}
-                    className="w-full bg-red-50 text-red-400 font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest border border-red-100"
-                  >
-                    <Trash2 size={16} /> Void Transaction
-                  </button>
-                )}
+                {/* 3. Security (Admin Only) Button Display Logic */}
+                <button 
+                  onClick={() => handleDeleteSale(selectedSale)}
+                  className={`w-full font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest border ${isAdmin ? 'bg-red-50 text-red-400 border-red-100 hover:bg-red-100' : 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'}`}
+                >
+                  <Trash2 size={16} /> Void Transaction
+                </button>
               </div>
             </div>
           </div>
