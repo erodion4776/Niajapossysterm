@@ -35,22 +35,22 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   
   message += `--------------------------\n`;
   
-  // Display transparent math for the customer
-  message += `💰 *Sub-Total: ${formatNaira(sale.total)}*\n`;
+  // The "Smart" Receipt Breakdown
+  message += `💰 *Total Items: ${formatNaira(sale.total)}*\n`;
 
   if (sale.walletUsed && sale.walletUsed > 0) {
-    message += `💳 Credit Applied (Wallet): -${formatNaira(sale.walletUsed)}\n`;
+    message += `💳 Paid from Wallet: -${formatNaira(sale.walletUsed)}\n`;
   }
   
   if (sale.paymentMethod === 'Debt') {
     const remainingDebt = sale.total - (sale.walletUsed || 0);
-    message += `⚠️ *Amount Owed (Debt): ${formatNaira(remainingDebt)}*\n`;
-    message += `📌 *PAYMENT STATUS: DEBT (Owed)*\n`;
+    message += `--------------------------\n`;
+    message += `⚠️ *NEW DEBT RECORDED: ${formatNaira(remainingDebt)}*\n`;
+    message += `📌 Status: Partially Paid via Wallet\n`;
   } else if (sale.paymentMethod === 'Wallet' && sale.walletUsed && sale.walletUsed >= sale.total) {
-    message += `✅ *Paid via Wallet Balance*\n`;
-    message += `🏦 *Amount Owed: ₦0*\n`;
+    message += `✅ Fully Paid via Wallet Balance\n`;
   } else {
-    message += `✅ *Total Paid: ${formatNaira(sale.total - (sale.walletUsed || 0))}*\n`;
+    message += `✅ Total Paid: ${formatNaira(sale.total - (sale.walletUsed || 0))}\n`;
   }
   
   message += `--------------------------\n`;
@@ -61,7 +61,7 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
       message += `✨ Change Saved to Wallet: +${formatNaira(sale.walletSaved)}\n`;
     }
     if (customer) {
-      message += `🏦 Current Wallet Balance: ${formatNaira(customer.walletBalance)}\n`;
+      message += `🏦 Your Wallet Balance: ${formatNaira(customer.walletBalance)}\n`;
     }
     message += `--------------------------\n`;
   }

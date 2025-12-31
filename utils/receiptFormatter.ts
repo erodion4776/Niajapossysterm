@@ -1,3 +1,4 @@
+
 import { Sale } from '../db.ts';
 
 /**
@@ -73,20 +74,32 @@ export function formatReceipt(sale: Sale): Uint8Array {
 
   line();
 
-  // 3. Totals and Wallet Info
+  // 3. Totals and Wallet/Debt Split Info
   add(CMD.ALIGN_RIGHT);
   
+  add(`TOTAL ITEMS: N${sale.total.toLocaleString()}\n`);
+
   if (sale.walletUsed && sale.walletUsed > 0) {
-    add(`WALLET CREDIT: -N${sale.walletUsed.toLocaleString()}\n`);
+    add(`PAID FROM WALLET: -N${sale.walletUsed.toLocaleString()}\n`);
+    line();
   }
   
-  add(CMD.BOLD_ON);
-  add(`TOTAL: N${sale.total.toLocaleString()}\n`);
-  add(CMD.BOLD_OFF);
-
-  if (sale.walletSaved && sale.walletSaved > 0) {
+  if (sale.paymentMethod === 'Debt') {
+    const remainingDebt = sale.total - (sale.walletUsed || 0);
+    add(CMD.BOLD_ON);
+    add(`NEW DEBT: N${remainingDebt.toLocaleString()}\n`);
+    add(CMD.BOLD_OFF);
     add(CMD.ALIGN_CENTER);
-    add(`\nSAVED TO WALLET: N${sale.walletSaved.toLocaleString()}\n`);
+    add(`Your Wallet Balance: N0\n`);
+  } else if (sale.paymentMethod === 'Wallet') {
+    add(CMD.BOLD_ON);
+    add(`SETTLED VIA WALLET\n`);
+    add(CMD.BOLD_OFF);
+  } else {
+    const cashTotal = sale.total - (sale.walletUsed || 0);
+    add(CMD.BOLD_ON);
+    add(`AMOUNT PAID: N${cashTotal.toLocaleString()}\n`);
+    add(CMD.BOLD_OFF);
   }
 
   // 4. Footer & Policy

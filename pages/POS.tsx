@@ -8,7 +8,7 @@ import {
   MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, 
   Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight,
   BookOpen, CreditCard, AlertCircle, Banknote, Landmark, CreditCard as CardIcon,
-  ShieldCheck, HelpCircle, ChevronLeft, Tag, Phone
+  ShieldCheck, HelpCircle, ChevronLeft, Tag, Phone, Info
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
@@ -210,7 +210,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           }
         }
 
-        // 2. The Logic Fix (The "Netting" Process)
+        // 2. The Logic Fix (The "Netting" / Split Process)
         let appliedFromWallet = 0;
         let finalPaymentMethod = modeToSave;
 
@@ -221,23 +221,23 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             let remainingWallet = 0;
 
             if (existingWallet > 0) {
-              // IF existingWallet > 0: netting
+              // The "Split" Calculation
+              appliedFromWallet = Math.min(saleTotal, existingWallet);
               netDebt = Math.max(0, saleTotal - existingWallet);
               remainingWallet = Math.max(0, existingWallet - saleTotal);
-              appliedFromWallet = Math.min(saleTotal, existingWallet);
             } else {
-              // ELSE (No wallet balance)
               netDebt = saleTotal;
               remainingWallet = 0;
+              appliedFromWallet = 0;
             }
 
-            // Update Customer wallet balance
+            // Update Customer wallet balance to NewWalletBalance
             await db.customers.update(finalCustomer.id!, { 
               walletBalance: remainingWallet,
               lastTransaction: Date.now()
             });
 
-            // Scenario A: If netDebt > 0, record as debt
+            // Automatic Debt Creation if RemainingToRecordAsDebt > 0
             if (netDebt > 0) {
               const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
               await db.debts.add({
@@ -246,13 +246,13 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                 totalAmount: saleTotal,
                 remainingBalance: netDebt,
                 items: appliedFromWallet > 0 
-                  ? `POS Sale: ${itemsSummary} (Reduced by ${formatNaira(appliedFromWallet)} wallet)`
+                  ? `POS Sale: ${itemsSummary} (Partially Paid via Wallet / Balance as Debt)`
                   : `POS Sale: ${itemsSummary}`,
                 date: Date.now(),
                 status: 'Unpaid'
               });
             } else {
-              // Scenario B: Fully paid via wallet
+              // Sale fully covered by wallet
               finalPaymentMethod = 'Wallet';
             }
 
@@ -283,7 +283,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
         const sale: Sale = {
           uuid: crypto.randomUUID(),
           items: cart.map(({image, ...rest}) => rest), 
-          total: saleTotal, // Record the Gross Sale amount
+          total: saleTotal, // Gross amount
           totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
           walletUsed: appliedFromWallet,
           walletSaved: paymentMode !== 'Debt' && saveChangeToWallet ? changeDue : 0,
@@ -517,15 +517,33 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Customer Information</h4>
                     </div>
 
-                    {/* Real-Time Balance Check Visual Feedback */}
-                    {selectedCustomer && selectedCustomer.walletBalance > 0 && (
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl flex items-center gap-3 animate-pulse mb-2">
-                        <div className="bg-emerald-500 p-2 rounded-xl text-white shadow-lg shadow-emerald-500/20">
-                          <Wallet size={16} />
+                    {/* Real-Time Settlement Summary Feedback */}
+                    {selectedCustomer && (
+                      <div className={`p-4 rounded-2xl border flex items-start gap-3 mb-2 animate-in slide-in-from-top duration-300 ${selectedCustomer.walletBalance > 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-slate-100 border-slate-200'}`}>
+                        <div className={`p-2 rounded-xl text-white shadow-lg ${selectedCustomer.walletBalance > 0 ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-slate-400'}`}>
+                          {selectedCustomer.walletBalance > 0 ? <Wallet size={16} /> : <UserCheck size={16} />}
                         </div>
-                        <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
-                          💰 This customer has {formatNaira(selectedCustomer.walletBalance)} in credit. {paymentMode === 'Debt' ? 'Applying to reduce debt...' : 'Available for use.'}
-                        </p>
+                        <div className="flex-1">
+                          {selectedCustomer.walletBalance > 0 ? (
+                            <div className="space-y-1">
+                               <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
+                                 Boss, this customer has {formatNaira(selectedCustomer.walletBalance)}.
+                               </p>
+                               {paymentMode === 'Debt' && (
+                                 <p className="text-[9px] font-bold text-slate-500 uppercase leading-tight">
+                                   {selectedCustomer.walletBalance >= saleTotal 
+                                     ? `This sale will be fully paid via wallet credit.`
+                                     : `This sale will use all their credit and add ${formatNaira(saleTotal - selectedCustomer.walletBalance)} to their debt.`}
+                                   {" "}Proceed?
+                                 </p>
+                               )}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-tight">
+                              Customer selected: {selectedCustomer.name} (No wallet balance)
+                            </p>
+                          )}
+                        </div>
                       </div>
                     )}
 
