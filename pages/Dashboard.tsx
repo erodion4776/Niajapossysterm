@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
@@ -302,22 +301,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             </div>
           </div>
         </div>
-        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
           {salesOnDate && salesOnDate.length > 0 ? (
-            salesOnDate.map(sale => (
-              <div key={sale.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-800/20 rounded-2xl border border-slate-100 dark:border-emerald-800/20">
-                <div className="flex items-center gap-3">
-                  <div className="bg-white dark:bg-emerald-900/60 p-2 rounded-lg text-slate-300 dark:text-emerald-600 shadow-sm"><CalendarIcon size={12} /></div>
-                  <div>
-                    <p className="text-xs font-black text-slate-800 dark:text-emerald-100">#{String(sale.id).slice(-4)}</p>
-                    <p className="text-[8px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase">{sale.paymentMethod} • {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+            <>
+              {salesOnDate.slice(0, 5).map(sale => (
+                <div key={sale.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-800/20 rounded-2xl border border-slate-100 dark:border-emerald-800/20">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white dark:bg-emerald-900/60 p-2 rounded-lg text-slate-300 dark:text-emerald-600 shadow-sm"><CalendarIcon size={12} /></div>
+                    <div>
+                      <p className="text-xs font-black text-slate-800 dark:text-emerald-100">#{String(sale.id).slice(-4)}</p>
+                      <p className="text-[8px] font-bold text-slate-400 dark:text-emerald-500/40 uppercase">{sale.paymentMethod} • {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-black text-slate-800 dark:text-emerald-100">{formatNaira(sale.total)}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-black text-slate-800 dark:text-emerald-100">{formatNaira(sale.total)}</p>
-                </div>
-              </div>
-            ))
+              ))}
+              {salesOnDate.length > 5 && (
+                <button 
+                  onClick={() => setPage(Page.SALES)}
+                  className="w-full py-4 bg-slate-100 dark:bg-emerald-800/40 rounded-2xl text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  View All {salesOnDate.length} Transactions <ChevronRight size={14} />
+                </button>
+              )}
+            </>
           ) : (
             <div className="py-12 text-center space-y-3 bg-emerald-50/20 dark:bg-emerald-800/10 p-8 rounded-[32px] border border-dashed border-emerald-100 dark:border-emerald-800/40">
               <History size={40} className="mx-auto text-emerald-200 dark:text-emerald-800" />
