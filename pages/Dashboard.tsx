@@ -39,6 +39,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
   const isAdmin = role === 'Admin' && !isStaffDevice;
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [datePreset, setDatePreset] = useState<'today' | 'yesterday' | 'month'>('today');
   const [showAlerts, setShowAlerts] = useState(true);
   
   const inventory = useLiveQuery(() => db.inventory.toArray());
@@ -87,14 +88,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     return { expiring, lowStock };
   }, [inventory]);
 
-  const queryStart = new Date(selectedDate);
-  queryStart.setHours(0, 0, 0, 0);
-  const queryEnd = new Date(selectedDate);
-  queryEnd.setHours(23, 59, 59, 999);
+  const dateRange = useMemo(() => {
+    const start = new Date();
+    const end = new Date();
+    
+    if (datePreset === 'today') {
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (datePreset === 'yesterday') {
+      start.setDate(start.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      end.setDate(end.getDate() - 1);
+      end.setHours(23, 59, 59, 999);
+    } else if (datePreset === 'month') {
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    }
+    return { start: start.getTime(), end: end.getTime() };
+  }, [datePreset]);
 
   const salesOnDate = useLiveQuery(() => 
-    db.sales.where('timestamp').between(queryStart.getTime(), queryEnd.getTime()).reverse().toArray()
-  , [selectedDate]);
+    db.sales.where('timestamp').between(dateRange.start, dateRange.end).reverse().toArray()
+  , [dateRange]);
 
   // Profit uses the FULL sale amount (Gross)
   const totalSalesOnDate = salesOnDate?.reduce((sum, sale) => sum + sale.total, 0) || 0;
@@ -139,18 +155,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const expenses = useLiveQuery(() => db.expenses.toArray());
   const actualExpensesOnDate = expenses?.filter(e => {
     const d = new Date(e.date).getTime();
-    return d >= queryStart.getTime() && d <= queryEnd.getTime();
+    return d >= dateRange.start && d <= dateRange.end;
   }).reduce((sum, e) => sum + e.amount, 0) || 0;
 
   const grossProfitOnDate = totalSalesOnDate - totalCostOnDate;
   const netProfitOnDate = grossProfitOnDate - actualExpensesOnDate;
 
-  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  const isToday = datePreset === 'today';
 
   const storeNetWorth = useMemo(() => {
     if (!inventory) return 0;
     return inventory.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.stock || 0)), 0);
   }, [inventory]);
+
+  const rangeLabel = useMemo(() => {
+    if (datePreset === 'today') return 'Today';
+    if (datePreset === 'yesterday') return 'Yesterday';
+    if (datePreset === 'month') return 'This Month';
+    return 'Range';
+  }, [datePreset]);
 
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
@@ -160,31 +183,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Home</h1>
             <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Business Overview</p>
           </div>
-          <div className="flex gap-2">
-            {!isStaffDevice && (
-              <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-emerald-950 rounded-full border border-slate-200 dark:border-emerald-800/40 pr-3">
-                 <div className={`w-7 h-7 rounded-full ${licenseInfo.color} flex items-center justify-center text-white shadow-lg`}>
-                    <ShieldCheck size={14} />
-                 </div>
-                 <div className="flex flex-col -space-y-0.5">
-                    <p className={`text-[9px] font-black uppercase tracking-tighter ${licenseInfo.status === 'Expired' ? 'text-red-500' : 'text-slate-800 dark:text-emerald-400'}`}>
-                      {licenseInfo.status}
-                    </p>
-                    {licenseInfo.displayDate && <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">{licenseInfo.displayDate}</p>}
-                 </div>
-              </div>
-            )}
+          <div className="flex gap-2 items-center">
+            <div className="flex bg-slate-100 dark:bg-emerald-950 p-1 rounded-2xl border border-slate-200 dark:border-emerald-800/40">
+              {(['today', 'yesterday', 'month'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setDatePreset(p)}
+                  className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-tighter transition-all ${datePreset === p ? 'bg-white dark:bg-emerald-800 text-emerald-600 dark:text-emerald-50 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  {p === 'month' ? 'Month' : p}
+                </button>
+              ))}
+            </div>
             
-            <div className="relative">
-              <input 
-                type="date" 
-                className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              />
-              <div className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
-                <CalendarIcon size={20} />
-              </div>
+            <div className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
+              <CalendarIcon size={20} />
             </div>
           </div>
         </div>
@@ -222,7 +235,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col gap-1">
           <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
-            {isToday ? (isAdmin ? 'Net Profit Today' : 'Revenue Today') : (isAdmin ? `Net Profit History` : `Revenue History`)}
+            {isAdmin ? `Net Profit ${rangeLabel}` : `Revenue ${rangeLabel}`}
           </p>
           <h2 className="text-4xl font-black tracking-tighter">{isAdmin ? formatNaira(netProfitOnDate) : formatNaira(totalSalesOnDate)}</h2>
           {isAdmin && (
@@ -284,7 +297,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
           <div className="flex items-center gap-3">
             <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-xl text-blue-600 dark:text-blue-400"><History size={18} /></div>
             <div>
-              <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">{isToday ? "Today's Sales" : `Sales History`}</h3>
+              <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">{rangeLabel} Sales</h3>
               <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Transaction Feed</p>
             </div>
           </div>
@@ -319,7 +332,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         <div className="flex items-center gap-3">
           <div className="bg-amber-50 dark:bg-amber-900/20 p-2 rounded-xl text-amber-600 dark:text-amber-400"><Zap size={18} /></div>
           <div>
-            <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Top Products {isToday ? "Today" : ""}</h3>
+            <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Top Products {rangeLabel}</h3>
             <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Fast Movers</p>
           </div>
         </div>
