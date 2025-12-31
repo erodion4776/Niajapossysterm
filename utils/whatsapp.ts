@@ -34,16 +34,20 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   });
   
   message += `--------------------------\n`;
+  
+  const grandTotal = sale.total + (sale.walletUsed || 0);
+  message += `💰 *Subtotal: ${formatNaira(grandTotal)}*\n`;
+
   if (sale.walletUsed && sale.walletUsed > 0) {
-    message += `💳 Wallet Credit Used: -${formatNaira(sale.walletUsed)}\n`;
+    message += `💳 Paid via Wallet: -${formatNaira(sale.walletUsed)}\n`;
   }
   
   // Status indicator for Debt
   if (sale.paymentMethod === 'Debt') {
-    message += `💰 *TOTAL OWED: ${formatNaira(sale.total)}*\n`;
-    message += `⚠️ *PAYMENT STATUS: DEBT (Owed)*\n`;
+    message += `⚠️ *New Debt Balance: ${formatNaira(sale.total)}*\n`;
+    message += `📌 *PAYMENT STATUS: DEBT (Owed)*\n`;
   } else {
-    message += `💰 *TOTAL PAID: ${formatNaira(sale.total)}*\n`;
+    message += `✅ *Total Paid: ${formatNaira(sale.total)}*\n`;
   }
   
   message += `--------------------------\n`;
@@ -51,7 +55,7 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   if (sale.customer_phone) {
     const customer = await db.customers.where('phone').equals(sale.customer_phone).first();
     if (sale.walletSaved && sale.walletSaved > 0) {
-      message += `✨ Change Saved to Wallet: ${formatNaira(sale.walletSaved)}\n`;
+      message += `✨ Change Saved to Wallet: +${formatNaira(sale.walletSaved)}\n`;
     }
     if (customer) {
       message += `🏦 Current Wallet Balance: ${formatNaira(customer.walletBalance)}\n`;

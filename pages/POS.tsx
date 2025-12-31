@@ -209,18 +209,60 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           }
         }
 
+        let appliedFromWallet = 0;
+
         if (finalCustomer) {
           if (paymentMode === 'Debt') {
-            const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
-            await db.debts.add({
-              customerName: finalCustomer.name,
-              customerPhone: finalCustomer.phone,
-              totalAmount: total,
-              remainingBalance: total,
-              items: `POS Sale: ${itemsSummary}`,
-              date: Date.now(),
-              status: 'Unpaid'
-            });
+            // Logic for applying existing wallet balance to debt
+            if (finalCustomer.walletBalance > 0) {
+              appliedFromWallet = Math.min(total, finalCustomer.walletBalance);
+              const remainingDebt = total - appliedFromWallet;
+              const newWalletBalance = finalCustomer.walletBalance - appliedFromWallet;
+              
+              // Update customer wallet
+              await db.customers.update(finalCustomer.id!, { 
+                walletBalance: newWalletBalance,
+                lastTransaction: Date.now()
+              });
+
+              // Create debt record if anything is left
+              if (remainingDebt > 0) {
+                const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
+                await db.debts.add({
+                  customerName: finalCustomer.name,
+                  customerPhone: finalCustomer.phone,
+                  totalAmount: total,
+                  remainingBalance: remainingDebt,
+                  items: `POS Sale: ${itemsSummary} (Reduced by ${formatNaira(appliedFromWallet)} wallet)`,
+                  date: Date.now(),
+                  status: 'Unpaid'
+                });
+              }
+
+              // Record in stock_logs (as audit trail for wallet activity)
+              await db.stock_logs.add({
+                item_id: 0,
+                itemName: "WALLET AUDIT",
+                quantityChanged: 0,
+                previousStock: 0,
+                newStock: 0,
+                type: 'Manual Update',
+                date: Date.now(),
+                staff_name: `Applied ${formatNaira(appliedFromWallet)} from wallet to Sale to reduce debt.`
+              });
+            } else {
+              // Standard debt entry
+              const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
+              await db.debts.add({
+                customerName: finalCustomer.name,
+                customerPhone: finalCustomer.phone,
+                totalAmount: total,
+                remainingBalance: total,
+                items: `POS Sale: ${itemsSummary}`,
+                date: Date.now(),
+                status: 'Unpaid'
+              });
+            }
           } else {
             let newBalance = finalCustomer.walletBalance - walletCreditApplied;
             if (saveChangeToWallet) newBalance += changeDue;
@@ -236,7 +278,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           items: cart.map(({image, ...rest}) => rest), 
           total,
           totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
-          walletUsed: paymentMode !== 'Debt' ? walletCreditApplied : 0,
+          walletUsed: paymentMode === 'Debt' ? appliedFromWallet : walletCreditApplied,
           walletSaved: paymentMode !== 'Debt' && saveChangeToWallet ? changeDue : 0,
           paymentMethod: (modeToSave === 'Soft POS (Transfer)' ? 'Transfer' : (modeToSave === 'Soft POS' ? 'Transfer' : modeToSave)) as any,
           timestamp: Date.now(),
@@ -468,6 +510,19 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                        <UserPlus size={16} className="text-emerald-600" />
                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Customer Information</h4>
                     </div>
+
+                    {/* Real-Time Balance Check Visual Feedback */}
+                    {selectedCustomer && selectedCustomer.walletBalance > 0 && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl flex items-center gap-3 animate-pulse mb-2">
+                        <div className="bg-emerald-500 p-2 rounded-xl text-white shadow-lg shadow-emerald-500/20">
+                          <Wallet size={16} />
+                        </div>
+                        <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
+                          💰 This customer has {formatNaira(selectedCustomer.walletBalance)} in credit. {paymentMode === 'Debt' ? 'Applying to reduce debt...' : 'Available for use.'}
+                        </p>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 gap-3">
                       <div className="space-y-1">
                         <label className="text-[8px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1"><Phone size={10}/> Phone Number</label>
@@ -604,11 +659,26 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             </div>
             <h2 className="text-2xl font-black mb-1 text-slate-800 dark:text-emerald-50 tracking-tight">{lastSale?.paymentMethod === 'Debt' ? 'Debt Recorded!' : 'Sale Successful!'}</h2>
             <div className="bg-slate-50 dark:bg-emerald-950/40 rounded-2xl p-5 text-left border border-slate-200 mb-6 space-y-2">
-              <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase"><span>Total Amount</span><span>{formatNaira(lastSale?.total || 0)}</span></div>
+              <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase"><span>Total Amount</span><span>{formatNaira((lastSale?.total || 0) + (lastSale?.walletUsed || 0))}</span></div>
               <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase"><span>Method</span><span className="font-black text-slate-800 dark:text-emerald-50 uppercase tracking-widest">{lastSale?.paymentMethod || 'CASH'}</span></div>
+              
+              {lastSale?.walletUsed && lastSale.walletUsed > 0 ? (
+                <div className="flex justify-between font-black text-blue-600 text-[10px] uppercase pt-1 border-t border-blue-50">
+                   <span>Paid via Wallet</span>
+                   <span>-{formatNaira(lastSale.walletUsed)}</span>
+                </div>
+              ) : null}
+
+              {lastSale?.paymentMethod === 'Debt' ? (
+                <div className="flex justify-between font-black text-amber-600 text-[10px] uppercase pt-1 border-t border-amber-50">
+                   <span>Remaining Debt</span>
+                   <span>{formatNaira(lastSale.total)}</span>
+                </div>
+              ) : null}
+
               {lastSale?.walletSaved && lastSale.walletSaved > 0 ? (
                 <div className="flex justify-between font-black text-emerald-600 text-[10px] uppercase pt-1 border-t border-emerald-100">
-                   <span>Wallet Credit</span>
+                   <span>New Credit Saved</span>
                    <span>+{formatNaira(lastSale.walletSaved)}</span>
                 </div>
               ) : null}
