@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page, Role, DeviceRole } from './types.ts';
 import { initTrialDate, User, db } from './db.ts';
@@ -19,7 +18,7 @@ import { LoginScreen } from './components/LoginScreen.tsx';
 import { RoleSelection } from './components/RoleSelection.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
-import { InstallPrompt } from './components/InstallPrompt.tsx'; // Added
+import { InstallBanner } from './components/InstallBanner.tsx'; 
 import { ThemeProvider } from './ThemeContext.tsx';
 import { getRequestCode, validateLicenseIntegrity } from './utils/security.ts';
 import { 
@@ -29,7 +28,6 @@ import {
 } from 'lucide-react';
 
 const ALLOWED_DOMAIN = 'niajapos.netlify.app';
-// 3 Day Trial Period in milliseconds
 const TRIAL_DURATION = 3 * 24 * 60 * 60 * 1000; 
 
 const AppContent: React.FC = () => {
@@ -49,7 +47,6 @@ const AppContent: React.FC = () => {
   const [deviceRole, setDeviceRole] = useState<DeviceRole | null>(() => localStorage.getItem('device_role') as DeviceRole);
   const [showRoleSelection, setShowRoleSelection] = useState(false);
 
-  // Subscription Expiry State
   const [licenseExpiry, setLicenseExpiry] = useState<string | null>(() => localStorage.getItem('license_expiry'));
   const [isExpired, setIsExpired] = useState(false);
 
@@ -58,14 +55,11 @@ const AppContent: React.FC = () => {
   
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /**
-   * Monotonic Heartbeat: Prevents time-travel to bypass expiry
-   */
   const saveHeartbeat = async () => {
     const now = Date.now();
     const maxTime = parseInt(localStorage.getItem('max_time_reached') || '0');
     
-    if (now < maxTime - 60000) { // 1 min tolerance for system jitter
+    if (now < maxTime - 60000) {
       setIsClockTampered(true);
     } else {
       const newMax = Math.max(now, maxTime);
@@ -125,7 +119,6 @@ const AppContent: React.FC = () => {
       
       await initTrialDate();
 
-      // 1. Clock Tamper Check
       const dbMaxTime = await db.security.get('max_time_reached');
       const lsMaxTime = parseInt(localStorage.getItem('max_time_reached') || '0');
       const maxTime = Math.max(lsMaxTime, dbMaxTime?.value || 0);
@@ -136,7 +129,6 @@ const AppContent: React.FC = () => {
         return;
       }
 
-      // 2. License Integrity & Recovery
       const requestCode = await getRequestCode();
       const dbExp = await db.security.get('license_expiry');
       const dbSig = await db.security.get('license_signature');
@@ -172,7 +164,6 @@ const AppContent: React.FC = () => {
       syncStateFromUrl();
       setIsInitialized(true);
 
-      // Start 5-min Heartbeat
       heartbeatRef.current = setInterval(saveHeartbeat, 5 * 60 * 1000);
       saveHeartbeat();
     };
@@ -283,7 +274,6 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500 transition-colors duration-300">
-      <InstallPrompt />
       <main className="flex-1 overflow-auto">{renderPage()}</main>
       {!isStaffDevice && !isNavHidden && <BackupReminder />}
       {!isNavHidden && (
@@ -313,6 +303,8 @@ const AppContent: React.FC = () => {
           )}
         </nav>
       )}
+      {/* 3. Add Banner to App UI */}
+      <InstallBanner />
     </div>
   );
 };
