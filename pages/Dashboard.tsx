@@ -225,6 +225,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             {isToday ? (isAdmin ? 'Net Profit Today' : 'Revenue Today') : (isAdmin ? `Net Profit History` : `Revenue History`)}
           </p>
           <h2 className="text-4xl font-black tracking-tighter">{isAdmin ? formatNaira(netProfitOnDate) : formatNaira(totalSalesOnDate)}</h2>
+          {isAdmin && (
+            <p className="text-[10px] font-bold text-emerald-200/60 uppercase tracking-[0.1em] mt-0.5">
+              Total Revenue: {formatNaira(totalSalesOnDate)}
+            </p>
+          )}
           <div className="flex items-center gap-2 mt-4">
             <span className="bg-emerald-500/40 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
               <ShoppingCart size={10}/> {salesOnDate?.length || 0} Orders
