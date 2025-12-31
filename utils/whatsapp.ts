@@ -35,19 +35,22 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   
   message += `--------------------------\n`;
   
-  const grandTotal = sale.total + (sale.walletUsed || 0);
-  message += `💰 *Subtotal: ${formatNaira(grandTotal)}*\n`;
+  // Display transparent math for the customer
+  message += `💰 *Sub-Total: ${formatNaira(sale.total)}*\n`;
 
   if (sale.walletUsed && sale.walletUsed > 0) {
-    message += `💳 Paid via Wallet: -${formatNaira(sale.walletUsed)}\n`;
+    message += `💳 Credit Applied (Wallet): -${formatNaira(sale.walletUsed)}\n`;
   }
   
-  // Status indicator for Debt
   if (sale.paymentMethod === 'Debt') {
-    message += `⚠️ *New Debt Balance: ${formatNaira(sale.total)}*\n`;
+    const remainingDebt = sale.total - (sale.walletUsed || 0);
+    message += `⚠️ *Amount Owed (Debt): ${formatNaira(remainingDebt)}*\n`;
     message += `📌 *PAYMENT STATUS: DEBT (Owed)*\n`;
+  } else if (sale.paymentMethod === 'Wallet' && sale.walletUsed && sale.walletUsed >= sale.total) {
+    message += `✅ *Paid via Wallet Balance*\n`;
+    message += `🏦 *Amount Owed: ₦0*\n`;
   } else {
-    message += `✅ *Total Paid: ${formatNaira(sale.total)}*\n`;
+    message += `✅ *Total Paid: ${formatNaira(sale.total - (sale.walletUsed || 0))}*\n`;
   }
   
   message += `--------------------------\n`;
