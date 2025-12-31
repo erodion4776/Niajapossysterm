@@ -43,7 +43,7 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   }
 
   if (sale.cashPaid && sale.cashPaid > 0) {
-    message += `💵 Cash Paid: -${formatNaira(sale.cashPaid)}\n`;
+    message += `💵 Cash Paid: ${formatNaira(sale.cashPaid)}\n`;
   }
   
   if (sale.paymentMethod === 'Debt' || sale.paymentMethod === 'Partial') {

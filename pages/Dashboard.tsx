@@ -94,14 +94,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     db.sales.where('timestamp').between(queryStart.getTime(), queryEnd.getTime()).reverse().toArray()
   , [selectedDate]);
 
+  // Profit uses the FULL sale amount (Gross)
   const totalSalesOnDate = salesOnDate?.reduce((sum, sale) => sum + sale.total, 0) || 0;
   const totalCostOnDate = salesOnDate?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
 
   const revenueBreakdown = useMemo(() => {
     if (!salesOnDate) return { cash: 0, digital: 0 };
     return salesOnDate.reduce((acc, sale) => {
-      if (sale.paymentMethod === 'Cash') acc.cash += sale.total;
-      else if (sale.paymentMethod === 'Transfer' || sale.paymentMethod === 'Card') acc.digital += sale.total;
+      // CASH IN HAND: Only physical cash physically received today for this transaction
+      if (sale.paymentMethod === 'Cash' || sale.paymentMethod === 'Partial') {
+         acc.cash += (sale.cashPaid || 0);
+      } 
+      
+      // DIGITAL: Track full value for Transfer/Card transactions
+      if (sale.paymentMethod === 'Transfer' || sale.paymentMethod === 'Card') {
+         acc.digital += sale.total;
+      }
       return acc;
     }, { cash: 0, digital: 0 });
   }, [salesOnDate]);

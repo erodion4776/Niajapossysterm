@@ -104,7 +104,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
     }));
   };
 
-  // 1. Define Variables Clearly
   const saleTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const total = paymentMode !== 'Debt' 
     ? Math.max(0, saleTotal - walletCreditApplied)
@@ -173,7 +172,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
     const modeToSave = explicitMode || paymentMode;
 
     try {
-      // 3. Update Database (Atomic Transaction)
       await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
         let finalCustomer = selectedCustomer;
         
@@ -214,7 +212,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           }
         }
 
-        // The Logic Fix (The "Netting" / Split / Cash Deduction Process)
         let appliedFromWallet = 0;
         let finalCashPaid = 0;
         let finalPaymentMethod = modeToSave;
@@ -263,7 +260,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
               finalPaymentMethod = 'Wallet';
             }
           } else if (paymentMode === 'Cash' && isUnderpaid) {
-            // Split Sale (Partial Payment)
+            // Underpayment Detection: Split Sale
             appliedFromWallet = walletCreditApplied;
             finalCashPaid = Number(amountPaid || 0);
             netDebtToRecord = balanceOwed;
@@ -273,7 +270,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             await db.debts.add({
               customerName: finalCustomer.name,
               customerPhone: finalCustomer.phone,
-              totalAmount: total,
+              totalAmount: saleTotal, // Gross amount
               remainingBalance: netDebtToRecord,
               items: `POS Partial: ${itemsSummary} (Paid ${formatNaira(finalCashPaid)} cash)`,
               date: Date.now(),
@@ -284,12 +281,15 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
               lastTransaction: Date.now()
             });
           } else {
-            // Standard non-debt wallet application
+            // Standard Cash/Wallet/Card/Transfer
             appliedFromWallet = walletCreditApplied;
-            finalCashPaid = Number(amountPaid || 0);
+            // Physical cash received for drawer logic:
+            finalCashPaid = (modeToSave === 'Cash') ? Math.min(total, Number(amountPaid || 0)) : 0;
+            
             let newBalance = finalCustomer.walletBalance - appliedFromWallet;
             if (saveChangeToWallet) {
-              const standardChange = Math.max(0, finalCashPaid - (saleTotal - appliedFromWallet));
+              const cashFromUser = Number(amountPaid || 0);
+              const standardChange = Math.max(0, cashFromUser - (saleTotal - appliedFromWallet));
               newBalance += standardChange;
             }
             await db.customers.update(finalCustomer.id!, { 
@@ -298,17 +298,18 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             });
           }
         } else {
-          finalCashPaid = Number(amountPaid || 0);
+          // No customer identified (Standard Cash/Card/Transfer)
+          finalCashPaid = (modeToSave === 'Cash') ? Math.min(total, Number(amountPaid || 0)) : 0;
         }
 
         const sale: Sale = {
           uuid: crypto.randomUUID(),
           items: cart.map(({image, ...rest}) => rest), 
-          total: (paymentMode === 'Cash' && isUnderpaid) ? total : saleTotal, 
+          total: saleTotal, // ALWAYS use Gross Total for Profit reports
           totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
           walletUsed: appliedFromWallet,
           walletSaved: (paymentMode === 'Debt' ? Math.max(0, Number(amountPaid || 0) - (saleTotal - appliedFromWallet)) : (saveChangeToWallet ? changeDue : 0)),
-          cashPaid: finalCashPaid || Number(amountPaid || 0),
+          cashPaid: finalCashPaid, // Critical for "Cash in Hand" logic
           paymentMethod: (finalPaymentMethod === 'Soft POS (Transfer)' ? 'Transfer' : (finalPaymentMethod === 'Soft POS' ? 'Transfer' : finalPaymentMethod)) as any,
           timestamp: Date.now(),
           staff_id: String(user.id || user.role),
@@ -531,7 +532,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                   </button>
                 </div>
 
-                {/* Conditional Customer Information Form (Triggered by Debt or Underpayment) */}
+                {/* Conditional Customer Information Form */}
                 {(paymentMode === 'Debt' || changeDue > 0 || isUnderpaid) && (
                   <div className="space-y-3 bg-slate-50 dark:bg-emerald-950/40 p-5 rounded-3xl border border-slate-100 dark:border-emerald-800/40 animate-in fade-in duration-300">
                     <div className="flex items-center gap-2 mb-2">
@@ -681,7 +682,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                     </div>
                     <div className="space-y-1 animate-in slide-in-from-top duration-300">
                        <label className="text-[10px] font-black text-amber-700 uppercase ml-2 flex items-center gap-1"><Banknote size={10}/> Part Cash Paid Today (₦)</label>
-                       <input type="number" inputMode="decimal" placeholder="0.00" className="w-full p-4 bg-white dark:bg-emerald-950 border-2 border-amber-200 rounded-2xl font-black text-xl text-amber-800 outline-none focus:ring-4 focus:ring-amber-500/10 transition-all" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
+                       <input type="number" inputMode="decimal" placeholder="0.00" className="w-full p-4 bg-white dark:bg-emerald-950 border-2 border-amber-200 rounded-2xl font-black text-xl text-amber-800 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
                     </div>
                     {changeDue > 0 && (
                       <div className="flex justify-between items-center bg-amber-500 text-white p-3 rounded-xl">
@@ -705,7 +706,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                     <button 
                       onClick={() => paymentMode === 'Transfer' ? triggerSoftPOSTerminal() : handleCheckout()} 
                       disabled={((paymentMode === 'Debt' || isUnderpaid) && (!customerPhone || !customerName)) || (saveChangeToWallet && (!customerPhone || !customerName))}
-                      className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale ${paymentMode === 'Debt' ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-emerald-600 text-white shadow-emerald-200'}`}
+                      className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale ${paymentMode === 'Debt' || isUnderpaid ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-emerald-600 text-white shadow-emerald-200'}`}
                     >
                       {paymentMode === 'Debt' || isUnderpaid ? 'Record Debt' : (paymentMode === 'Transfer' ? 'Open Soft POS' : 'Finish Sale')} <ArrowRight size={16} />
                     </button>
