@@ -41,16 +41,21 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   if (sale.walletUsed && sale.walletUsed > 0) {
     message += `💳 Paid from Wallet: -${formatNaira(sale.walletUsed)}\n`;
   }
+
+  if (sale.cashPaid && sale.cashPaid > 0) {
+    message += `💵 Cash Paid: -${formatNaira(sale.cashPaid)}\n`;
+  }
   
   if (sale.paymentMethod === 'Debt') {
-    const remainingDebt = sale.total - (sale.walletUsed || 0);
+    const remainingDebt = Math.max(0, sale.total - (sale.walletUsed || 0) - (sale.cashPaid || 0));
     message += `--------------------------\n`;
     message += `⚠️ *NEW DEBT RECORDED: ${formatNaira(remainingDebt)}*\n`;
-    message += `📌 Status: Partially Paid via Wallet\n`;
-  } else if (sale.paymentMethod === 'Wallet' && sale.walletUsed && sale.walletUsed >= sale.total) {
-    message += `✅ Fully Paid via Wallet Balance\n`;
+    message += `📌 Status: Partially Settled\n`;
+  } else if (sale.paymentMethod === 'Wallet' && (sale.walletUsed || 0) + (sale.cashPaid || 0) >= sale.total) {
+    message += `✅ Fully Settled via Wallet/Cash\n`;
   } else {
-    message += `✅ Total Paid: ${formatNaira(sale.total - (sale.walletUsed || 0))}\n`;
+    const totalPayment = (sale.walletUsed || 0) + (sale.cashPaid || 0);
+    message += `✅ Total Paid: ${formatNaira(totalPayment)}\n`;
   }
   
   message += `--------------------------\n`;

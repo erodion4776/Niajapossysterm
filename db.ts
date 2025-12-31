@@ -54,6 +54,7 @@ export interface Sale {
   totalCost: number;
   walletUsed?: number;
   walletSaved?: number;
+  cashPaid?: number;
   paymentMethod: 'Cash' | 'Transfer' | 'Card' | 'Wallet' | 'Debt';
   timestamp: number;
   staff_id: string;
@@ -118,7 +119,7 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(20).stores({
+dexieDb.version(21).stores({
   inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock',
   categories: '++id, name',
   customers: '++id, &phone, name, walletBalance',

@@ -81,24 +81,27 @@ export function formatReceipt(sale: Sale): Uint8Array {
 
   if (sale.walletUsed && sale.walletUsed > 0) {
     add(`PAID FROM WALLET: -N${sale.walletUsed.toLocaleString()}\n`);
-    line();
+  }
+
+  if (sale.cashPaid && sale.cashPaid > 0) {
+    add(`CASH PAID: -N${sale.cashPaid.toLocaleString()}\n`);
   }
   
   if (sale.paymentMethod === 'Debt') {
-    const remainingDebt = sale.total - (sale.walletUsed || 0);
+    const remainingDebt = Math.max(0, sale.total - (sale.walletUsed || 0) - (sale.cashPaid || 0));
     add(CMD.BOLD_ON);
     add(`NEW DEBT: N${remainingDebt.toLocaleString()}\n`);
     add(CMD.BOLD_OFF);
     add(CMD.ALIGN_CENTER);
     add(`Your Wallet Balance: N0\n`);
-  } else if (sale.paymentMethod === 'Wallet') {
+  } else if (sale.paymentMethod === 'Wallet' && (sale.walletUsed || 0) + (sale.cashPaid || 0) >= sale.total) {
     add(CMD.BOLD_ON);
-    add(`SETTLED VIA WALLET\n`);
+    add(`FULLY SETTLED\n`);
     add(CMD.BOLD_OFF);
   } else {
-    const cashTotal = sale.total - (sale.walletUsed || 0);
+    const totalPaid = (sale.walletUsed || 0) + (sale.cashPaid || 0);
     add(CMD.BOLD_ON);
-    add(`AMOUNT PAID: N${cashTotal.toLocaleString()}\n`);
+    add(`TOTAL SETTLED: N${totalPaid.toLocaleString()}\n`);
     add(CMD.BOLD_OFF);
   }
 

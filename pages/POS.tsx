@@ -110,7 +110,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
     ? Math.max(0, saleTotal - walletCreditApplied)
     : saleTotal;
 
-  const changeDue = Math.max(0, Number(amountPaid || 0) - total);
+  const changeDue = Math.max(0, Number(amountPaid || 0) - (paymentMode === 'Debt' ? (saleTotal - (selectedCustomer?.walletBalance || 0)) : total));
 
   const resetCheckoutState = () => {
     setCustomerPhone('');
@@ -210,50 +210,59 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           }
         }
 
-        // 2. The Logic Fix (The "Netting" / Split Process)
+        // 2. The Logic Fix (The "Netting" / Split / Cash Deduction Process)
         let appliedFromWallet = 0;
+        let finalCashPaid = 0;
         let finalPaymentMethod = modeToSave;
 
         if (finalCustomer) {
           if (paymentMode === 'Debt') {
             const existingWallet = finalCustomer.walletBalance;
-            let netDebt = 0;
-            let remainingWallet = 0;
-
-            if (existingWallet > 0) {
-              // The "Split" Calculation
-              appliedFromWallet = Math.min(saleTotal, existingWallet);
-              netDebt = Math.max(0, saleTotal - existingWallet);
-              remainingWallet = Math.max(0, existingWallet - saleTotal);
-            } else {
-              netDebt = saleTotal;
-              remainingWallet = 0;
-              appliedFromWallet = 0;
+            const cashFromUser = Number(amountPaid || 0);
+            
+            // Settlement Logic:
+            // 1. Apply wallet first
+            appliedFromWallet = Math.min(saleTotal, existingWallet);
+            const remainingAfterWallet = saleTotal - appliedFromWallet;
+            
+            // 2. Apply cash paid
+            finalCashPaid = Math.min(remainingAfterWallet, cashFromUser);
+            const netDebtToRecord = Math.max(0, remainingAfterWallet - finalCashPaid);
+            
+            // 3. Calculate Change Due (if they overpaid cash beyond the remainder)
+            const calculatedChange = Math.max(0, cashFromUser - remainingAfterWallet);
+            
+            // 4. Update Wallet Balance: OldWallet - Applied + ChangeSaved
+            let newWalletBalance = Math.max(0, existingWallet - saleTotal);
+            if (saveChangeToWallet && calculatedChange > 0) {
+              newWalletBalance += calculatedChange;
             }
 
-            // Update Customer wallet balance to NewWalletBalance
             await db.customers.update(finalCustomer.id!, { 
-              walletBalance: remainingWallet,
+              walletBalance: newWalletBalance,
               lastTransaction: Date.now()
             });
 
-            // Automatic Debt Creation if RemainingToRecordAsDebt > 0
-            if (netDebt > 0) {
+            // Automatic Debt Creation if NetDebt > 0
+            if (netDebtToRecord > 0) {
               const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
+              let itemsDesc = `POS Sale: ${itemsSummary}`;
+              if (appliedFromWallet > 0 || finalCashPaid > 0) {
+                itemsDesc += ` (Settled via: ${appliedFromWallet > 0 ? formatNaira(appliedFromWallet)+' wallet' : ''}${appliedFromWallet > 0 && finalCashPaid > 0 ? ' + ' : ''}${finalCashPaid > 0 ? formatNaira(finalCashPaid)+' cash' : ''})`;
+              }
+
               await db.debts.add({
                 customerName: finalCustomer.name,
                 customerPhone: finalCustomer.phone,
                 totalAmount: saleTotal,
-                remainingBalance: netDebt,
-                items: appliedFromWallet > 0 
-                  ? `POS Sale: ${itemsSummary} (Partially Paid via Wallet / Balance as Debt)`
-                  : `POS Sale: ${itemsSummary}`,
+                remainingBalance: netDebtToRecord,
+                items: itemsDesc,
                 date: Date.now(),
                 status: 'Unpaid'
               });
-            } else {
-              // Sale fully covered by wallet
-              finalPaymentMethod = 'Wallet';
+            } else if (remainingAfterWallet <= cashFromUser) {
+              // Entire balance covered by Wallet + Cash
+              finalPaymentMethod = 'Wallet'; // Or 'Cash' if predominantly cash? Let's use Wallet as indicator.
             }
 
             if (appliedFromWallet > 0) {
@@ -265,14 +274,18 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                 newStock: 0,
                 type: 'Manual Update',
                 date: Date.now(),
-                staff_name: `Applied ${formatNaira(appliedFromWallet)} from wallet to Sale #${user.id} to reduce debt.`
+                staff_name: `Applied ${formatNaira(appliedFromWallet)} from wallet to Sale reduction.`
               });
             }
           } else {
             // Standard non-debt wallet application
             appliedFromWallet = walletCreditApplied;
+            finalCashPaid = Number(amountPaid || 0);
             let newBalance = finalCustomer.walletBalance - appliedFromWallet;
-            if (saveChangeToWallet) newBalance += changeDue;
+            if (saveChangeToWallet) {
+              const standardChange = Math.max(0, finalCashPaid - (saleTotal - appliedFromWallet));
+              newBalance += standardChange;
+            }
             await db.customers.update(finalCustomer.id!, { 
               walletBalance: newBalance,
               lastTransaction: Date.now()
@@ -283,10 +296,11 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
         const sale: Sale = {
           uuid: crypto.randomUUID(),
           items: cart.map(({image, ...rest}) => rest), 
-          total: saleTotal, // Gross amount
+          total: saleTotal, 
           totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
           walletUsed: appliedFromWallet,
-          walletSaved: paymentMode !== 'Debt' && saveChangeToWallet ? changeDue : 0,
+          walletSaved: (paymentMode === 'Debt' ? Math.max(0, Number(amountPaid || 0) - (saleTotal - appliedFromWallet)) : (saveChangeToWallet ? changeDue : 0)),
+          cashPaid: finalCashPaid || Number(amountPaid || 0),
           paymentMethod: (finalPaymentMethod === 'Soft POS (Transfer)' ? 'Transfer' : (finalPaymentMethod === 'Soft POS' ? 'Transfer' : finalPaymentMethod)) as any,
           timestamp: Date.now(),
           staff_id: String(user.id || user.role),
@@ -533,7 +547,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                                  <p className="text-[9px] font-bold text-slate-500 uppercase leading-tight">
                                    {selectedCustomer.walletBalance >= saleTotal 
                                      ? `This sale will be fully paid via wallet credit.`
-                                     : `This sale will use all their credit and add ${formatNaira(saleTotal - selectedCustomer.walletBalance)} to their debt.`}
+                                     : `This sale will use all their credit${Number(amountPaid) > 0 ? ' and ' + formatNaira(Number(amountPaid)) + ' cash' : ''} and add ${formatNaira(Math.max(0, saleTotal - selectedCustomer.walletBalance - Number(amountPaid)))} to their debt.`}
                                    {" "}Proceed?
                                  </p>
                                )}
@@ -575,7 +589,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                     </div>
 
                     {/* Save Change to Wallet Toggle */}
-                    {changeDue > 0 && paymentMode !== 'Debt' && (
+                    {changeDue > 0 && (
                       <label className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900 border-2 border-emerald-100 dark:border-emerald-800 rounded-[24px] mt-2 cursor-pointer active:scale-[0.98] transition-all">
                         <input 
                           type="checkbox" 
@@ -642,10 +656,21 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                     )}
                   </div>
                 ) : (
-                  <div className="bg-amber-50 dark:bg-amber-900/20 p-6 rounded-[32px] border-2 border-dashed border-amber-300 text-center space-y-2 animate-in pulse duration-1000">
-                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest leading-none">Credit Sales Amount</p>
-                    <p className="text-4xl font-black text-amber-800 dark:text-emerald-50 tracking-tighter">{formatNaira(saleTotal)}</p>
-                    <p className="text-[9px] font-bold text-amber-600 uppercase tracking-wide">Record this sale in Customer Ledger</p>
+                  <div className="bg-amber-50 dark:bg-amber-900/20 p-6 rounded-[32px] border-2 border-dashed border-amber-300 space-y-4 animate-in pulse duration-1000">
+                    <div className="text-center">
+                       <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest leading-none">Credit Sales Amount</p>
+                       <p className="text-4xl font-black text-amber-800 dark:text-emerald-50 tracking-tighter">{formatNaira(saleTotal)}</p>
+                    </div>
+                    <div className="space-y-1 animate-in slide-in-from-top duration-300">
+                       <label className="text-[10px] font-black text-amber-700 uppercase ml-2 flex items-center gap-1"><Banknote size={10}/> Part Cash Paid Today (₦)</label>
+                       <input type="number" inputMode="decimal" placeholder="0.00" className="w-full p-4 bg-white dark:bg-emerald-950 border-2 border-amber-200 rounded-2xl font-black text-xl text-amber-800 outline-none focus:ring-4 focus:ring-amber-500/10 transition-all" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
+                    </div>
+                    {changeDue > 0 && (
+                      <div className="flex justify-between items-center bg-amber-500 text-white p-3 rounded-xl">
+                        <span className="text-[10px] font-black uppercase">Change Due (to wallet)</span>
+                        <span className="text-lg font-black">{formatNaira(changeDue)}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -698,10 +723,17 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                 </div>
               ) : null}
 
+              {lastSale?.cashPaid && lastSale.cashPaid > 0 ? (
+                <div className="flex justify-between font-black text-gray-600 dark:text-emerald-400 text-[10px] uppercase pt-1 border-t border-gray-100">
+                   <span>Cash Received</span>
+                   <span>-{formatNaira(lastSale.cashPaid)}</span>
+                </div>
+              ) : null}
+
               {lastSale?.paymentMethod === 'Debt' ? (
                 <div className="flex justify-between font-black text-red-600 text-[10px] uppercase pt-1 border-t border-red-50">
                    <span>Remaining Debt</span>
-                   <span>{formatNaira((lastSale?.total || 0) - (lastSale?.walletUsed || 0))}</span>
+                   <span>{formatNaira(Math.max(0, (lastSale?.total || 0) - (lastSale?.walletUsed || 0) - (lastSale?.cashPaid || 0)))}</span>
                 </div>
               ) : null}
 
