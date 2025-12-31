@@ -8,7 +8,7 @@ import {
   MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, 
   Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight,
   BookOpen, CreditCard, AlertCircle, Banknote, Landmark, CreditCard as CardIcon,
-  ShieldCheck, HelpCircle, ChevronLeft, Tag
+  ShieldCheck, HelpCircle, ChevronLeft, Tag, Phone
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
@@ -34,6 +34,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   // Checkout Configuration
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'Transfer' | 'Card' | 'Debt'>('Cash');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [walletCreditApplied, setWalletCreditApplied] = useState(0);
@@ -112,6 +113,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
 
   const resetCheckoutState = () => {
     setCustomerPhone('');
+    setCustomerName('');
     setSelectedCustomer(null);
     setWalletCreditApplied(0);
     setAmountPaid('');
@@ -138,18 +140,9 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
       const customer = await db.customers.where('phone').equals(phoneToSearch).first();
       if (customer) {
         setSelectedCustomer(customer);
-      } else if (!explicitPhone) {
-        const name = prompt("New Customer! Enter their name:", "Walk-in Customer");
-        if (name) {
-          const id = await db.customers.add({
-            name,
-            phone: phoneToSearch,
-            walletBalance: 0,
-            lastTransaction: Date.now()
-          });
-          const newCust = await db.customers.get(id as number);
-          if (newCust) setSelectedCustomer(newCust);
-        }
+        setCustomerName(customer.name);
+      } else {
+        setSelectedCustomer(null);
       }
     } finally {
       setIsSearchingCustomer(false);
@@ -165,31 +158,37 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const handleCheckout = async (explicitMode?: string) => {
     if (cart.length === 0) return;
     
-    if (paymentMode === 'Debt' && !explicitMode) {
-      if (!selectedCustomer) {
-        alert("Select or search for a customer before recording a debt!");
+    // Logic for required customer info on Debt or Save Change
+    if (paymentMode === 'Debt' || saveChangeToWallet) {
+      if (!customerPhone || !customerName) {
+        alert("Please provide customer Name and Phone Number!");
         return;
       }
     }
 
     const modeToSave = explicitMode || paymentMode;
 
-    const sale: Sale = {
-      uuid: crypto.randomUUID(),
-      items: cart.map(({image, ...rest}) => rest), 
-      total,
-      totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
-      walletUsed: paymentMode !== 'Debt' ? walletCreditApplied : 0,
-      walletSaved: paymentMode !== 'Debt' && saveChangeToWallet ? changeDue : 0,
-      paymentMethod: (modeToSave === 'Soft POS (Transfer)' ? 'Transfer' : (modeToSave === 'Soft POS' ? 'Transfer' : modeToSave)) as any,
-      timestamp: Date.now(),
-      staff_id: String(user.id || user.role),
-      staff_name: user.name || user.role,
-      customer_phone: selectedCustomer?.phone
-    };
-
     try {
       await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
+        let finalCustomer = selectedCustomer;
+        
+        // Auto-create/fetch customer if info provided
+        if ((paymentMode === 'Debt' || saveChangeToWallet) && !finalCustomer && customerPhone && customerName) {
+          const existing = await db.customers.where('phone').equals(customerPhone).first();
+          if (existing) {
+            finalCustomer = existing;
+            await db.customers.update(existing.id!, { name: customerName }); // Update name in case it changed
+          } else {
+            const id = await db.customers.add({
+              name: customerName,
+              phone: customerPhone,
+              walletBalance: 0,
+              lastTransaction: Date.now()
+            });
+            finalCustomer = await db.customers.get(id as number);
+          }
+        }
+
         for (const item of cart) {
           if (!item.id) continue;
           const invItem = await db.inventory.get(item.id);
@@ -210,12 +209,12 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           }
         }
 
-        if (selectedCustomer) {
+        if (finalCustomer) {
           if (paymentMode === 'Debt') {
             const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
             await db.debts.add({
-              customerName: selectedCustomer.name,
-              customerPhone: selectedCustomer.phone,
+              customerName: finalCustomer.name,
+              customerPhone: finalCustomer.phone,
               totalAmount: total,
               remainingBalance: total,
               items: `POS Sale: ${itemsSummary}`,
@@ -223,14 +222,28 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
               status: 'Unpaid'
             });
           } else {
-            let newBalance = selectedCustomer.walletBalance - walletCreditApplied;
+            let newBalance = finalCustomer.walletBalance - walletCreditApplied;
             if (saveChangeToWallet) newBalance += changeDue;
-            await db.customers.update(selectedCustomer.id!, { 
+            await db.customers.update(finalCustomer.id!, { 
               walletBalance: newBalance,
               lastTransaction: Date.now()
             });
           }
         }
+
+        const sale: Sale = {
+          uuid: crypto.randomUUID(),
+          items: cart.map(({image, ...rest}) => rest), 
+          total,
+          totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
+          walletUsed: paymentMode !== 'Debt' ? walletCreditApplied : 0,
+          walletSaved: paymentMode !== 'Debt' && saveChangeToWallet ? changeDue : 0,
+          paymentMethod: (modeToSave === 'Soft POS (Transfer)' ? 'Transfer' : (modeToSave === 'Soft POS' ? 'Transfer' : modeToSave)) as any,
+          timestamp: Date.now(),
+          staff_id: String(user.id || user.role),
+          staff_name: user.name || user.role,
+          customer_phone: finalCustomer?.phone
+        };
 
         const saleId = await db.sales.add(sale);
         setLastSale({ ...sale, id: saleId as number });
@@ -246,6 +259,12 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   };
 
   const triggerSoftPOSTerminal = () => {
+    setShowSoftPOSTerminal(false); // Close cart first
+    // Check if we need customer info for save change before opening terminal
+    if (saveChangeToWallet && (!customerPhone || !customerName)) {
+      alert("Please provide customer details to save change to wallet!");
+      return;
+    }
     setShowSoftPOSTerminal(true);
     if (setNavHidden) setNavHidden(true);
   };
@@ -348,7 +367,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           ))}
         </div>
 
-        {/* Dynamic Display: Categories or Products */}
         {!searchTerm && !selectedCategory ? (
           <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
              {categories?.map(cat => (
@@ -443,21 +461,57 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                   </button>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <input type="tel" placeholder="Customer Phone..." className="flex-1 px-4 py-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
-                    <button onClick={() => handleLookupCustomer()} className="px-4 bg-emerald-100 dark:bg-emerald-800 text-emerald-600 rounded-2xl active:scale-90 transition-all">{isSearchingCustomer ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}</button>
-                  </div>
-                  {selectedCustomer && (
-                    <div className="bg-emerald-50 dark:bg-emerald-950/40 p-4 rounded-2xl border border-emerald-100 flex justify-between items-center animate-in zoom-in duration-200">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-[10px] font-black">{selectedCustomer.name.charAt(0)}</div>
-                        <span className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase">{selectedCustomer.name}</span>
-                      </div>
-                      {paymentMode !== 'Debt' && selectedCustomer.walletBalance > 0 && walletCreditApplied === 0 && <button onClick={() => setWalletCreditApplied(Math.min(selectedCustomer.walletBalance, cartSubtotal))} className="text-[9px] font-black text-white bg-emerald-600 px-3 py-1.5 rounded-lg uppercase shadow-lg shadow-emerald-200">Use Wallet Credit (₦{selectedCustomer.walletBalance})</button>}
+                {/* 1. Conditional Customer Information Form */}
+                {(paymentMode === 'Debt' || changeDue > 0) && (
+                  <div className="space-y-3 bg-slate-50 dark:bg-emerald-950/40 p-5 rounded-3xl border border-slate-100 dark:border-emerald-800/40 animate-in fade-in duration-300">
+                    <div className="flex items-center gap-2 mb-2">
+                       <UserPlus size={16} className="text-emerald-600" />
+                       <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Customer Information</h4>
                     </div>
-                  )}
-                </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1"><Phone size={10}/> Phone Number</label>
+                        <div className="relative">
+                          <input 
+                            type="tel" 
+                            placeholder="080..." 
+                            className="w-full px-4 py-3.5 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 transition-all" 
+                            value={customerPhone} 
+                            onChange={(e) => setCustomerPhone(e.target.value)} 
+                          />
+                          {isSearchingCustomer && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-emerald-500" size={14} />}
+                          {selectedCustomer && <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500" size={16} />}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1"><UserCheck size={10}/> Customer Name</label>
+                        <input 
+                          type="text" 
+                          placeholder="Enter customer name" 
+                          className="w-full px-4 py-3.5 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 transition-all" 
+                          value={customerName} 
+                          onChange={(e) => setCustomerName(e.target.value)} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* 2. Save Change to Wallet Toggle */}
+                    {changeDue > 0 && paymentMode !== 'Debt' && (
+                      <label className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900 border-2 border-emerald-100 dark:border-emerald-800 rounded-[24px] mt-2 cursor-pointer active:scale-[0.98] transition-all">
+                        <input 
+                          type="checkbox" 
+                          checked={saveChangeToWallet} 
+                          onChange={e => setSaveChangeToWallet(e.target.checked)} 
+                          className="w-6 h-6 rounded-lg border-emerald-300 text-emerald-600 focus:ring-emerald-500" 
+                        />
+                        <div className="flex-1">
+                           <p className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase leading-tight">💾 Save {formatNaira(changeDue)} to Wallet?</p>
+                           <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Save change for customer's next visit</p>
+                        </div>
+                      </label>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   {cart.map(item => (
@@ -505,7 +559,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                     {changeDue > 0 && (
                       <div className="flex flex-col gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 rounded-2xl animate-in slide-in-from-top duration-300">
                         <div className="flex justify-between items-center"><span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Change Due</span><span className="text-2xl font-black text-amber-700">{formatNaira(changeDue)}</span></div>
-                        {selectedCustomer && <button onClick={() => setSaveChangeToWallet(!saveChangeToWallet)} className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm ${saveChangeToWallet ? 'bg-emerald-600 text-white shadow-emerald-200' : 'bg-white text-emerald-600 border border-emerald-200'}`}>{saveChangeToWallet ? '✓ Saving Change to Wallet' : 'Save Change to Wallet'}</button>}
                       </div>
                     )}
                   </div>
@@ -517,14 +570,25 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  <button onClick={() => setIsCartExpanded(false)} className="bg-slate-100 dark:bg-emerald-800 text-slate-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">Cancel</button>
-                  <button 
-                    onClick={() => paymentMode === 'Transfer' ? triggerSoftPOSTerminal() : handleCheckout()} 
-                    className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-all ${paymentMode === 'Debt' ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-emerald-600 text-white shadow-emerald-200'}`}
-                  >
-                    {paymentMode === 'Debt' ? 'Record Debt' : (paymentMode === 'Transfer' ? 'Open Soft POS' : 'Finish Sale')} <ArrowRight size={16} />
-                  </button>
+                <div className="grid grid-cols-1 gap-3 pt-2">
+                  {/* 3. Forced Customer Info for Debt Messaging */}
+                  {paymentMode === 'Debt' && (!customerPhone || !customerName) && (
+                    <div className="bg-red-50 p-3 rounded-xl flex items-center justify-center gap-2 text-red-500 animate-pulse">
+                      <AlertCircle size={14} />
+                      <p className="text-[9px] font-black uppercase tracking-widest">Please provide customer details to record this debt.</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setIsCartExpanded(false)} className="bg-slate-100 dark:bg-emerald-800 text-slate-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">Cancel</button>
+                    <button 
+                      onClick={() => paymentMode === 'Transfer' ? triggerSoftPOSTerminal() : handleCheckout()} 
+                      disabled={(paymentMode === 'Debt' && (!customerPhone || !customerName)) || (saveChangeToWallet && (!customerPhone || !customerName))}
+                      className={`font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale ${paymentMode === 'Debt' ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-emerald-600 text-white shadow-emerald-200'}`}
+                    >
+                      {paymentMode === 'Debt' ? 'Record Debt' : (paymentMode === 'Transfer' ? 'Open Soft POS' : 'Finish Sale')} <ArrowRight size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -542,6 +606,12 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             <div className="bg-slate-50 dark:bg-emerald-950/40 rounded-2xl p-5 text-left border border-slate-200 mb-6 space-y-2">
               <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase"><span>Total Amount</span><span>{formatNaira(lastSale?.total || 0)}</span></div>
               <div className="flex justify-between font-bold text-slate-500 text-[10px] uppercase"><span>Method</span><span className="font-black text-slate-800 dark:text-emerald-50 uppercase tracking-widest">{lastSale?.paymentMethod || 'CASH'}</span></div>
+              {lastSale?.walletSaved && lastSale.walletSaved > 0 ? (
+                <div className="flex justify-between font-black text-emerald-600 text-[10px] uppercase pt-1 border-t border-emerald-100">
+                   <span>Wallet Credit</span>
+                   <span>+{formatNaira(lastSale.walletSaved)}</span>
+                </div>
+              ) : null}
             </div>
             <div className="grid grid-cols-1 gap-3">
               <button onClick={handlePrint} disabled={isPrinting} className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 active:scale-95 shadow-xl text-xs uppercase tracking-widest">

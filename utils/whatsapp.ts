@@ -37,7 +37,15 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   if (sale.walletUsed && sale.walletUsed > 0) {
     message += `💳 Wallet Credit Used: -${formatNaira(sale.walletUsed)}\n`;
   }
-  message += `💰 *TOTAL: ${formatNaira(sale.total)}*\n`;
+  
+  // Status indicator for Debt
+  if (sale.paymentMethod === 'Debt') {
+    message += `💰 *TOTAL OWED: ${formatNaira(sale.total)}*\n`;
+    message += `⚠️ *PAYMENT STATUS: DEBT (Owed)*\n`;
+  } else {
+    message += `💰 *TOTAL PAID: ${formatNaira(sale.total)}*\n`;
+  }
+  
   message += `--------------------------\n`;
 
   if (sale.customer_phone) {
