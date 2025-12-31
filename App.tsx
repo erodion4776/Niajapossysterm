@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Page, Role, DeviceRole } from './types.ts';
 import { initTrialDate, User, db } from './db.ts';
@@ -13,6 +14,7 @@ import { Customers } from './pages/Customers.tsx';
 import { StockLogs } from './pages/StockLogs.tsx';
 import { CategoryManager } from './pages/CategoryManager.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
+import { InstallApp } from './pages/InstallApp.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { RoleSelection } from './components/RoleSelection.tsx';
@@ -46,6 +48,10 @@ const AppContent: React.FC = () => {
   const [isSetupPending, setIsSetupPending] = useState(() => localStorage.getItem('is_setup_pending') === 'true');
   const [deviceRole, setDeviceRole] = useState<DeviceRole | null>(() => localStorage.getItem('device_role') as DeviceRole);
   const [showRoleSelection, setShowRoleSelection] = useState(false);
+  
+  // PWA Install State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallPage, setShowInstallPage] = useState(false);
 
   const [licenseExpiry, setLicenseExpiry] = useState<string | null>(() => localStorage.getItem('license_expiry'));
   const [isExpired, setIsExpired] = useState(false);
@@ -111,6 +117,14 @@ const AppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // 1. Listen for PWA Install Signal
+    const installHandler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      console.log('PWA: Prompt stored');
+    };
+    window.addEventListener('beforeinstallprompt', installHandler);
+
     const startup = async () => {
       const hostname = window.location.hostname;
       if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== ALLOWED_DOMAIN && !hostname.endsWith('.webcontainer.io')) {
@@ -172,11 +186,26 @@ const AppContent: React.FC = () => {
     window.addEventListener('popstate', syncStateFromUrl);
     return () => {
       window.removeEventListener('popstate', syncStateFromUrl);
+      window.removeEventListener('beforeinstallprompt', installHandler);
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
   }, [syncStateFromUrl, checkExpiry]);
 
   const handleStartTrial = () => {
+    // Check if app is already running in standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    const hasAlreadySkipped = localStorage.getItem('install_onboarding_done') === 'true';
+
+    if (!isStandalone && !hasAlreadySkipped) {
+      setShowInstallPage(true);
+    } else {
+      setShowRoleSelection(true);
+    }
+  };
+
+  const handleInstallComplete = () => {
+    localStorage.setItem('install_onboarding_done', 'true');
+    setShowInstallPage(false);
     setShowRoleSelection(true);
   };
 
@@ -229,7 +258,14 @@ const AppContent: React.FC = () => {
 
   if (!isInitialized) return null;
 
-  if (isAtLanding && !isActivated && !isTrialing && !showRoleSelection) return <LandingPage onStartTrial={handleStartTrial} />;
+  if (isAtLanding && !isActivated && !isTrialing && !showRoleSelection && !showInstallPage) {
+    return <LandingPage onStartTrial={handleStartTrial} />;
+  }
+
+  if (showInstallPage) {
+    return <InstallApp deferredPrompt={deferredPrompt} onNext={handleInstallComplete} />;
+  }
+
   if (showRoleSelection) return <RoleSelection onSelect={handleRoleSelection} />;
   
   if (deviceRole === 'Owner') {
@@ -303,7 +339,6 @@ const AppContent: React.FC = () => {
           )}
         </nav>
       )}
-      {/* 3. Add Banner to App UI */}
       <InstallBanner />
     </div>
   );
