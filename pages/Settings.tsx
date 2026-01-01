@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData, User as DBUser, Category, InventoryItem } from '../db.ts';
@@ -14,7 +15,7 @@ import {
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
   Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert, Wifi, TrendingUp, AlertCircle, 
-  ChevronRight, MapPin, Phone, Receipt, Info, LogOut, Landmark, CreditCard, Tag, Download
+  ChevronRight, MapPin, Phone, Receipt, Info, LogOut, Landmark, CreditCard, Tag, Download, Globe, Gift
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -309,6 +310,48 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         </div>
         <Download size={20} />
       </button>
+
+      {/* Support & Resources - NEW */}
+      <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 bg-blue-50 dark:bg-blue-800 rounded-xl text-blue-600 dark:text-blue-300">
+            <HelpCircle size={18} />
+          </div>
+          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Support & Resources</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-3">
+          <button 
+            onClick={() => window.open('/help', '_blank')}
+            className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-950/40 rounded-2xl border border-slate-100 dark:border-emerald-800/40 active:scale-[0.98] transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <Globe size={18} className="text-emerald-500" />
+              <span className="text-xs font-black text-slate-700 dark:text-emerald-50 uppercase italic">Online Help Center</span>
+            </div>
+            <ChevronRight size={16} className="text-slate-300" />
+          </button>
+          <button 
+            onClick={() => window.open('/affiliates', '_blank')}
+            className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-950/40 rounded-2xl border border-slate-100 dark:border-emerald-800/40 active:scale-[0.98] transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <Gift size={18} className="text-amber-500" />
+              <span className="text-xs font-black text-slate-700 dark:text-emerald-50 uppercase italic">Join Affiliate Program</span>
+            </div>
+            <ChevronRight size={16} className="text-slate-300" />
+          </button>
+          <button 
+            onClick={() => window.open('/about', '_blank')}
+            className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-950/40 rounded-2xl border border-slate-100 dark:border-emerald-800/40 active:scale-[0.98] transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <Info size={18} className="text-blue-500" />
+              <span className="text-xs font-black text-slate-700 dark:text-emerald-50 uppercase italic">About NaijaShop</span>
+            </div>
+            <ChevronRight size={16} className="text-slate-300" />
+          </button>
+        </div>
+      </section>
 
       {/* Primary Actions */}
       <div className="grid grid-cols-1 gap-4">

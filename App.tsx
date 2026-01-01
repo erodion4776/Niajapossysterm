@@ -53,7 +53,6 @@ const AppContent: React.FC = () => {
   const [deviceRole, setDeviceRole] = useState<DeviceRole | null>(() => localStorage.getItem('device_role') as DeviceRole);
   const [showRoleSelection, setShowRoleSelection] = useState(false);
   
-  // PWA Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallPage, setShowInstallPage] = useState(false);
 
@@ -68,7 +67,6 @@ const AppContent: React.FC = () => {
   const saveHeartbeat = async () => {
     const now = Date.now();
     const maxTime = parseInt(localStorage.getItem('max_time_reached') || '0');
-    
     if (now < maxTime - 60000) {
       setIsClockTampered(true);
     } else {
@@ -91,31 +89,15 @@ const AppContent: React.FC = () => {
     const pathname = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page')?.toUpperCase();
-    const filterParam = params.get('filter');
 
-    if (pathname === '/help') {
-      setCurrentPage(Page.HELP_CENTER);
-      return;
-    }
-    if (pathname === '/about') {
-      setCurrentPage(Page.ABOUT_US);
-      return;
-    }
-    if (pathname === '/affiliates') {
-      setCurrentPage(Page.AFFILIATES);
-      return;
-    }
+    if (pathname === '/help') { setCurrentPage(Page.HELP_CENTER); return; }
+    if (pathname === '/about') { setCurrentPage(Page.ABOUT_US); return; }
+    if (pathname === '/affiliates') { setCurrentPage(Page.AFFILIATES); return; }
 
     if (pageParam && Object.values(Page).includes(pageParam as Page)) {
       setCurrentPage(pageParam as Page);
     }
     
-    if (filterParam === 'expiring' || filterParam === 'low-stock') {
-      setInventoryFilter(filterParam as any);
-    } else {
-      setInventoryFilter('all');
-    }
-
     setIsAtLanding(window.location.pathname === '/' || window.location.pathname === '');
   }, []);
 
@@ -123,16 +105,10 @@ const AppContent: React.FC = () => {
     setCurrentPage(page);
     const url = new URL(window.location.href);
     
-    if (page === Page.HELP_CENTER) {
-      url.pathname = '/help';
-      url.search = '';
-    } else if (page === Page.ABOUT_US) {
-      url.pathname = '/about';
-      url.search = '';
-    } else if (page === Page.AFFILIATES) {
-      url.pathname = '/affiliates';
-      url.search = '';
-    } else {
+    if (page === Page.HELP_CENTER) { url.pathname = '/help'; url.search = ''; }
+    else if (page === Page.ABOUT_US) { url.pathname = '/about'; url.search = ''; }
+    else if (page === Page.AFFILIATES) { url.pathname = '/affiliates'; url.search = ''; }
+    else {
       url.pathname = '/app';
       url.searchParams.set('page', page.toLowerCase());
       if (filter && filter !== 'all') {
@@ -147,12 +123,7 @@ const AppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // 1. Listen for PWA Install Signal
-    const installHandler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      console.log('PWA: Prompt stored');
-    };
+    const installHandler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
     window.addEventListener('beforeinstallprompt', installHandler);
 
     const startup = async () => {
@@ -160,59 +131,37 @@ const AppContent: React.FC = () => {
       if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== ALLOWED_DOMAIN && !hostname.endsWith('.webcontainer.io')) {
         setIsPirated(true);
       }
-      
       await initTrialDate();
-
       const dbMaxTime = await db.security.get('max_time_reached');
       const lsMaxTime = parseInt(localStorage.getItem('max_time_reached') || '0');
       const maxTime = Math.max(lsMaxTime, dbMaxTime?.value || 0);
-      
-      if (Date.now() < maxTime - 60000) {
-        setIsClockTampered(true);
-        setIsInitialized(true);
-        return;
-      }
+      if (Date.now() < maxTime - 60000) { setIsClockTampered(true); setIsInitialized(true); return; }
 
       const requestCode = await getRequestCode();
       const dbExp = await db.security.get('license_expiry');
       const dbSig = await db.security.get('license_signature');
       const lsExp = localStorage.getItem('license_expiry');
       const lsSig = localStorage.getItem('license_signature');
-      
-      let validExp = '';
-      let validSig = '';
+      let validExp = ''; let validSig = '';
 
       if (dbExp?.value && dbSig?.value && await validateLicenseIntegrity(requestCode, dbSig.value, dbExp.value)) {
-        validExp = dbExp.value;
-        validSig = dbSig.value;
+        validExp = dbExp.value; validSig = dbSig.value;
       } else if (lsExp && lsSig && await validateLicenseIntegrity(requestCode, lsSig, lsExp)) {
-        validExp = lsExp;
-        validSig = lsSig;
+        validExp = lsExp; validSig = lsSig;
       }
 
       if (validExp && validSig) {
-        localStorage.setItem('license_expiry', validExp);
-        localStorage.setItem('license_signature', validSig);
-        localStorage.setItem('is_activated', 'true');
-        await db.security.put({ key: 'license_expiry', value: validExp });
-        await db.security.put({ key: 'license_signature', value: validSig });
-        
-        const expired = checkExpiry(validExp);
-        setIsExpired(expired);
-        setIsActivated(true);
-        setLicenseExpiry(validExp);
-      } else {
-        setIsActivated(false);
-      }
+        localStorage.setItem('license_expiry', validExp); localStorage.setItem('license_signature', validSig); localStorage.setItem('is_activated', 'true');
+        await db.security.put({ key: 'license_expiry', value: validExp }); await db.security.put({ key: 'license_signature', value: validSig });
+        setIsExpired(checkExpiry(validExp)); setIsActivated(true); setLicenseExpiry(validExp);
+      } else { setIsActivated(false); }
 
       syncStateFromUrl();
       setIsInitialized(true);
-
       heartbeatRef.current = setInterval(saveHeartbeat, 5 * 60 * 1000);
       saveHeartbeat();
     };
     startup();
-
     window.addEventListener('popstate', syncStateFromUrl);
     return () => {
       window.removeEventListener('popstate', syncStateFromUrl);
@@ -224,130 +173,70 @@ const AppContent: React.FC = () => {
   const handleStartTrial = () => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     const hasAlreadySkipped = localStorage.getItem('install_onboarding_done') === 'true';
-
-    if (!isStandalone && !hasAlreadySkipped) {
-      setShowInstallPage(true);
-    } else {
-      setShowRoleSelection(true);
-    }
+    if (!isStandalone && !hasAlreadySkipped) { setShowInstallPage(true); } 
+    else { setShowRoleSelection(true); }
   };
 
-  const handleInstallComplete = () => {
-    localStorage.setItem('install_onboarding_done', 'true');
-    setShowInstallPage(false);
-    setShowRoleSelection(true);
-  };
+  if (isPirated) return (
+    <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
+      <ShieldAlert size={80} className="text-red-500 mb-6 animate-pulse" />
+      <h1 className="text-4xl font-black mb-4 uppercase leading-none">Access Denied</h1>
+    </div>
+  );
 
-  const handleRoleSelection = (role: DeviceRole) => {
-    localStorage.setItem('device_role', role);
-    setDeviceRole(role);
-    setShowRoleSelection(false);
-    
-    if (role === 'Owner') {
-      const randomOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      localStorage.setItem('is_trialing', 'true');
-      localStorage.setItem('trial_start_date', Date.now().toString());
-      localStorage.setItem('is_setup_pending', 'true');
-      localStorage.setItem('temp_otp', randomOtp);
-      
-      navigateTo(Page.DASHBOARD);
-      setIsAtLanding(false);
-      setIsTrialing(true);
-      setIsSetupPending(true);
-    } else {
-      navigateTo(Page.LOGIN);
-      setIsAtLanding(false);
-      setIsTrialing(false);
-      setIsSetupPending(false);
-    }
-  };
-
-  const handleLogin = (user: User) => setCurrentUser(user);
-
-  if (isPirated) {
-    return (
-      <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
-        <ShieldAlert size={80} className="text-red-500 mb-6 animate-pulse" />
-        <h1 className="text-4xl font-black mb-4 uppercase leading-none">Access Denied</h1>
-        <p className="text-red-200/60 max-w-sm font-medium">Unauthorized distribution detected.</p>
-      </div>
-    );
-  }
-
-  if (isClockTampered) {
-    return (
-      <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
-        <Clock size={80} className="text-amber-500 mb-6 animate-bounce" />
-        <h1 className="text-3xl font-black mb-4 uppercase leading-none text-amber-500 italic tracking-tighter">Clock Tampered!</h1>
-        <p className="text-slate-300 max-w-sm font-medium mb-8">Please set your phone to the correct date and time to continue.</p>
-        <button onClick={() => window.location.reload()} className="bg-amber-600 px-10 py-5 rounded-[24px] font-black uppercase text-xs shadow-xl active:scale-95 transition-all">Check Again</button>
-      </div>
-    );
-  }
+  if (isClockTampered) return (
+    <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
+      <Clock size={80} className="text-amber-500 mb-6 animate-bounce" />
+      <h1 className="text-3xl font-black mb-4 uppercase leading-none text-amber-500 italic">Clock Tampered!</h1>
+      <button onClick={() => window.location.reload()} className="bg-amber-600 px-10 py-5 rounded-[24px] font-black uppercase text-xs">Check Again</button>
+    </div>
+  );
 
   if (!isInitialized) return null;
 
-  // Public Routes (Allow rendering without login)
-  if (currentPage === Page.HELP_CENTER) return <PublicHelp onBack={() => window.history.back()} />;
-  if (currentPage === Page.ABOUT_US) return <AboutUs onBack={() => window.history.back()} />;
-  if (currentPage === Page.AFFILIATES) return <Affiliates onBack={() => window.history.back()} />;
+  // PUBLIC ROUTES
+  if (currentPage === Page.HELP_CENTER) return <PublicHelp onBack={() => { navigateTo(Page.DASHBOARD); }} />;
+  if (currentPage === Page.ABOUT_US) return <AboutUs onBack={() => { navigateTo(Page.DASHBOARD); }} />;
+  if (currentPage === Page.AFFILIATES) return <Affiliates onBack={() => { navigateTo(Page.DASHBOARD); }} />;
 
+  // LANDING & ONBOARDING
   if (isAtLanding && !isActivated && !isTrialing && !showRoleSelection && !showInstallPage) {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={(p) => navigateTo(p)} />;
   }
-
-  if (showInstallPage) {
-    return <InstallApp deferredPrompt={deferredPrompt} onNext={handleInstallComplete} />;
-  }
-
-  if (showRoleSelection) return <RoleSelection onSelect={handleRoleSelection} />;
+  if (showInstallPage) return <InstallApp deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_onboarding_done', 'true'); setShowInstallPage(false); setShowRoleSelection(true); }} />;
+  if (showRoleSelection) return <RoleSelection onSelect={(role) => { localStorage.setItem('device_role', role); setDeviceRole(role); setShowRoleSelection(false); if(role === 'Owner'){ localStorage.setItem('is_trialing', 'true'); localStorage.setItem('trial_start_date', Date.now().toString()); localStorage.setItem('is_setup_pending', 'true'); navigateTo(Page.DASHBOARD); setIsAtLanding(false); setIsTrialing(true); setIsSetupPending(true); } else { navigateTo(Page.LOGIN); setIsAtLanding(false); setIsTrialing(false); setIsSetupPending(false); } }} />;
   
+  // PROTECTION LAYER
   if (deviceRole === 'Owner') {
-    if ((!isActivated && (!isTrialing || !isTrialValid)) || isExpired) {
-      return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
-    }
+    if ((!isActivated && (!isTrialing || !isTrialValid)) || isExpired) return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
     if (isSetupPending) return <Onboarding onComplete={() => window.location.reload()} />;
   }
-  
-  if (!currentUser) return <LoginScreen onLogin={handleLogin} deviceRole={deviceRole || 'StaffDevice'} />;
+  if (!currentUser) return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || 'StaffDevice'} />;
 
   const isStaffDevice = deviceRole === 'StaffDevice';
-
   const renderPage = () => {
     switch (currentPage) {
-      case Page.DASHBOARD: 
-        return <Dashboard 
-          setPage={(p) => navigateTo(p)} 
-          role={isStaffDevice ? 'Staff' : currentUser.role} 
-          onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)}
-        />;
-      case Page.INVENTORY: 
-        return <Inventory 
-          user={currentUser}
-          role={isStaffDevice ? 'Staff' : currentUser.role} 
-          initialFilter={inventoryFilter} 
-          clearInitialFilter={() => navigateTo(Page.INVENTORY, 'all')}
-          setPage={(p) => navigateTo(p)}
-        />;
+      case Page.DASHBOARD: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
+      case Page.INVENTORY: return <Inventory user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} initialFilter={inventoryFilter} clearInitialFilter={() => navigateTo(Page.INVENTORY, 'all')} setPage={navigateTo} />;
       case Page.POS: return <POS user={currentUser} setNavHidden={setIsNavHidden} />;
       case Page.SALES: return <Sales role={isStaffDevice ? 'Staff' : currentUser.role} />;
       case Page.DEBTS: return <Debts role={isStaffDevice ? 'Staff' : currentUser.role} />;
-      case Page.STOCK_LOGS: return <StockLogs setPage={(p) => navigateTo(p)} />;
-      case Page.EXPENSES: return <Expenses role={isStaffDevice ? 'Staff' : currentUser.role} setPage={(p) => navigateTo(p)} />;
-      case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(role) => setCurrentUser({...currentUser, role})} setPage={(p) => navigateTo(p)} />;
-      case Page.FAQ: return <FAQ setPage={(p) => navigateTo(p)} />;
-      case Page.CUSTOMERS: return <Customers setPage={(p) => navigateTo(p)} role={isStaffDevice ? 'Staff' : currentUser.role} />;
-      case Page.CATEGORY_MANAGER: return <CategoryManager setPage={(p) => navigateTo(p)} />;
-      default: return <Dashboard setPage={(p) => navigateTo(p)} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
+      case Page.STOCK_LOGS: return <StockLogs setPage={navigateTo} />;
+      case Page.EXPENSES: return <Expenses role={isStaffDevice ? 'Staff' : currentUser.role} setPage={navigateTo} />;
+      case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} />;
+      case Page.FAQ: return <FAQ setPage={navigateTo} />;
+      case Page.CUSTOMERS: return <Customers setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} />;
+      case Page.CATEGORY_MANAGER: return <CategoryManager setPage={navigateTo} />;
+      default: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in duration-500 transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 animate-in fade-in transition-colors duration-300">
       <main className="flex-1 overflow-auto">{renderPage()}</main>
       {!isStaffDevice && !isNavHidden && <BackupReminder />}
       {!isNavHidden && (
-        <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/90 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-0.5 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)] transition-colors duration-300">
+        <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/90 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-0.5 py-2 safe-bottom z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
           <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
             <LayoutGrid size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Home</span>
           </button>
