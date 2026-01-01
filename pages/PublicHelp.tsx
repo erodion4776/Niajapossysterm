@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Search, ChevronDown, ChevronUp, MessageCircle, ArrowLeft, Book, Shield, Zap, Tooltip, HelpCircle, Package, Lock, RefreshCw, Smartphone } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, MessageCircle, ArrowLeft, Book, Shield, Zap, Info, HelpCircle, Package, Lock, RefreshCw, Smartphone } from 'lucide-react';
 
 interface PublicHelpProps {
   onBack: () => void;
@@ -27,7 +27,7 @@ const HELP_SECTIONS = [
   },
   {
     category: "Inventory & AI",
-    icon: <Tooltip className="text-blue-500" size={20} />,
+    icon: <Info className="text-blue-500" size={20} />,
     items: [
       { q: "Using the AI Expiry Scanner", a: "When adding or editing an item, tap the camera icon next to Expiry Date. Point your camera at the 'EXP' text on the product. Our AI will read the date automatically and fill the form." },
       { q: "Bulk Inflation Protection", a: "Fuel price go up? Go to Stock > TrendingUp Icon. You can increase prices for your entire shop or a specific category by a percentage (e.g. 10%) or fixed amount instantly." }
@@ -138,3 +138,5 @@ export const PublicHelp: React.FC<PublicHelpProps> = ({ onBack }) => {
     </div>
   );
 };
+
+export default PublicHelp;
