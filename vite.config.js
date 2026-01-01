@@ -5,9 +5,11 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   plugins: [
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       injectRegister: 'inline',
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{html,js,css,ico,png,svg,ts,tsx}'],
         navigateFallback: 'index.html',
         runtimeCaching: [

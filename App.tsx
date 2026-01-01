@@ -21,6 +21,7 @@ import { RoleSelection } from './components/RoleSelection.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
 import { InstallBanner } from './components/InstallBanner.tsx'; 
+import { UpdatePrompt } from './components/UpdatePrompt.tsx';
 import { ThemeProvider } from './ThemeContext.tsx';
 import { getRequestCode, validateLicenseIntegrity } from './utils/security.ts';
 import { 
@@ -340,6 +341,7 @@ const AppContent: React.FC = () => {
         </nav>
       )}
       <InstallBanner />
+      <UpdatePrompt />
     </div>
   );
 };
