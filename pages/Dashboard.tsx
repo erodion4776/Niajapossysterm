@@ -26,7 +26,9 @@ import {
   CreditCard,
   BookOpen,
   X,
-  Check
+  Check,
+  Coins,
+  Gem
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -50,6 +52,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const debts = useLiveQuery(() => db.debts.toArray());
   const securityTable = useLiveQuery(() => db.security.toArray());
+
+  // ALL-TIME DATA FOR LIFETIME SECTION
+  const allSales = useLiveQuery(() => db.sales.toArray());
+  const allExpenses = useLiveQuery(() => db.expenses.toArray());
 
   // License Visibility Logic
   const licenseInfo = useMemo(() => {
@@ -166,6 +172,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     if (!debts) return 0;
     return debts.reduce((sum, d) => sum + (d.remainingBalance || 0), 0);
   }, [debts]);
+
+  // LIFETIME CALCULATIONS
+  const lifetimeStats = useMemo(() => {
+    if (!allSales || !allExpenses) return { sales: 0, profit: 0, expenses: 0 };
+    const totalSales = allSales.reduce((sum, s) => sum + s.total, 0);
+    const totalCost = allSales.reduce((sum, s) => sum + (s.totalCost || 0), 0);
+    const totalExp = allExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const netProfit = (totalSales - totalCost) - totalExp;
+    return { sales: totalSales, profit: netProfit, expenses: totalExp };
+  }, [allSales, allExpenses]);
 
   // Fast Movers Logic
   const topProducts = useMemo(() => {
@@ -309,6 +325,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <Package className="absolute -right-2 -bottom-2 text-blue-50 dark:text-blue-500/10" size={56} />
           </button>
         </div>
+      )}
+
+      {/* SHOP LIFETIME RECORDS - New Distinct Section */}
+      {isAdmin && (
+        <section className="bg-slate-900 dark:bg-blue-950 p-6 rounded-[32px] border border-slate-800 dark:border-blue-900 shadow-xl space-y-5 animate-in slide-in-from-bottom duration-500">
+           <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/10 rounded-xl text-amber-500">
+                <Gem size={18} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-widest italic">Shop Lifetime Records</h3>
+                <p className="text-[8px] text-slate-500 font-bold uppercase tracking-[0.2em]">Total Business History</p>
+              </div>
+           </div>
+
+           <div className="grid grid-cols-1 gap-3">
+              <div className="bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg"><Coins size={14}/></div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase">Total Sales</span>
+                 </div>
+                 <span className="text-sm font-black text-white">{formatNaira(lifetimeStats.sales)}</span>
+              </div>
+              <div className="bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg"><TrendingUp size={14}/></div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase">Total Profit</span>
+                 </div>
+                 <span className="text-sm font-black text-emerald-400">{formatNaira(lifetimeStats.profit)}</span>
+              </div>
+              <div className="bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg"><Wallet size={14}/></div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase">Total Expenses</span>
+                 </div>
+                 <span className="text-sm font-black text-amber-400">{formatNaira(lifetimeStats.expenses)}</span>
+              </div>
+           </div>
+        </section>
       )}
 
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
