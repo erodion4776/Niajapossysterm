@@ -135,13 +135,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     return { start: start.getTime(), end: end.getTime() };
   }, [datePreset, customDate]);
 
+  // OPTIMIZED: Fetch only sales in range
   const salesInRange = useLiveQuery(() => 
     db.sales.where('timestamp').between(dateRange.start, dateRange.end).reverse().toArray()
   , [dateRange]);
 
-  // Profit uses the FULL sale amount (Gross)
-  const totalSalesInRange = salesInRange?.reduce((sum, sale) => sum + sale.total, 0) || 0;
-  const totalCostInRange = salesInRange?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0;
+  // OPTIMIZED: Fetch only expenses in range
+  const expensesInRange = useLiveQuery(() =>
+    db.expenses.where('date').between(dateRange.start, dateRange.end).toArray()
+  , [dateRange]);
+
+  const totalSalesInRange = useMemo(() => salesInRange?.reduce((sum, sale) => sum + sale.total, 0) || 0, [salesInRange]);
+  const totalCostInRange = useMemo(() => salesInRange?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0, [salesInRange]);
+  const actualExpensesInRange = useMemo(() => expensesInRange?.reduce((sum, e) => sum + e.amount, 0) || 0, [expensesInRange]);
 
   const revenueBreakdown = useMemo(() => {
     if (!salesInRange) return { cash: 0, digital: 0 };
@@ -176,12 +182,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       .slice(0, 3);
   }, [salesInRange]);
   
-  const expenses = useLiveQuery(() => db.expenses.toArray());
-  const actualExpensesInRange = expenses?.filter(e => {
-    const d = new Date(e.date).getTime();
-    return d >= dateRange.start && d <= dateRange.end;
-  }).reduce((sum, e) => sum + e.amount, 0) || 0;
-
   const grossProfitInRange = totalSalesInRange - totalCostInRange;
   const netProfitInRange = grossProfitInRange - actualExpensesInRange;
 
