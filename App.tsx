@@ -25,6 +25,7 @@ import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
 import { InstallBanner } from './components/InstallBanner.tsx'; 
 import { UpdatePrompt } from './components/UpdatePrompt.tsx';
+import { LoadingScreen } from './components/LoadingScreen.tsx';
 import { ThemeProvider } from './ThemeContext.tsx';
 import { getRequestCode, validateLicenseIntegrity } from './utils/security.ts';
 import { 
@@ -165,7 +166,12 @@ const AppContent: React.FC = () => {
       } else { setIsActivated(false); }
 
       syncStateFromUrl();
-      setIsInitialized(true);
+      
+      // Delay slightly for smooth transition if data is ready instantly
+      setTimeout(() => {
+        setIsInitialized(true);
+      }, 800);
+      
       heartbeatRef.current = setInterval(saveHeartbeat, 5 * 60 * 1000);
       saveHeartbeat();
     };
@@ -201,7 +207,7 @@ const AppContent: React.FC = () => {
     </div>
   );
 
-  if (!isInitialized) return null;
+  if (!isInitialized) return <LoadingScreen />;
 
   // PUBLIC ROUTES
   if (currentPage === Page.HELP_CENTER) return <PublicHelp onBack={() => { navigateTo(Page.DASHBOARD); }} />;
