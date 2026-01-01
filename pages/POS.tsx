@@ -63,7 +63,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
 
   // Scanner States
   const [isScanning, setIsScanning] = useState(false);
-  // Fix: Line 66 - Corrected type name from HTML5Qrcode to Html5Qrcode to match import from 'html5-qrcode'
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = "reader";
 
@@ -358,9 +357,11 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
 
         const sale: Sale = {
           uuid: crypto.randomUUID(),
+          // Store items including their individual costPrice at this moment
           items: cart.map(({image, ...rest}) => rest), 
           total: saleTotal, 
-          totalCost: cart.reduce((sum, item) => sum + ((item.costPrice || 0) * item.quantity), 0),
+          // Capture total cost using current item cost prices
+          totalCost: cart.reduce((sum, item) => sum + (Number(item.costPrice || 0) * item.quantity), 0),
           walletUsed: appliedFromWallet,
           walletSaved: (paymentMode === 'Debt' ? Math.max(0, Number(amountPaid || 0) - (saleTotal - appliedFromWallet)) : (saveChangeToWallet ? changeDue : 0)),
           cashPaid: finalCashPaid, 

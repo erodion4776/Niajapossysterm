@@ -167,13 +167,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   /**
    * Technical Fix: The True Profit Formula
    * Robust sum of COGS (Cost of Goods Sold) looping through every item in every sale.
-   * Safety check: Treat missing costPrice as 0 to avoid calculation crashes.
+   * Uses historical cost_price stored at the moment of sale.
    */
   const totalCostInRange = useMemo(() => {
     if (!salesInRange) return 0;
     return salesInRange.reduce((acc, sale) => {
       const saleCogs = sale.items.reduce((iAcc, item) => {
-        const cPrice = Number(item.costPrice || 0); // Safety Check:treat missing as 0
+        // Safety Check: handle missing costPrice with default 0
+        const cPrice = Number(item.costPrice || 0); 
         return iAcc + (cPrice * item.quantity);
       }, 0);
       return acc + saleCogs;
@@ -205,7 +206,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     if (!allSales || !allExpenses) return { sales: 0, profit: 0, expenses: 0 };
     const totalSales = allSales.reduce((sum, s) => sum + s.total, 0);
     
-    // Explicit COGS calc for lifetime
+    // Explicit COGS calc for lifetime using stored item cost
     const totalCost = allSales.reduce((sum, s) => {
       return sum + s.items.reduce((iSum, item) => iSum + (Number(item.costPrice || 0) * item.quantity), 0);
     }, 0);
@@ -235,7 +236,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
   const storeNetWorth = useMemo(() => {
     if (!inventory) return 0;
-    return inventory.reduce((sum, item) => sum + ((item.costPrice || 0) * (item.stock || 0)), 0);
+    return inventory.reduce((sum, item) => sum + (Number(item.costPrice || 0) * (item.stock || 0)), 0);
   }, [inventory]);
 
   const rangeLabel = useMemo(() => {
@@ -304,7 +305,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </div>
       </header>
 
-      {/* Staff Sync Button - prominent placement for non-admins */}
+      {/* Staff Sync Button */}
       {!isAdmin && (
         <section className="bg-white dark:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4 animate-in slide-in-from-top duration-500">
           <div className="flex items-center gap-3">
@@ -358,6 +359,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </section>
       )}
 
+      {/* PROFIT SECTION WITH INFO TOOLTIP */}
       <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col gap-1">
           <div className="flex items-center gap-2">
@@ -367,45 +369,50 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             {isAdmin && (
               <button 
                 onClick={() => setShowProfitInfo(!showProfitInfo)} 
-                className="p-1.5 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
-                title="Profit Breakdown"
+                className="p-1.5 bg-white/20 rounded-full hover:bg-white/40 transition-all active:scale-90"
+                title="Boss Profit Breakdown"
               >
-                <Info size={12} />
+                <Info size={14} />
               </button>
             )}
           </div>
           <h2 className="text-4xl font-black tracking-tighter">{isAdmin ? formatNaira(netProfitInRange) : formatNaira(totalSalesInRange)}</h2>
           
-          {/* visual "Boss" Breakdown Tooltip */}
+          {/* Visual Breakdown Tooltip for the Boss */}
           {showProfitInfo && isAdmin && (
-             <div className="mt-3 bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/10 animate-in zoom-in duration-300">
-                <p className="text-[10px] font-black text-emerald-300 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">Master Calculation</p>
-                <div className="space-y-1.5">
-                   <div className="flex justify-between items-center text-[10px] font-bold">
-                      <span className="text-white/60">Total Revenue:</span>
-                      <span className="text-white">{formatNaira(totalSalesInRange)}</span>
+             <div className="mt-4 bg-[#014734] backdrop-blur-md p-5 rounded-2xl border border-white/10 animate-in zoom-in duration-300 shadow-2xl">
+                <div className="flex justify-between items-center mb-3 pb-2 border-b border-white/5">
+                   <p className="text-[10px] font-black text-emerald-300 uppercase tracking-widest">True Profit Math</p>
+                   <button onClick={() => setShowProfitInfo(false)} className="text-white/40 hover:text-white"><X size={14}/></button>
+                </div>
+                <div className="space-y-2">
+                   <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-white/50 uppercase">Total Revenue</span>
+                      <span className="text-xs font-black text-white">{formatNaira(totalSalesInRange)}</span>
                    </div>
-                   <div className="flex justify-between items-center text-[10px] font-bold">
-                      <span className="text-white/60">Cost of Goods:</span>
-                      <span className="text-red-300">-{formatNaira(totalCostInRange)}</span>
+                   <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-white/50 uppercase">Cost of Goods (COGS)</span>
+                      <span className="text-xs font-black text-red-300">-{formatNaira(totalCostInRange)}</span>
                    </div>
-                   <div className="flex justify-between items-center text-[10px] font-bold pb-1.5 border-b border-white/5">
-                      <span className="text-white/60">Shop Expenses:</span>
-                      <span className="text-red-300">-{formatNaira(actualExpensesInRange)}</span>
+                   <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                      <span className="text-[10px] font-bold text-white/50 uppercase">Shop Expenses</span>
+                      <span className="text-xs font-black text-red-300">-{formatNaira(actualExpensesInRange)}</span>
                    </div>
-                   <div className="flex justify-between items-center text-[11px] font-black text-emerald-400">
-                      <span>FINAL PROFIT:</span>
-                      <span>{formatNaira(netProfitInRange)}</span>
+                   <div className="flex justify-between items-center pt-1">
+                      <span className="text-[11px] font-black text-emerald-400 uppercase italic">Net Profit</span>
+                      <span className="text-lg font-black text-emerald-400">{formatNaira(netProfitInRange)}</span>
                    </div>
                 </div>
+                <p className="text-[8px] font-bold text-white/20 uppercase tracking-widest mt-4 text-center">Revenue - Cost - Expenses = Net Profit</p>
              </div>
           )}
 
-          {isAdmin && !showProfitInfo && (
+          {!showProfitInfo && isAdmin && (
             <p className="text-[10px] font-bold text-emerald-200/60 uppercase tracking-[0.1em] mt-0.5">
-              Total Revenue: {formatNaira(totalSalesInRange)}
+              Revenue: {formatNaira(totalSalesInRange)} • Expenses: {formatNaira(actualExpensesInRange)}
             </p>
           )}
+
           <div className="flex items-center gap-2 mt-4">
             <span className="bg-emerald-500/40 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
               <ShoppingCart size={10}/> {salesInRange?.length || 0} Orders
@@ -420,6 +427,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={160} />
       </section>
 
+      {/* Financial Overview Tiles */}
       {isAdmin && (
         <section className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-[32px] p-1 flex gap-1 shadow-sm overflow-hidden">
            <div className="flex-1 bg-slate-50 dark:bg-emerald-950/40 p-3 rounded-[24px] text-center">
@@ -440,22 +448,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </section>
       )}
 
+      {/* Nav Buttons */}
       {isAdmin && (
         <div className="grid grid-cols-2 gap-4">
           <button onClick={() => setPage(Page.EXPENSES)} className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left active:scale-95 transition-all">
-            <p className="text-slate-400 dark:text-emerald-500/40 text-[9px] font-black uppercase tracking-widest">Expenses</p>
+            <p className="text-slate-400 dark:text-emerald-500/40 text-[9px] font-black uppercase tracking-widest">Expenses {rangeLabel}</p>
             <h2 className="text-xl font-black text-amber-600 dark:text-amber-500">{formatNaira(actualExpensesInRange)}</h2>
             <Wallet className="absolute -right-2 -bottom-2 text-amber-50 dark:text-amber-500/10" size={56} />
           </button>
           <button onClick={() => { onInventoryFilter('all'); setPage(Page.INVENTORY); }} className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-5 rounded-[28px] shadow-sm relative overflow-hidden flex flex-col justify-between h-32 text-left active:scale-95 transition-all">
-            <p className="text-slate-400 dark:text-emerald-500/40 text-[9px] font-black uppercase tracking-widest">Store Value</p>
+            <p className="text-slate-400 dark:text-emerald-500/40 text-[9px] font-black uppercase tracking-widest">Stock Value</p>
             <h2 className="text-xl font-black text-blue-600 dark:text-blue-50">{formatNaira(storeNetWorth)}</h2>
             <Package className="absolute -right-2 -bottom-2 text-blue-50 dark:text-blue-500/10" size={56} />
           </button>
         </div>
       )}
 
-      {/* SHOP LIFETIME RECORDS - New Distinct Section */}
+      {/* Lifetime Stats */}
       {isAdmin && (
         <section className="bg-slate-900 dark:bg-blue-950 p-6 rounded-[32px] border border-slate-800 dark:border-blue-900 shadow-xl space-y-5 animate-in slide-in-from-bottom duration-500">
            <div className="flex items-center gap-3">
@@ -494,6 +503,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </section>
       )}
 
+      {/* Recent Sales History */}
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -544,8 +554,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         <div className="flex items-center gap-3">
           <div className="bg-amber-50 dark:bg-amber-900/20 p-2 rounded-xl text-amber-600 dark:text-amber-400"><Zap size={18} /></div>
           <div>
-            <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Top Products {rangeLabel}</h3>
-            <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Fast Movers</p>
+            <h3 className="text-sm font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Fast Movers {rangeLabel}</h3>
+            <p className="text-[9px] text-slate-400 dark:text-emerald-500/40 font-bold uppercase">Popular Items</p>
           </div>
         </div>
         <div className="space-y-2">
@@ -570,7 +580,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </div>
       </section>
 
-      {/* Date Range Modal */}
+      {/* Range Selection Modal */}
       {showDateModal && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
