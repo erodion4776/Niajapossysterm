@@ -443,7 +443,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
 
       {/* Success Toast for Parked Order */}
       {showParkedToast && (
-        <div className="fixed top-12 inset-x-0 flex justify-center z-[1000] pointer-events-none">
+        <div className="fixed top-12 inset-x-0 flex justify-center z-[1000] pointer-events-none px-4">
           <div className="bg-amber-600 text-white px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in slide-in-from-top duration-300">
              <div className="bg-white/20 p-1.5 rounded-full"><CheckCircle size={16} /></div>
              <p className="font-black text-xs uppercase tracking-widest">Order Parked Successfully</p>
@@ -466,11 +466,11 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setShowParkedList(true)}
-              className="relative bg-amber-50 dark:bg-amber-900/40 text-amber-600 p-3 rounded-2xl border border-amber-100 dark:border-amber-800 active:scale-90 transition-all"
+              className="relative bg-amber-50 dark:bg-amber-900/40 text-amber-600 p-3 rounded-2xl border border-amber-100 dark:border-amber-800 active:scale-90 transition-all group"
             >
               <Pause size={20} />
               {parkedOrders && parkedOrders.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-emerald-950">
+                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-emerald-950 px-1 shadow-md animate-in zoom-in duration-300">
                   {parkedOrders.length}
                 </span>
               )}
@@ -574,7 +574,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                 </div>
                 {!isCartExpanded && (
                    <div className="flex gap-2">
-                      <button onClick={(e) => { e.stopPropagation(); setShowParkModal(true); }} className="bg-amber-500 text-white px-4 py-2.5 rounded-2xl font-black text-[10px] uppercase flex items-center gap-1.5 active:scale-95 transition-all"><Pause size={14}/> Hold</button>
+                      <button onClick={(e) => { e.stopPropagation(); setShowParkModal(true); }} className="bg-amber-500 text-white px-4 py-2.5 rounded-2xl font-black text-[10px] uppercase flex items-center gap-1.5 active:scale-95 transition-all shadow-lg shadow-amber-200"><Pause size={14}/> Hold</button>
                       <div className="bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase">Checkout <ChevronUp size={14} className="inline ml-1" /></div>
                    </div>
                 )}
@@ -763,7 +763,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                   <div className="grid grid-cols-2 gap-3">
                     <button 
                       onClick={() => setShowParkModal(true)} 
-                      className="bg-amber-500 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg"
+                      className="bg-amber-500 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-100 dark:shadow-none"
                     >
                       <Pause size={16}/> Hold Order
                     </button>
@@ -795,7 +795,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             
             <input 
               type="text" 
-              placeholder="e.g. Customer in Yellow Shirt" 
+              placeholder="e.g. Mama Chidi" 
               className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none mb-6 text-center"
               value={parkNote}
               onChange={(e) => setParkNote(e.target.value)}
