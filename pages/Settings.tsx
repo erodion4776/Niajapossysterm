@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData, User as DBUser, Category, InventoryItem } from '../db.ts';
@@ -555,8 +554,9 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         ))}
       </section>
 
-      <div className="py-6 text-center">
+      <div className="py-6 text-center space-y-1">
         <p className="text-[9px] font-black text-slate-300 dark:text-emerald-900 uppercase tracking-[0.5em]">NaijaShop Offline POS • v2.5</p>
+        <p className="text-[8px] font-bold text-slate-400 dark:text-emerald-800/40 uppercase tracking-widest">App Version: 1.0.5</p>
       </div>
 
       {/* Add User Modal */}
