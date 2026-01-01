@@ -463,16 +463,16 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
 
       {/* Add Product Modal */}
       {showAddModal && isAdmin && (
-        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 flex flex-col">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] px-8 pt-6 pb-4 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 flex flex-col max-h-[92vh]">
+            <div className="sticky top-0 bg-white dark:bg-emerald-900 z-[210] flex justify-between items-center pb-4 -mx-2">
               <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 italic">Stock New Item</h2>
               <button onClick={() => setShowAddModal(false)} className="p-3 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90 transition-all"><X size={20} /></button>
             </div>
             
-            <form onSubmit={handleAddItem} className="space-y-8 pt-20 flex-1">
+            <form onSubmit={handleAddItem} className="space-y-6 overflow-y-auto flex-1 custom-scrollbar pr-1 pb-24">
               {/* Image Upload Area */}
-              <div className="flex justify-center -mt-16 mb-4">
+              <div className="flex justify-center mt-4">
                 <div className="relative group">
                   <div className="w-32 h-32 rounded-[32px] bg-slate-50 dark:bg-emerald-950 flex items-center justify-center overflow-hidden border-4 border-white dark:border-emerald-800 shadow-xl">
                     {formData.image ? (
@@ -601,7 +601,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                       <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                       <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan or type barcode" />
                     </div>
-                    <button type="button" onClick={() => startBarcodeScanner('add')} className="p-4 bg-emerald-600 text-white rounded-2xl active:scale-90 shadow-lg"><Camera size={20}/></button>
+                    <button type="button" onClick={() => startBarcodeScanner('add')} className="w-14 shrink-0 bg-emerald-600 text-white rounded-2xl active:scale-90 shadow-lg flex items-center justify-center"><Camera size={20}/></button>
                   </div>
                 </div>
               </div>
@@ -616,15 +616,15 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
 
       {/* Edit Product Modal */}
       {editingItem && isAdmin && (
-        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 flex flex-col">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] px-8 pt-6 pb-4 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 flex flex-col max-h-[92vh]">
+            <div className="sticky top-0 bg-white dark:bg-emerald-900 z-[210] flex justify-between items-center pb-4 -mx-2">
               <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 italic">Update Item</h2>
               <button onClick={() => setEditingItem(null)} className="p-3 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20} /></button>
             </div>
             
-            <form onSubmit={handleUpdateItem} className="space-y-8 pt-20 flex-1">
-              <div className="flex justify-center -mt-16 mb-4">
+            <form onSubmit={handleUpdateItem} className="space-y-6 overflow-y-auto flex-1 custom-scrollbar pr-1 pb-24">
+              <div className="flex justify-center mt-4">
                 <div className="relative">
                   <div className="w-32 h-32 rounded-[32px] bg-slate-50 dark:bg-emerald-950 flex items-center justify-center overflow-hidden border-4 border-white dark:border-emerald-800 shadow-xl">
                     {editingItem.image ? (
@@ -746,7 +746,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                       <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                       <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={editingItem.barcode} onChange={e => setEditingItem({...editingItem, barcode: e.target.value})} />
                     </div>
-                    <button type="button" onClick={() => startBarcodeScanner('edit')} className="p-4 bg-emerald-600 text-white rounded-2xl active:scale-90 shadow-lg"><Camera size={20}/></button>
+                    <button type="button" onClick={() => startBarcodeScanner('edit')} className="w-14 shrink-0 bg-emerald-600 text-white rounded-2xl active:scale-90 shadow-lg flex items-center justify-center"><Camera size={20}/></button>
                   </div>
                 </div>
               </div>
