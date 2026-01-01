@@ -206,7 +206,10 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           if (expiry) localStorage.setItem('license_expiry', expiry);
           if (sig) localStorage.setItem('license_signature', sig);
           
+          // Restore Setup State
           localStorage.setItem('is_activated', 'true');
+          localStorage.setItem('is_setup_pending', 'false');
+          localStorage.removeItem('is_trialing');
           
           // Fix 4: Ensure device role is preserved to show the login screen correctly
           if (!localStorage.getItem('device_role')) {
