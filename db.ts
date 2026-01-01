@@ -130,10 +130,10 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(22).stores({
+dexieDb.version(23).stores({
   inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock',
   categories: '++id, name',
-  customers: '++id, &phone, name, walletBalance',
+  customers: '++id, &phone, name, walletBalance, lastTransaction',
   sales: '++id, uuid, timestamp, total, staff_id, staff_name, customer_phone',
   settings: 'key',
   security: 'key',

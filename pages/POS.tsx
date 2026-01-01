@@ -233,7 +233,10 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           const existing = await db.customers.where('phone').equals(customerPhone).first();
           if (existing) {
             finalCustomer = existing;
-            await db.customers.update(existing.id!, { name: customerName }); 
+            await db.customers.update(existing.id!, { 
+              name: customerName,
+              lastTransaction: Date.now() 
+            }); 
           } else {
             const id = await db.customers.add({
               name: customerName,
@@ -496,7 +499,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           <div className="flex items-center gap-1.5 pl-1">
              <RefreshCw size={8} className="text-slate-400 dark:text-emerald-700" />
              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-emerald-700">
-               Prices last updated: <span className="text-emerald-600 dark:text-emerald-500">{lastSyncText}</span>
+               Prices last updated: <span className="text-emerald-600 dark:text-emerald-50">{lastSyncText}</span>
              </p>
           </div>
         </header>
@@ -893,7 +896,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
 
       {showSuccessModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-6 text-center shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[40px] p-6 text-center shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${lastSale?.paymentMethod === 'Debt' || lastSale?.paymentMethod === 'Partial' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
               {(lastSale?.paymentMethod === 'Debt' || lastSale?.paymentMethod === 'Partial') ? <BookOpen size={40} /> : <CheckCircle size={40} />}
             </div>

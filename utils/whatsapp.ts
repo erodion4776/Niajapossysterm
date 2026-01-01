@@ -360,10 +360,13 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
       const existing = await db.customers.where('phone').equals(sCustomer.phone).first();
       if (existing) {
         // Timestamp resolution: Trust the record that was updated more recently
-        if (sCustomer.lastTransaction > existing.lastTransaction) {
+        const staffTs = Number(sCustomer.lastTransaction || 0);
+        const adminTs = Number(existing.lastTransaction || 0);
+
+        if (staffTs > adminTs) {
           await db.customers.update(existing.id!, {
             walletBalance: sCustomer.walletBalance,
-            lastTransaction: sCustomer.lastTransaction,
+            lastTransaction: staffTs,
             name: sCustomer.name 
           });
           walletsSynced++;
@@ -371,7 +374,10 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
       } else {
         // Completely new customer added by staff
         const { id, ...custWithoutOldId } = sCustomer;
-        await db.customers.add(custWithoutOldId);
+        await db.customers.add({
+          ...custWithoutOldId,
+          lastTransaction: Number(custWithoutOldId.lastTransaction || Date.now())
+        });
         walletsSynced++;
       }
     }
@@ -398,8 +404,14 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
   const startOfDay = new Date().setHours(0,0,0,0);
 
   // Fetch today's debts and customers updated since start of day
+  // Fix: Gracefully handle missing index by ensuring it exists via db migration 23
   const debts = await db.debts.where('date').aboveOrEqual(startOfDay).toArray();
-  const customers = await db.customers.where('lastTransaction').aboveOrEqual(startOfDay).toArray();
+  
+  // Safe filtering: Handle null/undefined timestamps gracefully
+  const customers = await db.customers
+    .where('lastTransaction')
+    .aboveOrEqual(startOfDay)
+    .toArray();
 
   const payload = { 
     sales, 
