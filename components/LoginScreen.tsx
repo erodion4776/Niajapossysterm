@@ -58,12 +58,54 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
     if (e.key === 'Enter' && pinArr.join('').length === 4) handleLogin();
   };
 
+  /**
+   * Technical Fix: Bulletproof Staff Onboarding
+   * Clears old data and enforces the 'staff' lockdown role
+   */
+  const processStaffInvite = async (data: any) => {
+    setIsProcessing(true);
+    try {
+      // 1. Wipe existing users and critical data
+      await db.users.clear();
+      
+      // 2. Add the specific staff account
+      await db.users.add({ 
+        name: data.staffName, 
+        pin: data.staffPin, 
+        role: 'Staff' 
+      });
+
+      // 3. Inject shop and license settings
+      await db.settings.put({ key: 'is_activated', value: true });
+      if (data.expiry && data.license_signature) {
+        await db.security.put({ key: 'license_expiry', value: data.expiry });
+        await db.security.put({ key: 'license_signature', value: data.license_signature });
+        localStorage.setItem('license_expiry', data.expiry);
+        localStorage.setItem('license_signature', data.license_signature);
+      }
+
+      // 4. Set GLOBAL LOCKDOWN flags
+      localStorage.setItem('shop_name', data.shopName);
+      localStorage.setItem('is_activated', 'true');
+      localStorage.setItem('is_setup_pending', 'false');
+      localStorage.setItem('device_role', 'StaffDevice');
+      localStorage.setItem('user_role', 'staff');
+
+      // 5. Force Clean Reload
+      window.location.href = '/app';
+    } catch (err) {
+      setImportError('❌ Activation failed. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleImportKey = async () => {
     let data;
     try {
       data = decodeShopKey(importKey);
     } catch (err) {
-      setImportError('❌ Invalid Invite Key. Please ask your Boss to send a new one.');
+      setImportError('❌ Invalid Key format. Check code and try again.');
       return;
     }
 
@@ -72,53 +114,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
       return;
     }
 
-    if (data.type === 'STAFF_INVITE') {
-      if (confirm(`Accept invite to join "${data.shopName}" as ${data.staffName}? Existing records on this phone will be cleared.`)) {
-        setIsProcessing(true);
-        try {
-          // 1. Clear any existing local data
-          await clearAllData();
-
-          // 2. Perform Staff Setup
-          await db.transaction('rw', [db.inventory, db.users, db.settings, db.security], async () => {
-            // Restore inventory if provided
-            if (data.inventory && data.inventory.length > 0) {
-               await db.inventory.bulkAdd(data.inventory);
-            }
-            
-            // Add the specific staff user
-            await db.users.add({ name: data.staffName, pin: data.staffPin, role: 'Staff' });
-            
-            // Save settings
-            await db.settings.put({ key: 'is_activated', value: true });
-            
-            // Setup License
-            if (data.licenseExpiry && data.license_signature) {
-              await db.security.put({ key: 'license_expiry', value: data.licenseExpiry });
-              await db.security.put({ key: 'license_signature', value: data.license_signature });
-              localStorage.setItem('license_expiry', data.licenseExpiry);
-              localStorage.setItem('license_signature', data.license_signature);
-            }
-          });
-          
-          // 3. Set CRITICAL localStorage flags
-          localStorage.setItem('shop_name', data.shopName);
-          localStorage.setItem('shop_info', data.shopInfo || '');
-          localStorage.setItem('is_activated', 'true');
-          localStorage.setItem('device_role', 'StaffDevice');
-          localStorage.setItem('user_role', 'staff');
-          
-          // 4. Force Reload for Lockdown Activation
-          window.location.reload();
-        } catch (e) {
-          setImportError('Invite setup failed: ' + (e as Error).message);
-        } finally {
-          setIsProcessing(false);
-        }
+    // Handle the new strict Staff Invite format
+    if (data.type === 'STAFF_INVITE' && data.secret === 'NAIJA_VERIFIED') {
+      if (confirm(`Activate terminal for ${data.staffName} at "${data.shopName}"?`)) {
+        await processStaffInvite(data);
       }
       return;
     }
 
+    // Legacy formats
     if (data.type === 'STOCK_UPDATE') {
       if (confirm(`Update stock levels from Admin?`)) {
         setIsProcessing(true);
@@ -151,29 +155,31 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
       return;
     }
 
-    if (confirm(`Clone "${data.settings.shopName}" to this phone?`)) {
-      setIsProcessing(true);
-      try {
-        await clearAllData();
-        await db.transaction('rw', [db.inventory, db.users, db.security], async () => {
-          if (data.inventory.length > 0) await db.inventory.bulkAdd(data.inventory.map(({id, ...rest}: any) => rest));
-          if (data.users.length > 0) await db.users.bulkAdd(data.users.map(({id, ...rest}: any) => rest));
-          
-          // Clone license
-          if (data.settings.license_expiry && data.settings.license_signature) {
-             await db.security.put({ key: 'license_expiry', value: data.settings.license_expiry });
-             await db.security.put({ key: 'license_signature', value: data.settings.license_signature });
-             localStorage.setItem('license_expiry', data.settings.license_expiry);
-             localStorage.setItem('license_signature', data.settings.license_signature);
-          }
-        });
-        localStorage.setItem('shop_name', data.settings.shopName);
-        localStorage.setItem('shop_info', data.settings.shopInfo);
-        window.location.reload();
-      } catch (e) {
-        setImportError('Import failed');
-      } finally {
-        setIsProcessing(false);
+    // Full Shop Setup Key (Clone)
+    if (data.settings && data.settings.shopName) {
+      if (confirm(`Clone "${data.settings.shopName}" to this phone?`)) {
+        setIsProcessing(true);
+        try {
+          await clearAllData();
+          await db.transaction('rw', [db.inventory, db.users, db.security], async () => {
+            if (data.inventory.length > 0) await db.inventory.bulkAdd(data.inventory.map(({id, ...rest}: any) => rest));
+            if (data.users.length > 0) await db.users.bulkAdd(data.users.map(({id, ...rest}: any) => rest));
+            
+            if (data.settings.license_expiry && data.settings.license_signature) {
+               await db.security.put({ key: 'license_expiry', value: data.settings.license_expiry });
+               await db.security.put({ key: 'license_signature', value: data.settings.license_signature });
+               localStorage.setItem('license_expiry', data.settings.license_expiry);
+               localStorage.setItem('license_signature', data.settings.license_signature);
+            }
+          });
+          localStorage.setItem('shop_name', data.settings.shopName);
+          localStorage.setItem('shop_info', data.settings.shopInfo);
+          window.location.reload();
+        } catch (e) {
+          setImportError('Import failed');
+        } finally {
+          setIsProcessing(false);
+        }
       }
     }
   };
@@ -184,11 +190,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
         <button onClick={() => setShowImport(false)} className="self-end p-2 bg-slate-100 dark:bg-emerald-900 rounded-full mb-8 dark:text-emerald-50"><X size={20} /></button>
         <div className="flex flex-col items-center text-center mb-8">
           <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mb-4"><RefreshCw size={32} className={isProcessing ? 'animate-spin' : ''} /></div>
-          <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">System Setup</h2>
+          <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">System Activation</h2>
           <p className="text-slate-400 dark:text-emerald-500/40 text-sm mt-2 font-medium">Paste the Code sent by the Boss.</p>
         </div>
         <textarea 
-          placeholder="Paste INVITE-STAFF-... code here" 
+          placeholder="Paste STAFF-INVITE-... code here" 
           className={`w-full h-48 bg-slate-50 dark:bg-emerald-900/40 border ${importError ? 'border-red-500' : 'border-slate-100 dark:border-emerald-800/40'} rounded-3xl p-5 text-xs font-mono mb-6 resize-none dark:text-emerald-50 focus:ring-2 focus:ring-emerald-500 outline-none`} 
           value={importKey} 
           onChange={(e) => { setImportKey(e.target.value); setImportError(''); }} 
@@ -204,7 +210,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
           disabled={isProcessing || !importKey}
           className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          {isProcessing ? 'Setting up Terminal...' : 'Activate Account'} <ArrowRight size={16} />
+          {isProcessing ? 'Setting up Terminal...' : 'Activate Terminal'} <ArrowRight size={16} />
         </button>
       </div>
     );

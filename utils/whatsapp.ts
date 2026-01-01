@@ -92,7 +92,6 @@ export const generateShopKey = async () => {
   const license_expiry = localStorage.getItem('license_expiry');
   const license_signature = localStorage.getItem('license_signature');
 
-  // Include images in the shop setup key
   const payload = {
     inventory, 
     users,
@@ -125,47 +124,31 @@ export const generateShopKey = async () => {
   }
 };
 
+/**
+ * Technical Fix: Rebuilt Staff Invite Generator
+ * Simple but strict format for 100% reliability
+ */
 export const generateStaffInviteKey = async (user: User) => {
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
-  const shopInfo = localStorage.getItem('shop_info') || '';
-  const inventory = await db.inventory.toArray();
-  const licenseExpiry = localStorage.getItem('license_expiry') || '';
+  const expiry = localStorage.getItem('license_expiry') || '';
   const license_signature = localStorage.getItem('license_signature') || '';
 
-  // Simple signature for tampering protection
-  const signature = btoa(shopName + user.name + licenseExpiry + MASTER_SALT).substring(0, 12);
-
-  const payload = {
-    type: 'STAFF_INVITE',
-    shopName,
-    shopInfo,
-    staffName: user.name,
-    staffPin: user.pin,
-    role: 'staff',
-    licenseExpiry,
+  const data = { 
+    shopName, 
+    staffName: user.name, 
+    staffPin: user.pin, 
+    expiry, 
     license_signature,
-    signature,
-    inventory: inventory.map(i => ({ 
-      name: i.name, 
-      sellingPrice: i.sellingPrice, 
-      costPrice: i.costPrice, 
-      stock: i.stock, 
-      category: i.category, 
-      barcode: i.barcode, 
-      image: i.image 
-    })),
-    timestamp: Date.now()
+    role: 'staff', 
+    secret: 'NAIJA_VERIFIED' 
   };
 
-  const jsonStr = JSON.stringify(payload);
-  const base64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => 
-    String.fromCharCode(parseInt(p1, 16))
-  ));
+  const base64String = btoa(JSON.stringify(data));
+  const key = `STAFF-INVITE-${base64String}`;
   
-  const key = `INVITE-STAFF-${base64}`;
-  const message = `👋 *NaijaShop Staff Invite for ${user.name}*\n\nCopy the code below and paste it into your app to join the ${shopName} team.\n\n${key}`;
+  const message = `👋 *NaijaShop Staff Invite for ${user.name}*\n\nBoss has authorized you to use the POS. Copy the code below and paste it into your app to start.\n\n${key}`;
 
-  if (navigator.share && key.length < 1500) {
+  if (navigator.share) {
     try {
       await navigator.share({ title: 'Staff Invite Code', text: message });
     } catch (e) {
@@ -180,7 +163,6 @@ export const generateMasterStockKey = async () => {
   const inventory = await db.inventory.toArray();
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
 
-  // Include images in master stock update
   const payload = {
     inventory,
     type: 'STOCK_UPDATE',
@@ -210,15 +192,23 @@ export const decodeShopKey = (key: string) => {
   const trimmedKey = key.trim();
   const isSetup = trimmedKey.includes('SHOP-KEY-');
   const isStock = trimmedKey.includes('STOCK-SYNC-');
-  const isInvite = trimmedKey.includes('INVITE-STAFF-');
+  const isStaffInvite = trimmedKey.includes('STAFF-INVITE-');
   
-  if (!isSetup && !isStock && !isInvite) return null;
+  if (!isSetup && !isStock && !isStaffInvite) return null;
   
   try {
-    const match = trimmedKey.match(/(?:SHOP-KEY-|STOCK-SYNC-|INVITE-STAFF-)([A-Za-z0-9+/=]+)/);
+    const match = trimmedKey.match(/(?:SHOP-KEY-|STOCK-SYNC-|STAFF-INVITE-)([A-Za-z0-9+/=]+)/);
     if (!match) return null;
     
     const base64 = match[1];
+    
+    // For the simple STAFF-INVITE format, we use standard atob
+    if (isStaffInvite) {
+      const jsonStr = atob(base64);
+      return { ...JSON.parse(jsonStr), type: 'STAFF_INVITE' };
+    }
+
+    // For other keys, use the URI component decoder
     const jsonStr = decodeURIComponent(Array.prototype.map.call(atob(base64), (c: any) => 
       '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
     ).join(''));

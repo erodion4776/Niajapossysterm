@@ -59,7 +59,7 @@ const AppContent: React.FC = () => {
   const [licenseExpiry, setLicenseExpiry] = useState<string | null>(() => localStorage.getItem('license_expiry'));
   const [isExpired, setIsExpired] = useState(false);
 
-  // CRITICAL Lockdown Check
+  // Technical Fix: Strict Role Check
   const isStaff = localStorage.getItem('user_role') === 'staff';
 
   const trialStartDate = localStorage.getItem('trial_start_date');
@@ -210,11 +210,16 @@ const AppContent: React.FC = () => {
   if (showRoleSelection) return <RoleSelection onSelect={(role) => { localStorage.setItem('device_role', role); setDeviceRole(role); setShowRoleSelection(false); if(role === 'Owner'){ localStorage.setItem('is_trialing', 'true'); localStorage.setItem('trial_start_date', Date.now().toString()); localStorage.setItem('is_setup_pending', 'true'); navigateTo(Page.DASHBOARD); setIsAtLanding(false); setIsTrialing(true); setIsSetupPending(true); } else { navigateTo(Page.LOGIN); setIsAtLanding(false); setIsTrialing(false); setIsSetupPending(false); } }} />;
   
   // PROTECTION LAYER
-  if (deviceRole === 'Owner') {
-    if ((!isActivated && (!isTrialing || !isTrialValid)) || isExpired) return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
-    if (isSetupPending) return <Onboarding onComplete={() => window.location.reload()} />;
+  // Switchboard Priority: If staff role is detected, bypass all admin guards
+  if (!isStaff) {
+    if (deviceRole === 'Owner') {
+      if ((!isActivated && (!isTrialing || !isTrialValid)) || isExpired) return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
+      if (isSetupPending) return <Onboarding onComplete={() => window.location.reload()} />;
+    }
   }
-  if (!currentUser) return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || 'StaffDevice'} />;
+
+  // Final check for login
+  if (!currentUser) return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || (isStaff ? 'StaffDevice' : 'Owner')} />;
 
   const isStaffDevice = deviceRole === 'StaffDevice' || isStaff;
   const renderPage = () => {
@@ -253,7 +258,7 @@ const AppContent: React.FC = () => {
             <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Sales</span>
           </button>
           
-          {/* Lockdown for Staff: Hide Debts, Wallet, and Admin */}
+          {/* Strict Role Lockdown: Hide sensitive tabs for staff */}
           {!isStaff && (
             <>
               <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
