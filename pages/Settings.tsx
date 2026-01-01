@@ -8,7 +8,9 @@ import {
   reconcileStaffSales, 
   generateMasterStockKey, 
   generateStaffInviteKey, 
-  decodeShopKey 
+  decodeShopKey,
+  pushInventoryUpdateToStaff,
+  applyInventoryUpdate
 } from '../utils/whatsapp.ts';
 import pako from 'pako';
 import { 
@@ -50,6 +52,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
   const [isConnectingPrinter, setIsConnectingPrinter] = useState(false);
   
   // Modal Data
@@ -68,6 +71,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reconcileInputRef = useRef<HTMLInputElement>(null);
+  const inventoryUpdateRef = useRef<HTMLInputElement>(null);
 
   const users = useLiveQuery(() => db.users.toArray());
   const categories = useLiveQuery(() => db.categories.toArray());
@@ -192,6 +196,42 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     else reader.readAsText(file);
   };
 
+  const handlePushUpdateToStaff = async () => {
+    setIsUpdatingInventory(true);
+    try {
+      await pushInventoryUpdateToStaff();
+      alert("Inventory update shared successfully!");
+    } catch (err) {
+      alert("Failed to share update: " + (err as Error).message);
+    } finally {
+      setIsUpdatingInventory(false);
+    }
+  };
+
+  const handleImportInventoryUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        setIsUpdatingInventory(true);
+        const jsonStr = event.target?.result as string;
+        const data = JSON.parse(jsonStr);
+        
+        const result = await applyInventoryUpdate(data);
+        alert(`Inventory Updated! ${result.added} new products added, ${result.updated} prices/names updated.`);
+        window.location.reload();
+      } catch (err) {
+        alert('Update failed: ' + (err as Error).message);
+      } finally {
+        setIsUpdatingInventory(false);
+        if (inventoryUpdateRef.current) inventoryUpdateRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handlePairPrinter = async () => {
     setIsConnectingPrinter(true);
     try {
@@ -281,8 +321,8 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Admin Control</h1>
-          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Master Settings</p>
+          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">{isAdmin ? 'Admin Control' : 'Staff Settings'}</h1>
+          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">{isAdmin ? 'Master Settings' : 'Personal Preferences'}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={toggleTheme} className="p-3 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl shadow-sm text-emerald-600 active:scale-90 transition-all">
@@ -353,92 +393,136 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         </div>
       </section>
 
-      {/* Primary Actions */}
-      <div className="grid grid-cols-1 gap-4">
-        <button onClick={() => setPage(Page.CATEGORY_MANAGER)} className="w-full flex items-center justify-between p-6 bg-white dark:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800/40 rounded-[32px] shadow-sm active:scale-95 transition-all">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-2xl">
-              <Tag size={24} />
-            </div>
-            <div className="text-left">
-              <h3 className="font-black text-slate-800 dark:text-emerald-50 text-base uppercase italic">Category Lab</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Manage Shop Folders</p>
-            </div>
-          </div>
-          <ChevronRight size={20} className="text-slate-300" />
-        </button>
-      </div>
-
-      {/* Soft POS Setup */}
-      <section className="bg-slate-900 text-white p-6 rounded-[32px] shadow-xl space-y-4 border border-emerald-500/20">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400">
-            <CreditCard size={18} />
-          </div>
-          <div>
-            <h2 className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Soft POS Setup</h2>
-            <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Customer Bank Transfers</p>
-          </div>
-        </div>
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Bank Name</label>
-            <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="e.g. OPay / Access Bank" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Account Number</label>
-            <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-mono font-black text-lg outline-none focus:ring-2 focus:ring-emerald-500" value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g,''))} placeholder="0123456789" maxLength={10} inputMode="numeric" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Account Name</label>
-            <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500" value={accountName} onChange={e => setAccountName(e.target.value)} placeholder="e.g. AL-BARAKAH VENTURES" />
-          </div>
-          <button onClick={saveBankDetails} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">Save Bank Details</button>
-          <div className="bg-white/5 p-3 rounded-2xl flex gap-2 items-center">
-            <Info size={12} className="text-emerald-500 flex-shrink-0" />
-            <p className="text-[8px] font-bold text-slate-400 uppercase leading-relaxed">These details will be shown to customers during Soft POS transfers.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Shop Branding Section */}
+      {/* Inventory Sync Section - NEW */}
       <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600 dark:text-emerald-300">
-            <Store size={18} />
+            <RefreshCw size={18} />
           </div>
-          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Shop Branding</h2>
+          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Inventory Sync</h2>
         </div>
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-300 uppercase ml-2 flex items-center gap-1"><Store size={10}/> Business Name</label>
+        
+        {isAdmin ? (
+          <button 
+            onClick={handlePushUpdateToStaff}
+            disabled={isUpdatingInventory}
+            className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all"
+          >
+            {isUpdatingInventory ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>}
+            Push Inventory to Staff
+          </button>
+        ) : (
+          <label className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all cursor-pointer">
             <input 
-              className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
-              value={shopName} 
-              onChange={e => setShopName(e.target.value)} 
-              placeholder="e.g. Al-Barakah Stores"
+              type="file" 
+              className="hidden" 
+              accept=".json" 
+              onChange={handleImportInventoryUpdate}
+              ref={inventoryUpdateRef}
             />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-300 uppercase ml-2 flex items-center gap-1"><MapPin size={10}/> Address & Phone</label>
-            <input 
-              className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
-              value={shopInfo} 
-              onChange={e => setShopInfo(e.target.value)} 
-              placeholder="e.g. 12 Market St, Lagos. 08012345678"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-300 uppercase ml-2 flex items-center gap-1"><Receipt size={10}/> Receipt Footer</label>
-            <input 
-              className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
-              value={receiptFooter} 
-              onChange={e => setReceiptFooter(e.target.value)} 
-              placeholder="e.g. No Refund After Payment"
-            />
-          </div>
-        </div>
+            {isUpdatingInventory ? <Loader2 size={18} className="animate-spin"/> : <CloudUpload size={18}/>}
+            Update from Boss
+          </label>
+        )}
+        <p className="text-[8px] font-bold text-slate-400 text-center uppercase tracking-widest leading-relaxed px-4">
+          {isAdmin 
+            ? "Send updated products and prices to staff via WhatsApp." 
+            : "Select the update file sent by the Boss to sync your inventory."}
+        </p>
       </section>
+
+      {/* Primary Actions */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 gap-4">
+          <button onClick={() => setPage(Page.CATEGORY_MANAGER)} className="w-full flex items-center justify-between p-6 bg-white dark:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800/40 rounded-[32px] shadow-sm active:scale-95 transition-all">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                <Tag size={24} />
+              </div>
+              <div className="text-left">
+                <h3 className="font-black text-slate-800 dark:text-emerald-50 text-base uppercase italic">Category Lab</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Manage Shop Folders</p>
+              </div>
+            </div>
+            <ChevronRight size={20} className="text-slate-300" />
+          </button>
+        </div>
+      )}
+
+      {/* Soft POS Setup */}
+      {isAdmin && (
+        <section className="bg-slate-900 text-white p-6 rounded-[32px] shadow-xl space-y-4 border border-emerald-500/20">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400">
+              <CreditCard size={18} />
+            </div>
+            <div>
+              <h2 className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Soft POS Setup</h2>
+              <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Customer Bank Transfers</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Bank Name</label>
+              <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="e.g. OPay / Access Bank" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Account Number</label>
+              <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-mono font-black text-lg outline-none focus:ring-2 focus:ring-emerald-500" value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g,''))} placeholder="0123456789" maxLength={10} inputMode="numeric" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase ml-2">Account Name</label>
+              <input className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500" value={accountName} onChange={e => setAccountName(e.target.value)} placeholder="e.g. AL-BARAKAH VENTURES" />
+            </div>
+            <button onClick={saveBankDetails} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">Save Bank Details</button>
+            <div className="bg-white/5 p-3 rounded-2xl flex gap-2 items-center">
+              <Info size={12} className="text-emerald-500 flex-shrink-0" />
+              <p className="text-[8px] font-bold text-slate-400 uppercase leading-relaxed">These details will be shown to customers during Soft POS transfers.</p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Shop Branding Section */}
+      {isAdmin && (
+        <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600 dark:text-emerald-300">
+              <Store size={18} />
+            </div>
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Shop Branding</h2>
+          </div>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-300 uppercase ml-2 flex items-center gap-1"><Store size={10}/> Business Name</label>
+              <input 
+                className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                value={shopName} 
+                onChange={e => setShopName(e.target.value)} 
+                placeholder="e.g. Al-Barakah Stores"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-300 uppercase ml-2 flex items-center gap-1"><MapPin size={10}/> Address & Phone</label>
+              <input 
+                className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                value={shopInfo} 
+                onChange={e => setShopInfo(e.target.value)} 
+                placeholder="e.g. 12 Market St, Lagos. 08012345678"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-300 uppercase ml-2 flex items-center gap-1"><Receipt size={10}/> Receipt Footer</label>
+              <input 
+                className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                value={receiptFooter} 
+                onChange={e => setReceiptFooter(e.target.value)} 
+                placeholder="e.g. No Refund After Payment"
+              />
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Printer Configuration Section */}
       <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
@@ -469,107 +553,111 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       </section>
 
       {/* Staff Management Section */}
-      <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
-        <div className="flex justify-between items-center mb-2">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-50 dark:bg-purple-900/40 rounded-xl text-purple-600 dark:text-purple-300">
-              <Users size={18} />
+      {isAdmin && (
+        <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
+          <div className="flex justify-between items-center mb-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-50 dark:bg-purple-900/40 rounded-xl text-purple-600 dark:text-purple-300">
+                <Users size={18} />
+              </div>
+              <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Staff Management</h2>
             </div>
-            <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Staff Management</h2>
+            <button onClick={() => setShowAddUser(true)} className="p-2.5 bg-emerald-600 text-white rounded-xl active:scale-90 transition-all shadow-lg shadow-emerald-200"><Plus size={18}/></button>
           </div>
-          <button onClick={() => setShowAddUser(true)} className="p-2.5 bg-emerald-600 text-white rounded-xl active:scale-90 transition-all shadow-lg shadow-emerald-200"><Plus size={18}/></button>
-        </div>
-        <div className="space-y-3">
-          {users?.map(u => (
-            <div key={u.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-950/40 rounded-2xl border border-slate-100 dark:border-emerald-800/40">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${u.role === 'Admin' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
-                  {u.role === 'Admin' ? <ShieldCheck size={18} /> : <UserIcon size={18} />}
+          <div className="space-y-3">
+            {users?.map(u => (
+              <div key={u.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-950/40 rounded-2xl border border-slate-100 dark:border-emerald-800/40">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${u.role === 'Admin' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                    {u.role === 'Admin' ? <ShieldCheck size={18} /> : <UserIcon size={18} />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-slate-800 dark:text-emerald-50">{u.name}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{u.role} • <span className="font-mono tracking-tighter">PIN: {u.pin}</span></p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-black text-slate-800 dark:text-emerald-50">{u.name}</p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{u.role} • <span className="font-mono tracking-tighter">PIN: {u.pin}</span></p>
+                <div className="flex gap-2">
+                  {u.role === 'Staff' && (
+                    <button onClick={() => generateStaffInviteKey(u)} className="p-2 text-emerald-500 active:scale-90" title="Invite Code">
+                      <Share2 size={16}/>
+                    </button>
+                  )}
+                  {u.id !== user.id && (
+                    <button onClick={() => handleDeleteUser(u.id!)} className="p-2 text-red-300 active:scale-90">
+                      <Trash2 size={16}/>
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="flex gap-2">
-                {u.role === 'Staff' && (
-                  <button onClick={() => generateStaffInviteKey(u)} className="p-2 text-emerald-500 active:scale-90" title="Invite Code">
-                    <Share2 size={16}/>
-                  </button>
-                )}
-                {u.id !== user.id && (
-                  <button onClick={() => handleDeleteUser(u.id!)} className="p-2 text-red-300 active:scale-90">
-                    <Trash2 size={16}/>
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Data Management Section */}
-      <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600 dark:text-emerald-300">
-            <Database size={18} />
-          </div>
-          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data Safety</h2>
-        </div>
-        
-        <div className="grid grid-cols-1 gap-4">
-          <button 
-            onClick={handleBackup} 
-            disabled={isBackingUp} 
-            className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all"
-          >
-            {isBackingUp ? <Loader2 size={18} className="animate-spin"/> : <CloudUpload size={18}/>} 
-            {isBackingUp ? 'Saving Data...' : 'Full Shop Backup'}
-          </button>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex-1 bg-white dark:bg-emerald-800 border border-slate-100 dark:border-emerald-700 p-5 rounded-[24px] flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-all shadow-sm">
-              <input type="file" className="hidden" accept=".json,.gz" onChange={handleImportJSON} />
-              <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-emerald-900 flex items-center justify-center mb-2">
-                <Database className="text-slate-400" size={20}/>
-              </div>
-              <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Restore Backup</span>
-            </label>
-            <label className="flex-1 bg-white dark:bg-emerald-800 border border-slate-100 dark:border-emerald-700 p-5 rounded-[24px] flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-all shadow-sm">
-              <input type="file" className="hidden" accept=".gz" onChange={handleReconcileMerge} />
-              <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900 flex items-center justify-center mb-2">
-                <RefreshCw className={`text-emerald-400 ${isMerging ? 'animate-spin' : ''}`} size={20}/>
-              </div>
-              <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Merge Staff Report</span>
-            </label>
+      {isAdmin && (
+        <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600 dark:text-emerald-300">
+              <Database size={18} />
+            </div>
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data Safety</h2>
           </div>
           
-          {reconcileResult && (
-             <div className="bg-emerald-50 dark:bg-emerald-900/40 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/40 flex items-center justify-between animate-in zoom-in duration-300">
-               <div className="flex items-center gap-2">
-                 <CheckCircle2 size={16} className="text-emerald-500" />
-                 <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-widest">
-                   Synced: {reconcileResult.merged} | Skipped: {reconcileResult.skipped}
-                 </span>
+          <div className="grid grid-cols-1 gap-4">
+            <button 
+              onClick={handleBackup} 
+              disabled={isBackingUp} 
+              className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all"
+            >
+              {isBackingUp ? <Loader2 size={18} className="animate-spin"/> : <CloudUpload size={18}/>} 
+              {isBackingUp ? 'Saving Data...' : 'Full Shop Backup'}
+            </button>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex-1 bg-white dark:bg-emerald-800 border border-slate-100 dark:border-emerald-700 p-5 rounded-[24px] flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-all shadow-sm">
+                <input type="file" className="hidden" accept=".json,.gz" onChange={handleImportJSON} ref={fileInputRef} />
+                <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-emerald-900 flex items-center justify-center mb-2">
+                  <Database className="text-slate-400" size={20}/>
+                </div>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Restore Backup</span>
+              </label>
+              <label className="flex-1 bg-white dark:bg-emerald-800 border border-slate-100 dark:border-emerald-700 p-5 rounded-[24px] flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-all shadow-sm">
+                <input type="file" className="hidden" accept=".gz" onChange={handleReconcileMerge} ref={reconcileInputRef} />
+                <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900 flex items-center justify-center mb-2">
+                  <RefreshCw className={`text-emerald-400 ${isMerging ? 'animate-spin' : ''}`} size={20}/>
+                </div>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Merge Staff Report</span>
+              </label>
+            </div>
+            
+            {reconcileResult && (
+               <div className="bg-emerald-50 dark:bg-emerald-900/40 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/40 flex items-center justify-between animate-in zoom-in duration-300">
+                 <div className="flex items-center gap-2">
+                   <CheckCircle2 size={16} className="text-emerald-500" />
+                   <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-widest">
+                     Synced: {reconcileResult.merged} | Skipped: {reconcileResult.skipped}
+                   </span>
+                 </div>
+                 <button onClick={() => setReconcileResult(null)} className="text-[9px] font-bold text-emerald-400">Clear</button>
                </div>
-               <button onClick={() => setReconcileResult(null)} className="text-[9px] font-bold text-emerald-400">Clear</button>
-             </div>
-          )}
+            )}
 
-          <button 
-            onClick={async () => { 
-              if(confirm("FINAL WARNING: Delete ALL shop data? This cannot be recovered!")) { 
-                await clearAllData(); 
-                localStorage.clear();
-                window.location.reload(); 
-              } 
-            }} 
-            className="w-full py-4 text-red-300 font-bold text-[9px] uppercase tracking-[0.4em] hover:text-red-500 transition-colors"
-          >
-            Wipe Terminal Data
-          </button>
-        </div>
-      </section>
+            <button 
+              onClick={async () => { 
+                if(confirm("FINAL WARNING: Delete ALL shop data? This cannot be recovered!")) { 
+                  await clearAllData(); 
+                  localStorage.clear();
+                  window.location.reload(); 
+                } 
+              }} 
+              className="w-full py-4 text-red-300 font-bold text-[9px] uppercase tracking-[0.4em] hover:text-red-500 transition-colors"
+            >
+              Wipe Terminal Data
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Accordion FAQ Section */}
       <section className="space-y-3">
@@ -605,7 +693,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       {/* Add User Modal */}
       {showAddUser && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600"><Users size={20}/></div>

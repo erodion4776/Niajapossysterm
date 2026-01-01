@@ -1,5 +1,5 @@
 
-import { Sale, db, User, Customer } from '../db.ts';
+import { Sale, db, User, Customer, Category, InventoryItem } from '../db.ts';
 import pako from 'pako';
 
 export const formatNaira = (amount: number) => {
@@ -364,4 +364,111 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   return { success: true };
+};
+
+/**
+ * Pushes the inventory update to staff via WhatsApp
+ */
+export const pushInventoryUpdateToStaff = async () => {
+  const inventory = await db.inventory.toArray();
+  const categories = await db.categories.toArray();
+  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+  const dateStr = new Date().toISOString().split('T')[0];
+  const fileName = `NAIJASHOP_UPDATE_${dateStr}.json`;
+
+  const payload = {
+    type: 'INVENTORY_UPDATE',
+    shopName,
+    timestamp: Date.now(),
+    inventory,
+    categories
+  };
+
+  const jsonString = JSON.stringify(payload);
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const file = new File([blob], fileName, { type: 'application/json' });
+
+  const message = "Hello Team, I have updated the shop inventory. Please click the file below and select 'Import Update' in your app to see the new products/prices.";
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: `Inventory Update: ${shopName}`,
+        text: message,
+        files: [file]
+      });
+      return true;
+    } catch (err) {
+      console.warn("Navigator share failed, falling back to download");
+    }
+  }
+
+  // Fallback to download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
+  const encodedMessage = encodeURIComponent(message);
+  window.open(`https://api.whatsapp.com/send?text=${encodedMessage}`, '_blank');
+  return true;
+};
+
+/**
+ * Merges the inventory update on the staff device
+ */
+export const applyInventoryUpdate = async (data: any) => {
+  if (data.type !== 'INVENTORY_UPDATE') {
+    throw new Error('Invalid update file type');
+  }
+
+  let added = 0;
+  let updated = 0;
+
+  await db.transaction('rw', [db.inventory, db.categories], async () => {
+    // 1. Process Categories (Overwrites/Adds)
+    if (data.categories) {
+      for (const cat of data.categories) {
+        const { id, ...catWithoutId } = cat;
+        const existing = await db.categories.where('name').equals(cat.name).first();
+        if (existing) {
+          await db.categories.update(existing.id!, catWithoutId);
+        } else {
+          await db.categories.add(catWithoutId);
+        }
+      }
+    }
+
+    // 2. Process Inventory (Smart Merge)
+    if (data.inventory) {
+      for (const item of data.inventory) {
+        const { id, stock, ...itemData } = item;
+        const existing = await db.inventory.get(id);
+
+        if (existing) {
+          // Update Name, Price, Category, etc. Do NOT touch stock.
+          await db.inventory.update(id, itemData);
+          updated++;
+        } else {
+          // If ID mismatch, try matching by name
+          const byName = await db.inventory.where('name').equals(item.name).first();
+          if (byName) {
+            await db.inventory.update(byName.id!, itemData);
+            updated++;
+          } else {
+            // Add New Item with provided stock from Boss (initial stock)
+            await db.inventory.add(item);
+            added++;
+          }
+        }
+      }
+    }
+  });
+
+  localStorage.setItem('inventory_last_updated', Date.now().toString());
+  return { added, updated };
 };

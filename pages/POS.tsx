@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, SaleItem, Sale, InventoryItem, User as DBUser, Customer, Debt, Category, ParkedOrder } from '../db.ts';
@@ -7,7 +8,7 @@ import {
   MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, 
   Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight,
   BookOpen, CreditCard, AlertCircle, Banknote, Landmark, CreditCard as CardIcon,
-  ShieldCheck, HelpCircle, ChevronLeft, Tag, Phone, Info, Pause, Play, Clock
+  ShieldCheck, HelpCircle, ChevronLeft, Tag, Phone, Info, Pause, Play, Clock, RefreshCw
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
@@ -31,6 +32,12 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
   
+  // Last Updated Status
+  const lastUpdatedTs = localStorage.getItem('inventory_last_updated');
+  const lastUpdatedText = lastUpdatedTs 
+    ? new Date(parseInt(lastUpdatedTs)).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })
+    : 'Never';
+
   // Parked Orders States
   const [showParkedList, setShowParkedList] = useState(false);
   const [showParkModal, setShowParkModal] = useState(false);
@@ -452,36 +459,45 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
       )}
 
       <div className={`p-4 space-y-4 flex-1 overflow-auto transition-all ${cart.length > 0 ? 'pb-40' : 'pb-24'}`}>
-        <header className="flex justify-between items-center">
-          <div className="flex items-center gap-3">
-             {selectedCategory && !searchTerm && (
-                <button onClick={() => setSelectedCategory(null)} className="p-2 bg-emerald-50 dark:bg-emerald-900 rounded-xl text-emerald-600 dark:text-emerald-400">
-                   <ChevronLeft size={20} />
-                </button>
-             )}
-             <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">
-               {selectedCategory && !searchTerm ? selectedCategory : 'Quick POS'}
-             </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setShowParkedList(true)}
-              className="relative bg-amber-50 dark:bg-amber-900/40 text-amber-600 p-3 rounded-2xl border border-amber-100 dark:border-amber-800 active:scale-90 transition-all group"
-            >
-              <Pause size={20} />
-              {parkedOrders && parkedOrders.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-emerald-950 px-1 shadow-md animate-in zoom-in duration-300">
-                  {parkedOrders.length}
-                </span>
-              )}
-            </button>
-            <button onClick={startScanner} className="bg-emerald-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 transition-all">
-              <Scan size={20} />
-            </button>
-            <div className="bg-slate-100 dark:bg-emerald-900/40 px-3 py-1 rounded-full flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${user.role === 'Admin' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
-              <span className="text-[10px] font-bold text-slate-500 dark:text-emerald-400 uppercase truncate max-w-[80px]">{user.name || user.role}</span>
+        <header className="flex flex-col gap-1">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+               {selectedCategory && !searchTerm && (
+                  <button onClick={() => setSelectedCategory(null)} className="p-2 bg-emerald-50 dark:bg-emerald-900 rounded-xl text-emerald-600 dark:text-emerald-400">
+                     <ChevronLeft size={20} />
+                  </button>
+               )}
+               <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">
+                 {selectedCategory && !searchTerm ? selectedCategory : 'Quick POS'}
+               </h1>
             </div>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setShowParkedList(true)}
+                className="relative bg-amber-50 dark:bg-amber-900/40 text-amber-600 p-3 rounded-2xl border border-amber-100 dark:border-amber-800 active:scale-90 transition-all group"
+              >
+                <Pause size={20} />
+                {parkedOrders && parkedOrders.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 bg-red-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-emerald-950 px-1 shadow-md animate-in zoom-in duration-300">
+                    {parkedOrders.length}
+                  </span>
+                )}
+              </button>
+              <button onClick={startScanner} className="bg-emerald-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 transition-all">
+                <Scan size={20} />
+              </button>
+              <div className="bg-slate-100 dark:bg-emerald-900/40 px-3 py-1 rounded-full flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${user.role === 'Admin' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-emerald-400 uppercase truncate max-w-[80px]">{user.name || user.role}</span>
+              </div>
+            </div>
+          </div>
+          {/* Last Updated Visual Indicator */}
+          <div className="flex items-center gap-1.5 pl-1">
+             <RefreshCw size={8} className="text-slate-400 dark:text-emerald-700" />
+             <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-emerald-700">
+               Inventory Last Updated: <span className="text-emerald-600 dark:text-emerald-500">{lastUpdatedText}</span>
+             </p>
           </div>
         </header>
 
