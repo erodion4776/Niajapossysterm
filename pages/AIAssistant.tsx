@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -44,7 +45,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ setPage }) => {
   const generateSystemInstruction = () => {
     const lowStock = inventory?.filter(i => i.stock < 5).map(i => i.name).join(', ') || 'None';
     const totalSales = sales?.length || 0;
-    const totalDebt = debts?.filter(d => d.status === 'Unpaid').reduce((sum, d) => sum + d.amount, 0) || 0;
+    // Fix: Access remainingBalance property correctly on Debt objects
+    const totalDebt = debts?.filter(d => d.status === 'Unpaid').reduce((sum, d) => sum + d.remainingBalance, 0) || 0;
     const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
 
     return `You are NaijaGPT, an expert Nigerian business consultant and shop manager for "${shopName}". 
@@ -68,8 +70,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ setPage }) => {
     setIsLoading(true);
 
     try {
-      // Corrected initialization to follow Gemini API guidelines exactly.
+      // Fix: Follow initialization guidelines for GoogleGenAI
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Fix: Use generateContent directly as per latest Gemini API guidelines
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: [...messages, userMessage].map(m => ({
@@ -82,6 +85,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ setPage }) => {
         }
       });
 
+      // Fix: Access text directly as a property of GenerateContentResponse
       const modelText = response.text || "Oga, I'm having trouble connecting right now. Please check your network.";
       setMessages(prev => [...prev, { role: 'model', text: modelText }]);
     } catch (err) {
@@ -130,73 +134,4 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ setPage }) => {
             <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-[32px] flex items-center justify-center mx-auto shadow-inner animate-pulse">
               <Bot size={40} />
             </div>
-            <div className="space-y-2">
-              <h2 className="text-xl font-black text-gray-800">Welcome, Oga!</h2>
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider px-10">
-                I'm your AI partner. Ask me anything about your shop or how to grow your profit.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-2 px-4">
-              {suggestions.map((s, i) => (
-                <button 
-                  key={i} 
-                  onClick={() => handleSend(s)}
-                  className="bg-white border border-gray-100 p-4 rounded-2xl text-xs font-black text-emerald-700 text-left hover:bg-emerald-50 active:scale-95 transition-all shadow-sm flex justify-between items-center"
-                >
-                  {s} <TrendingUp size={14} className="opacity-40" />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-            <div className={`max-w-[85%] p-4 rounded-3xl shadow-sm flex gap-3 ${
-              m.role === 'user' 
-                ? 'bg-emerald-600 text-white rounded-tr-none' 
-                : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'
-            }`}>
-              <div className="flex-shrink-0 mt-1">
-                {m.role === 'user' ? <UserIcon size={16} /> : <Sparkles size={16} className="text-emerald-500" />}
-              </div>
-              <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">
-                {m.text}
-              </p>
-            </div>
-          </div>
-        ))}
-
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-white border border-gray-100 p-4 rounded-3xl rounded-tl-none flex items-center gap-2">
-              <Loader2 size={16} className="text-emerald-500 animate-spin" />
-              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">NaijaGPT is thinking...</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Input Area */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-gray-100 p-4 pb-6 safe-bottom">
-        <div className="relative flex items-center gap-2">
-          <input 
-            type="text" 
-            placeholder="Ask Oga AI..."
-            className="flex-1 bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-14"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          />
-          <button 
-            onClick={() => handleSend()}
-            disabled={!input.trim() || isLoading}
-            className="absolute right-2 p-3 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200 active:scale-90 disabled:opacity-50 disabled:shadow-none transition-all"
-          >
-            <Send size={18} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+            <
