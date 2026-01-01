@@ -134,6 +134,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         users: await db.users.toArray(),
         categories: await db.categories.toArray(),
         settings: await db.settings.toArray(),
+        security: await db.security.toArray(), // Crucial for license restore
         shopName,
         shopInfo,
         timestamp: Date.now() 
@@ -170,18 +171,49 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
         const data = JSON.parse(jsonStr);
         if (confirm("Replace all local data with this backup? Current records will be deleted!")) {
+          // 1. Clear All Data including Security and Users
           await clearAllData();
-          await db.transaction('rw', [db.inventory, db.sales, db.expenses, db.debts, db.users, db.categories, db.settings], async () => {
+          
+          // 2. Perform Transactional Restore
+          await db.transaction('rw', [db.inventory, db.sales, db.expenses, db.debts, db.users, db.categories, db.settings, db.security], async () => {
             if (data.inventory) await db.inventory.bulkAdd(data.inventory);
             if (data.sales) await db.sales.bulkAdd(data.sales);
             if (data.expenses) await db.expenses.bulkAdd(data.expenses);
             if (data.debts) await db.debts.bulkAdd(data.debts);
-            if (data.users) await db.users.bulkAdd(data.users);
+            
+            // Fix 1: Ensure Users table is properly restored
+            if (data.users && data.users.length > 0) {
+              await db.users.bulkAdd(data.users);
+            }
+            
             if (data.categories) await db.categories.bulkAdd(data.categories);
+            if (data.settings) await db.settings.bulkAdd(data.settings);
+            
+            // Fix 2: Restore Security (License) table
+            if (data.security) await db.security.bulkAdd(data.security);
+            
             await db.settings.put({ key: 'is_activated', value: true });
           });
+
+          // Fix 3: Restore critical LocalStorage keys to avoid being locked out
           if (data.shopName) localStorage.setItem('shop_name', data.shopName);
           if (data.shopInfo) localStorage.setItem('shop_info', data.shopInfo);
+          
+          // Restore License info from backup data if available
+          const expiry = data.security?.find((s: any) => s.key === 'license_expiry')?.value || data.license_expiry;
+          const sig = data.security?.find((s: any) => s.key === 'license_signature')?.value || data.license_signature;
+          
+          if (expiry) localStorage.setItem('license_expiry', expiry);
+          if (sig) localStorage.setItem('license_signature', sig);
+          
+          localStorage.setItem('is_activated', 'true');
+          
+          // Fix 4: Ensure device role is preserved to show the login screen correctly
+          if (!localStorage.getItem('device_role')) {
+             localStorage.setItem('device_role', 'Owner');
+          }
+
+          alert("Shop Restored Successfully! The app will now reload.");
           window.location.reload();
         }
       } catch (err) {
