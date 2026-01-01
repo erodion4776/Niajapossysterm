@@ -213,14 +213,6 @@ export const decodeShopKey = (key: string) => {
   }
 };
 
-export type BackupResult = {
-  success: boolean;
-  method: 'FILE_SHARE' | 'TEXT_SHARE' | 'DOWNLOAD';
-  fileName?: string;
-  totalRecords?: number;
-  isLarge?: boolean;
-};
-
 export const backupToWhatsApp = async (data: any, excludePhotos = false): Promise<BackupResult> => {
   const finalData = excludePhotos ? {
     ...data,
@@ -369,7 +361,7 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
 /**
  * Pushes the inventory update to staff via WhatsApp
  */
-export const pushInventoryUpdateToStaff = async () => {
+export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) => {
   const inventory = await db.inventory.toArray();
   const categories = await db.categories.toArray();
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
@@ -381,7 +373,8 @@ export const pushInventoryUpdateToStaff = async () => {
     shopName,
     timestamp: Date.now(),
     inventory,
-    categories
+    categories,
+    resetStock
   };
 
   const jsonString = JSON.stringify(payload);
@@ -420,6 +413,7 @@ export const pushInventoryUpdateToStaff = async () => {
 
 /**
  * Merges the inventory update on the staff device
+ * Implements 'Smart Merge' logic: protects existing stock unless resetStock is true.
  */
 export const applyInventoryUpdate = async (data: any) => {
   if (data.type !== 'INVENTORY_UPDATE') {
@@ -428,6 +422,7 @@ export const applyInventoryUpdate = async (data: any) => {
 
   let added = 0;
   let updated = 0;
+  const resetStock = data.resetStock === true;
 
   await db.transaction('rw', [db.inventory, db.categories], async () => {
     // 1. Process Categories (Overwrites/Adds)
@@ -450,14 +445,16 @@ export const applyInventoryUpdate = async (data: any) => {
         const existing = await db.inventory.get(id);
 
         if (existing) {
-          // Update Name, Price, Category, etc. Do NOT touch stock.
-          await db.inventory.update(id, itemData);
+          // Update Price and Name. Protect current stock levels unless Boss explicitly chose to reset.
+          const updatePayload = resetStock ? { ...itemData, stock } : itemData;
+          await db.inventory.update(id, updatePayload);
           updated++;
         } else {
           // If ID mismatch, try matching by name
           const byName = await db.inventory.where('name').equals(item.name).first();
           if (byName) {
-            await db.inventory.update(byName.id!, itemData);
+            const updatePayload = resetStock ? { ...itemData, stock } : itemData;
+            await db.inventory.update(byName.id!, updatePayload);
             updated++;
           } else {
             // Add New Item with provided stock from Boss (initial stock)
@@ -471,4 +468,12 @@ export const applyInventoryUpdate = async (data: any) => {
 
   localStorage.setItem('inventory_last_updated', Date.now().toString());
   return { added, updated };
+};
+
+export type BackupResult = {
+  success: boolean;
+  method: 'FILE_SHARE' | 'TEXT_SHARE' | 'DOWNLOAD';
+  fileName?: string;
+  totalRecords?: number;
+  isLarge?: boolean;
 };

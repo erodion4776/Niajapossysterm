@@ -199,7 +199,8 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const handlePushUpdateToStaff = async () => {
     setIsUpdatingInventory(true);
     try {
-      await pushInventoryUpdateToStaff();
+      const resetStock = confirm("Boss, do you want to RESET staff stock levels to match your phone? (Choose NO if you only want to update items and prices).");
+      await pushInventoryUpdateToStaff(resetStock);
       alert("Inventory update shared successfully!");
     } catch (err) {
       alert("Failed to share update: " + (err as Error).message);
@@ -220,7 +221,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         const data = JSON.parse(jsonStr);
         
         const result = await applyInventoryUpdate(data);
-        alert(`Inventory Updated! ${result.added} new products added, ${result.updated} prices/names updated.`);
+        alert(`Inventory Updated! ${result.added} new products added, ${result.updated} prices updated.`);
         window.location.reload();
       } catch (err) {
         alert('Update failed: ' + (err as Error).message);
