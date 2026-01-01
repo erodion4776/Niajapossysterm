@@ -687,7 +687,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
                     <button onClick={() => setReconcileResult(null)} className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Dismiss</button>
                  </div>
                  <p className="text-[9px] font-bold text-emerald-700/70 dark:text-emerald-500/60 uppercase tracking-wide leading-relaxed pl-6">
-                    Added {reconcileResult.merged} Sales, {reconcileResult.debtsAdded} New Debts, and updated {reconcileResult.walletsSynced} Wallets.
+                    Merge Complete! Added {reconcileResult.merged} Sales, {reconcileResult.debtsAdded} New Debts, and updated {reconcileResult.walletsSynced} Customer Wallets.
                  </p>
                </div>
             )}

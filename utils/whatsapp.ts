@@ -306,7 +306,7 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
   let walletsSynced = 0;
 
   await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
-    // 1. Process Sales (Merges history and handles stock)
+    // 1. Process Sales (Merges history and handles stock deduction)
     for (const sale of staffSales) {
       const existing = await db.sales.where('uuid').equals(sale.uuid).first();
       if (existing) {
@@ -340,7 +340,7 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
       mergedCount++;
     }
 
-    // 2. Process Debts (Duplicate protection via sale_uuid)
+    // 2. Process Debts (Duplicate protection via sale_uuid or primary key)
     for (const debt of staffDebts) {
       let isDuplicate = false;
       if (debt.sale_uuid) {
@@ -355,21 +355,21 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
       }
     }
 
-    // 3. Process Customer Wallets (Sync via phone number and timestamp)
+    // 3. Process Customer Wallets (Unique key: Phone Number)
     for (const sCustomer of staffCustomers) {
       const existing = await db.customers.where('phone').equals(sCustomer.phone).first();
       if (existing) {
-        // If staff phone has more recent transaction info, trust its wallet balance
+        // Timestamp resolution: Trust the record that was updated more recently
         if (sCustomer.lastTransaction > existing.lastTransaction) {
           await db.customers.update(existing.id!, {
             walletBalance: sCustomer.walletBalance,
             lastTransaction: sCustomer.lastTransaction,
-            name: sCustomer.name // Keep name current
+            name: sCustomer.name 
           });
           walletsSynced++;
         }
       } else {
-        // New customer found on staff phone
+        // Completely new customer added by staff
         const { id, ...custWithoutOldId } = sCustomer;
         await db.customers.add(custWithoutOldId);
         walletsSynced++;
@@ -388,7 +388,7 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
 
 /**
  * Export Staff Sales Report
- * Packaging today's Sales, Debts, and updated Customers for Admin reconciliation.
+ * Filters for today's data to keep sync files lightweight.
  */
 export const exportStaffSalesReport = async (sales: Sale[]) => {
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
@@ -397,7 +397,7 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
   
   const startOfDay = new Date().setHours(0,0,0,0);
 
-  // Fetch today's debts and customers updated today
+  // Fetch today's debts and customers updated since start of day
   const debts = await db.debts.where('date').aboveOrEqual(startOfDay).toArray();
   const customers = await db.customers.where('lastTransaction').aboveOrEqual(startOfDay).toArray();
 
@@ -420,7 +420,7 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
       const file = new File([blob], fileName, { type: 'application/gzip' });
       await navigator.share({
         title: `Sales Report: ${shopName}`,
-        text: `Boss, here is my sales report for ${dateStr}. Includes Sales, Debts and Wallet updates.`,
+        text: `Boss, here is my report for ${dateStr}. Contains Sales, Debts and Wallet updates.`,
         files: [file]
       });
       return { success: true };
@@ -443,7 +443,6 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
 
 /**
  * Pushes the inventory update to staff via WhatsApp
- * Includes Soft POS bank details to ensure staff terminals are up-to-date
  */
 export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) => {
   const inventory = await db.inventory.toArray();
@@ -466,14 +465,14 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
     expiryDate: item.expiryDate,
     category: item.category,
     barcode: item.barcode,
-    image: item.image, // Product Image
+    image: item.image, 
     dateAdded: item.dateAdded
   }));
 
   const categoryData = categories.map(cat => ({
     id: cat.id,
     name: cat.name,
-    image: cat.image, // Category Image
+    image: cat.image, 
     dateCreated: cat.dateCreated
   }));
 
