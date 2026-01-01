@@ -171,17 +171,20 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
         const data = JSON.parse(jsonStr);
         if (confirm("Replace all local data with this backup? Current records will be deleted!")) {
-          // 1. Clear All Data including Security and Users
+          // 1. Clear existing local database state first
           await clearAllData();
           
           // 2. Perform Transactional Restore
-          await db.transaction('rw', [db.inventory, db.sales, db.expenses, db.debts, db.users, db.categories, db.settings, db.security], async () => {
+          await db.transaction('rw', [db.inventory, db.sales, db.expenses, db.debts, db.users, db.categories, db.settings, db.security, db.stock_logs, db.parked_orders], async () => {
+            // Restore Inventory
             if (data.inventory) await db.inventory.bulkAdd(data.inventory);
             if (data.sales) await db.sales.bulkAdd(data.sales);
             if (data.expenses) await db.expenses.bulkAdd(data.expenses);
             if (data.debts) await db.debts.bulkAdd(data.debts);
             
-            // Fix 1: Ensure Users table is properly restored
+            // Fix: Ensure Users table is properly restored from backupData.users
+            // Calling clear again within transaction for absolute certainty
+            await db.users.clear();
             if (data.users && data.users.length > 0) {
               await db.users.bulkAdd(data.users);
             }
@@ -189,34 +192,40 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
             if (data.categories) await db.categories.bulkAdd(data.categories);
             if (data.settings) await db.settings.bulkAdd(data.settings);
             
-            // Fix 2: Restore Security (License) table
+            // Restore Security (License) table
             if (data.security) await db.security.bulkAdd(data.security);
+
+            // Restore other tables if present
+            if (data.stock_logs) await db.stock_logs.bulkAdd(data.stock_logs);
+            if (data.parked_orders) await db.parked_orders.bulkAdd(data.parked_orders);
             
             await db.settings.put({ key: 'is_activated', value: true });
           });
 
-          // Fix 3: Restore critical LocalStorage keys to avoid being locked out
-          if (data.shopName) localStorage.setItem('shop_name', data.shopName);
-          if (data.shopInfo) localStorage.setItem('shop_info', data.shopInfo);
-          
-          // Restore License info from backup data if available
-          const expiry = data.security?.find((s: any) => s.key === 'license_expiry')?.value || data.license_expiry;
-          const sig = data.security?.find((s: any) => s.key === 'license_signature')?.value || data.license_signature;
-          
-          if (expiry) localStorage.setItem('license_expiry', expiry);
-          if (sig) localStorage.setItem('license_signature', sig);
-          
-          // Restore Setup State
+          // 3. Restore critical Setup and Setup State in LocalStorage
           localStorage.setItem('is_activated', 'true');
           localStorage.setItem('is_setup_pending', 'false');
           localStorage.removeItem('is_trialing');
           
-          // Fix 4: Ensure device role is preserved to show the login screen correctly
+          if (data.shopName) localStorage.setItem('shop_name', data.shopName);
+          if (data.shopInfo) localStorage.setItem('shop_info', data.shopInfo);
+          
+          // Restore license info from security table in the backup data
+          const security = data.security || [];
+          const expiryEntry = security.find((s: any) => s.key === 'license_expiry');
+          const sigEntry = security.find((s: any) => s.key === 'license_signature');
+          
+          if (expiryEntry) localStorage.setItem('license_expiry', expiryEntry.value);
+          if (sigEntry) localStorage.setItem('license_signature', sigEntry.value);
+          
+          // Ensure device role is preserved
           if (!localStorage.getItem('device_role')) {
              localStorage.setItem('device_role', 'Owner');
           }
 
           alert("Shop Restored Successfully! The app will now reload.");
+          
+          // 4. Force App Brain Refresh
           window.location.reload();
         }
       } catch (err) {
