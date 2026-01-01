@@ -16,6 +16,17 @@ const updateSW = registerSW({
   },
 });
 
+// Force Reload Logic: Detects when a new Service Worker has taken over and reloads the page once
+if ('serviceWorker' in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
+}
+
 // Force HTTPS for compatibility in Production (GCP/Netlify)
 if (
   window.location.protocol !== 'https:' && 
