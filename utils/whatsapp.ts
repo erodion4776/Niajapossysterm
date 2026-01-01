@@ -135,7 +135,6 @@ export const generateStaffInviteKey = async (user: User) => {
   const license_signature = localStorage.getItem('license_signature') || '';
 
   // Fetch current Soft POS settings
-  // Fix: Renamed single-letter variables for clarity and to avoid redeclaration conflicts
   const bankSetting = await db.settings.get('softPosBank');
   const numberSetting = await db.settings.get('softPosNumber');
   const accountSetting = await db.settings.get('softPosAccount');
@@ -277,7 +276,6 @@ export const backupToWhatsApp = async (data: any, excludePhotos = false): Promis
   try {
     const blob = new Blob([compressed], { type: 'application/gzip' });
     const url = URL.createObjectURL(blob);
-    // Fix: Rename 'a' to 'anchor' to avoid confusion with settings variables
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = fileName;
@@ -293,14 +291,22 @@ export const backupToWhatsApp = async (data: any, excludePhotos = false): Promis
   }
 };
 
+/**
+ * Reconcile Staff Sales Logic
+ * Merges Sales, Debts, and Customer Wallets from Staff report into Admin's master ledger.
+ */
 export const reconcileStaffSales = async (staffData: any, adminName: string = 'Admin') => {
   const staffSales = staffData.sales || [];
-  if (staffSales.length === 0) return { success: true, merged: 0, skipped: 0 };
-
+  const staffDebts = staffData.debts || [];
+  const staffCustomers = staffData.customers || [];
+  
   let mergedCount = 0;
   let skippedCount = 0;
+  let debtsAdded = 0;
+  let walletsSynced = 0;
 
-  await db.transaction('rw', [db.inventory, db.sales, db.customers, db.stock_logs], async () => {
+  await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
+    // 1. Process Sales (Merges history and handles stock)
     for (const sale of staffSales) {
       const existing = await db.sales.where('uuid').equals(sale.uuid).first();
       if (existing) {
@@ -316,16 +322,15 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
           const newStock = Math.max(0, (invItem.stock || 0) - item.quantity);
           await db.inventory.update(invItem.id!, { stock: newStock });
           
-          // Log the deduction from reconciliation
           await db.stock_logs.add({
             item_id: invItem.id!,
             itemName: invItem.name,
             quantityChanged: -item.quantity,
             previousStock: invItem.stock,
             newStock: newStock,
-            type: 'Reconciliation Deduction',
+            type: 'Sales Deduction',
             date: Date.now(),
-            staff_name: adminName
+            staff_name: sale.staff_name || adminName
           });
         }
       }
@@ -334,17 +339,77 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
       await db.sales.add(saleWithoutOldId);
       mergedCount++;
     }
+
+    // 2. Process Debts (Duplicate protection via sale_uuid)
+    for (const debt of staffDebts) {
+      let isDuplicate = false;
+      if (debt.sale_uuid) {
+        const existing = await db.debts.where('sale_uuid').equals(debt.sale_uuid).first();
+        if (existing) isDuplicate = true;
+      }
+
+      if (!isDuplicate) {
+        const { id, ...debtWithoutOldId } = debt;
+        await db.debts.add(debtWithoutOldId);
+        debtsAdded++;
+      }
+    }
+
+    // 3. Process Customer Wallets (Sync via phone number and timestamp)
+    for (const sCustomer of staffCustomers) {
+      const existing = await db.customers.where('phone').equals(sCustomer.phone).first();
+      if (existing) {
+        // If staff phone has more recent transaction info, trust its wallet balance
+        if (sCustomer.lastTransaction > existing.lastTransaction) {
+          await db.customers.update(existing.id!, {
+            walletBalance: sCustomer.walletBalance,
+            lastTransaction: sCustomer.lastTransaction,
+            name: sCustomer.name // Keep name current
+          });
+          walletsSynced++;
+        }
+      } else {
+        // New customer found on staff phone
+        const { id, ...custWithoutOldId } = sCustomer;
+        await db.customers.add(custWithoutOldId);
+        walletsSynced++;
+      }
+    }
   });
 
-  return { success: true, merged: mergedCount, skipped: skippedCount };
+  return { 
+    success: true, 
+    merged: mergedCount, 
+    skipped: skippedCount, 
+    debtsAdded, 
+    walletsSynced 
+  };
 };
 
+/**
+ * Export Staff Sales Report
+ * Packaging today's Sales, Debts, and updated Customers for Admin reconciliation.
+ */
 export const exportStaffSalesReport = async (sales: Sale[]) => {
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
   const dateStr = new Date().toISOString().split('T')[0];
   const fileName = `SALES_REPORT_${shopName}_${dateStr}.json.gz`;
+  
+  const startOfDay = new Date().setHours(0,0,0,0);
 
-  const payload = { sales, shopName, type: 'STAFF_REPORT', timestamp: Date.now() };
+  // Fetch today's debts and customers updated today
+  const debts = await db.debts.where('date').aboveOrEqual(startOfDay).toArray();
+  const customers = await db.customers.where('lastTransaction').aboveOrEqual(startOfDay).toArray();
+
+  const payload = { 
+    sales, 
+    debts,
+    customers,
+    shopName, 
+    type: 'STAFF_REPORT', 
+    timestamp: Date.now() 
+  };
+
   const jsonString = JSON.stringify(payload);
   const uint8Data = new TextEncoder().encode(jsonString);
   const compressed = pako.gzip(uint8Data);
@@ -355,7 +420,7 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
       const file = new File([blob], fileName, { type: 'application/gzip' });
       await navigator.share({
         title: `Sales Report: ${shopName}`,
-        text: `Boss, here is my sales report for ${dateStr}.`,
+        text: `Boss, here is my sales report for ${dateStr}. Includes Sales, Debts and Wallet updates.`,
         files: [file]
       });
       return { success: true };
@@ -366,7 +431,6 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
 
   const blob = new Blob([compressed], { type: 'application/gzip' });
   const url = URL.createObjectURL(blob);
-  // Fix: Rename 'a' to 'anchor' to avoid confusion with settings variables
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = fileName;
@@ -388,13 +452,10 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
   const dateStr = new Date().toISOString().split('T')[0];
   const fileName = `NAIJASHOP_UPDATE_${dateStr}.json`;
 
-  // Fetch current Soft POS settings
-  // Fix: Renamed single-letter variables for clarity and to avoid redeclaration conflicts
   const bankSetting = await db.settings.get('softPosBank');
   const numberSetting = await db.settings.get('softPosNumber');
   const accountSetting = await db.settings.get('softPosAccount');
 
-  // Explicitly ensure images are included in the export payload
   const inventoryData = inventory.map(item => ({
     id: item.id,
     name: item.name,
@@ -449,7 +510,6 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
 
   // Fallback to download
   const url = URL.createObjectURL(blob);
-  // Fix: Rename 'a' to 'anchor' to avoid confusion with settings variables (which included 'a' previously)
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = fileName;
@@ -465,8 +525,6 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
 
 /**
  * Merges the inventory update on the staff device
- * Implements 'Smart Merge' logic: protects existing stock unless resetStock is true.
- * Explicitly preserves and updates image data and Soft POS details.
  */
 export const applyInventoryUpdate = async (data: any) => {
   if (data.type !== 'INVENTORY_UPDATE') {
@@ -478,18 +536,15 @@ export const applyInventoryUpdate = async (data: any) => {
   const resetStock = data.resetStock === true;
 
   await db.transaction('rw', [db.inventory, db.categories, db.settings], async () => {
-    // 0. Sync Soft POS Details
     if (data.softPosBank !== undefined) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
     if (data.softPosNumber !== undefined) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
     if (data.softPosAccount !== undefined) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
 
-    // 1. Process Categories (Sync Name and Image)
     if (data.categories) {
       for (const cat of data.categories) {
         const { id, ...catWithoutId } = cat;
         const existing = await db.categories.where('name').equals(cat.name).first();
         if (existing) {
-          // Update category details including image
           await db.categories.update(existing.id!, catWithoutId);
         } else {
           await db.categories.add(catWithoutId);
@@ -497,27 +552,22 @@ export const applyInventoryUpdate = async (data: any) => {
       }
     }
 
-    // 2. Process Inventory (Smart Merge with Image Support)
     if (data.inventory) {
       for (const item of data.inventory) {
         const { id, stock, ...itemData } = item;
         const existing = await db.inventory.get(id);
 
         if (existing) {
-          // Smart Update: Update Price, Name, and IMAGE. 
-          // Preserve local stock unless Boss specifically requested a reset.
           const updatePayload = resetStock ? { ...itemData, stock } : itemData;
           await db.inventory.update(id, updatePayload);
           updated++;
         } else {
-          // If ID mismatch, try matching by name (helps if staff manually added items with same name)
           const byName = await db.inventory.where('name').equals(item.name).first();
           if (byName) {
             const updatePayload = resetStock ? { ...itemData, stock } : itemData;
             await db.inventory.update(byName.id!, updatePayload);
             updated++;
           } else {
-            // Completely New Item: Add with everything including Boss's initial stock levels and image
             const { id: bossId, ...newProduct } = item; 
             await db.inventory.add(newProduct);
             added++;

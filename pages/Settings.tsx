@@ -67,7 +67,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   // Feedback States
   const [showBackupSuccess, setShowBackupSuccess] = useState(false);
   const [backupFileName, setBackupFileName] = useState('');
-  const [reconcileResult, setReconcileResult] = useState<{merged: number, skipped: number} | null>(null);
+  const [reconcileResult, setReconcileResult] = useState<{merged: number, skipped: number, debtsAdded: number, walletsSynced: number} | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reconcileInputRef = useRef<HTMLInputElement>(null);
@@ -134,7 +134,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         users: await db.users.toArray(),
         categories: await db.categories.toArray(),
         settings: await db.settings.toArray(),
-        security: await db.security.toArray(), // Crucial for license restore
+        security: await db.security.toArray(), 
         shopName,
         shopInfo,
         timestamp: Date.now() 
@@ -171,24 +171,18 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
         const data = JSON.parse(jsonStr);
         if (confirm("Replace all local data with this backup? Current records will be deleted!")) {
-          // 1. Clear existing local database state first
           await clearAllData();
-          
-          // 2. Perform Transactional Restore
           await db.transaction('rw', [db.inventory, db.sales, db.expenses, db.debts, db.users, db.categories, db.settings, db.security, db.stock_logs, db.parked_orders], async () => {
-            // Restore Inventory
             if (data.inventory) await db.inventory.bulkAdd(data.inventory);
             if (data.sales) await db.sales.bulkAdd(data.sales);
             if (data.expenses) await db.expenses.bulkAdd(data.expenses);
             if (data.debts) await db.debts.bulkAdd(data.debts);
             
-            // Fix 1: Ensure Users table is properly restored (Clear and bulkAdd)
             await db.users.clear();
             if (data.users && data.users.length > 0) {
               await db.users.bulkAdd(data.users);
             }
             
-            // Fix 4 (Part 1): Admin User Verification
             const finalUserCount = await db.users.count();
             if (finalUserCount === 0) {
               await db.users.add({
@@ -200,18 +194,13 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
             
             if (data.categories) await db.categories.bulkAdd(data.categories);
             if (data.settings) await db.settings.bulkAdd(data.settings);
-            
-            // Restore Security (License) table
             if (data.security) await db.security.bulkAdd(data.security);
-
-            // Restore other tables if present
             if (data.stock_logs) await db.stock_logs.bulkAdd(data.stock_logs);
             if (data.parked_orders) await db.parked_orders.bulkAdd(data.parked_orders);
             
             await db.settings.put({ key: 'is_activated', value: true });
           });
 
-          // Fix 2: Restore critical Setup and Setup State in LocalStorage
           localStorage.setItem('is_activated', 'true');
           localStorage.setItem('is_setup_pending', 'false');
           localStorage.removeItem('is_trialing');
@@ -219,7 +208,6 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           if (data.shopName) localStorage.setItem('shop_name', data.shopName);
           if (data.shopInfo) localStorage.setItem('shop_info', data.shopInfo);
           
-          // Restore license info from security table in the backup data
           const security = data.security || [];
           const expiryEntry = security.find((s: any) => s.key === 'license_expiry');
           const sigEntry = security.find((s: any) => s.key === 'license_signature');
@@ -227,15 +215,11 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           if (expiryEntry) localStorage.setItem('license_expiry', expiryEntry.value);
           if (sigEntry) localStorage.setItem('license_signature', sigEntry.value);
           
-          // Ensure device role is preserved
           if (!localStorage.getItem('device_role')) {
              localStorage.setItem('device_role', 'Owner');
           }
 
-          // Fix 4 (Part 2): Confirmation Message
           alert("Backup Restored Successfully. App is restarting...");
-          
-          // Fix 3: Force App Brain Reset
           window.location.reload();
         }
       } catch (err) {
@@ -352,7 +336,12 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         const decompressed = pako.ungzip(new Uint8Array(result as ArrayBuffer));
         const staffData = JSON.parse(new TextDecoder().decode(decompressed));
         const report = await reconcileStaffSales(staffData, user.name || 'Admin');
-        setReconcileResult({ merged: report.merged, skipped: report.skipped });
+        setReconcileResult({ 
+          merged: report.merged, 
+          skipped: report.skipped, 
+          debtsAdded: report.debtsAdded, 
+          walletsSynced: report.walletsSynced 
+        });
       } catch (err) {
         alert('Merge failed. Ensure file is a valid Staff Report.');
       } finally {
@@ -406,7 +395,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         <Download size={20} />
       </button>
 
-      {/* Support & Resources - NEW */}
+      {/* Support & Resources */}
       <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 bg-blue-50 dark:bg-blue-800 rounded-xl text-blue-600 dark:text-blue-300">
@@ -448,7 +437,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         </div>
       </section>
 
-      {/* Inventory Sync Section - NEW */}
+      {/* Inventory Sync Section */}
       <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
         <div className="flex items-center gap-3 mb-2">
           <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600 dark:text-emerald-300">
@@ -687,14 +676,19 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
             </div>
             
             {reconcileResult && (
-               <div className="bg-emerald-50 dark:bg-emerald-900/40 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/40 flex items-center justify-between animate-in zoom-in duration-300">
-                 <div className="flex items-center gap-2">
-                   <CheckCircle2 size={16} className="text-emerald-500" />
-                   <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-widest">
-                     Synced: {reconcileResult.merged} | Skipped: {reconcileResult.skipped}
-                   </span>
+               <div className="bg-emerald-50 dark:bg-emerald-900/40 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/40 flex flex-col gap-1 animate-in zoom-in duration-300">
+                 <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-emerald-500" />
+                      <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-tight italic">
+                        Merge Complete!
+                      </span>
+                    </div>
+                    <button onClick={() => setReconcileResult(null)} className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Dismiss</button>
                  </div>
-                 <button onClick={() => setReconcileResult(null)} className="text-[9px] font-bold text-emerald-400">Clear</button>
+                 <p className="text-[9px] font-bold text-emerald-700/70 dark:text-emerald-500/60 uppercase tracking-wide leading-relaxed pl-6">
+                    Added {reconcileResult.merged} Sales, {reconcileResult.debtsAdded} New Debts, and updated {reconcileResult.walletsSynced} Wallets.
+                 </p>
                </div>
             )}
 

@@ -80,6 +80,7 @@ export interface Expense {
 
 export interface Debt {
   id?: string | number;
+  sale_uuid?: string; // Links debt to specific POS transaction for sync
   customerName: string;
   customerPhone: string;
   totalAmount: number;
@@ -138,7 +139,7 @@ dexieDb.version(22).stores({
   security: 'key',
   users: '++id, name, pin, role',
   expenses: '++id, date, amount',
-  debts: '++id, customerName, customerPhone, status, date, remainingBalance',
+  debts: '++id, customerName, customerPhone, status, date, remainingBalance, sale_uuid',
   stock_logs: '++id, item_id, itemName, type, date, staff_name',
   parked_orders: '++id, timestamp, staff_id'
 });
