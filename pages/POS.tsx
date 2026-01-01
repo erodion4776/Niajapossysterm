@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, SaleItem, Sale, InventoryItem, User as DBUser, Customer, Debt, Category, ParkedOrder } from '../db.ts';
@@ -36,6 +35,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const [showParkedList, setShowParkedList] = useState(false);
   const [showParkModal, setShowParkModal] = useState(false);
   const [parkNote, setParkNote] = useState('');
+  const [showParkedToast, setShowParkedToast] = useState(false);
 
   // Checkout Configuration
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'Transfer' | 'Card' | 'Debt'>('Cash');
@@ -165,7 +165,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
       await db.parked_orders.add({
         cartItems: cart,
         total: saleTotal,
-        customerNote: parkNote || 'No Note',
+        customerNote: parkNote || 'Unnamed Customer',
         timestamp: Date.now(),
         staff_id: String(user.id || user.role)
       });
@@ -173,6 +173,8 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
       setParkNote('');
       setShowParkModal(false);
       setIsCartExpanded(false);
+      setShowParkedToast(true);
+      setTimeout(() => setShowParkedToast(false), 2500);
       if (navigator.vibrate) navigator.vibrate(100);
     } catch (err) {
       alert("Failed to park order");
@@ -428,6 +430,16 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
         />
       )}
 
+      {/* Success Toast for Parked Order */}
+      {showParkedToast && (
+        <div className="fixed top-12 inset-x-0 flex justify-center z-[1000] pointer-events-none">
+          <div className="bg-amber-600 text-white px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in slide-in-from-top duration-300">
+             <div className="bg-white/20 p-1.5 rounded-full"><CheckCircle size={16} /></div>
+             <p className="font-black text-xs uppercase tracking-widest">Order Parked Successfully</p>
+          </div>
+        </div>
+      )}
+
       <div className={`p-4 space-y-4 flex-1 overflow-auto transition-all ${cart.length > 0 ? 'pb-40' : 'pb-24'}`}>
         <header className="flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -551,7 +563,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                 </div>
                 {!isCartExpanded && (
                    <div className="flex gap-2">
-                      <button onClick={(e) => { e.stopPropagation(); setShowParkModal(true); }} className="bg-amber-500 text-white px-4 py-2.5 rounded-2xl font-black text-[10px] uppercase flex items-center gap-1.5"><Pause size={14}/> Hold</button>
+                      <button onClick={(e) => { e.stopPropagation(); setShowParkModal(true); }} className="bg-amber-500 text-white px-4 py-2.5 rounded-2xl font-black text-[10px] uppercase flex items-center gap-1.5 active:scale-95 transition-all"><Pause size={14}/> Hold</button>
                       <div className="bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase">Checkout <ChevronUp size={14} className="inline ml-1" /></div>
                    </div>
                 )}
