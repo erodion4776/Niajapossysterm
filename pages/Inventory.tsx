@@ -7,7 +7,8 @@ import {
   Plus, Search, Package, Edit3, X, Trash2, 
   Camera, LayoutGrid, List, Image as ImageIcon, Loader2,
   Tag, ShieldAlert, TrendingUp, AlertTriangle, CheckCircle2,
-  ChevronRight, ArrowRight, History, Barcode, Calendar, Scan
+  ChevronRight, ArrowRight, History, Barcode, Calendar, Scan,
+  Truck, HelpCircle
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { ExpiryScanner } from '../components/ExpiryScanner.tsx';
@@ -20,6 +21,8 @@ interface InventoryProps {
   clearInitialFilter?: () => void;
   setPage: (page: Page) => void;
 }
+
+const NAIJA_UNITS = ['Pcs', 'Packs', 'Cartons', 'Bags', 'Tins', 'Sachets', 'Kg'];
 
 export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter = 'all', clearInitialFilter, setPage }) => {
   const isStaff = localStorage.getItem('user_role') === 'staff';
@@ -59,6 +62,8 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     costPrice: 0,
     sellingPrice: 0,
     stock: 0,
+    unit: 'Pcs',
+    supplierName: '',
     minStock: 5,
     expiryDate: '',
     category: 'Uncategorized',
@@ -115,11 +120,12 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
         newStock: formData.stock,
         type: 'Addition',
         date: Date.now(),
-        staff_name: user.name || user.role
+        staff_name: user.name || user.role,
+        supplierName: formData.supplierName
       });
     });
 
-    setFormData({ name: '', costPrice: 0, sellingPrice: 0, stock: 0, minStock: 5, expiryDate: '', category: 'Uncategorized', barcode: '', image: '' });
+    setFormData({ name: '', costPrice: 0, sellingPrice: 0, stock: 0, unit: 'Pcs', supplierName: '', minStock: 5, expiryDate: '', category: 'Uncategorized', barcode: '', image: '' });
     setShowAddModal(false);
   };
 
@@ -144,7 +150,8 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
           newStock: editingItem.stock,
           type: 'Manual Update',
           date: Date.now(),
-          staff_name: user.name || user.role
+          staff_name: user.name || user.role,
+          supplierName: editingItem.supplierName
         });
       }
     });
@@ -252,6 +259,13 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     return categories?.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())) || [];
   }, [categories, searchTerm]);
 
+  // Real-time Profit Calculation for Add/Edit
+  const calculateProfitData = (cost: number, selling: number) => {
+    const profit = selling - cost;
+    const margin = selling > 0 ? ((profit / selling) * 100).toFixed(1) : '0';
+    return { profit, margin };
+  };
+
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-300">
       {showScanner && <ExpiryScanner onDateFound={d => {
@@ -346,7 +360,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                   <div className="p-4 space-y-1">
                     <h3 className="font-bold text-slate-800 dark:text-emerald-50 text-xs line-clamp-1">{item.name}</h3>
                     <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm">{formatNaira(item.sellingPrice)}</p>
-                    <span className={`text-[8px] font-black px-2 py-1 rounded-full uppercase ${isLow ? 'bg-orange-100 text-orange-600' : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600'}`}>{item.stock} left</span>
+                    <span className={`text-[8px] font-black px-2 py-1 rounded-full uppercase ${isLow ? 'bg-orange-100 text-orange-600' : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600'}`}>{item.stock} {item.unit || 'Pcs'} left</span>
                   </div>
                 </button>
               );
@@ -364,7 +378,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold text-slate-800 dark:text-emerald-50 text-sm truncate">{item.name}</h3>
-                  <div className="flex items-center gap-2 mt-0.5"><p className="text-emerald-600 dark:text-emerald-400 font-black text-sm">{formatNaira(item.sellingPrice)}</p><span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${isLow ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 dark:bg-emerald-950 text-gray-500'}`}>{item.stock} in stock</span></div>
+                  <div className="flex items-center gap-2 mt-0.5"><p className="text-emerald-600 dark:text-emerald-400 font-black text-sm">{formatNaira(item.sellingPrice)}</p><span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${isLow ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 dark:bg-emerald-950 text-gray-500'}`}>{item.stock} {item.unit || 'Pcs'} in stock</span></div>
                 </div>
                 {isAdmin && <Edit3 size={16} className="text-gray-200" />}
               </button>
@@ -418,55 +432,130 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                   </div>
                   <input type="file" accept="image/*" className="hidden" id="add-img" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'product-add')} />
                   <label htmlFor="add-img" className="absolute -bottom-2 -right-2 bg-emerald-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 transition-all cursor-pointer"><Camera size={18} /></label>
-                  {formData.image && <button type="button" onClick={() => removeImage('product-add')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-xl shadow-lg active:scale-90 transition-all"><Trash2 size={14}/></button>}
+                  {formData.image && <button type="button" onClick={() => removeImage('product-add')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-xl shadow-lg active:scale-90 transition-all"><X size={14}/></button>}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Product Name</label>
-                  <input required className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Peak Milk Tin" />
+                  <div className="relative">
+                    <input 
+                      required 
+                      className="w-full p-4 pr-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={formData.name} 
+                      onChange={e => setFormData({...formData, name: e.target.value})} 
+                      placeholder="e.g. Peak Milk Tin" 
+                    />
+                    {formData.name && (
+                      <button 
+                        type="button" 
+                        onClick={() => setFormData({...formData, name: ''})} 
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500 transition-colors"
+                      >
+                        <X size={18} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Cost Price (₦)</label>
-                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.costPrice || ''} onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} />
+                    <input 
+                      required 
+                      type="number" 
+                      inputMode="decimal"
+                      className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={formData.costPrice || ''} 
+                      onChange={e => setFormData({...formData, costPrice: Number(e.target.value)})} 
+                    />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Selling Price (₦)</label>
-                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.sellingPrice || ''} onChange={e => setFormData({...formData, sellingPrice: Number(e.target.value)})} />
+                    <input 
+                      required 
+                      type="number" 
+                      inputMode="decimal"
+                      className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={formData.sellingPrice || ''} 
+                      onChange={e => setFormData({...formData, sellingPrice: Number(e.target.value)})} 
+                    />
+                    {formData.costPrice > 0 && formData.sellingPrice > 0 && (() => {
+                      const { profit, margin } = calculateProfitData(formData.costPrice, formData.sellingPrice);
+                      const isLoss = profit < 0;
+                      return (
+                        <p className={`text-[10px] font-black uppercase tracking-tight ml-2 mt-1 ${isLoss ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {isLoss ? '⚠️ Warning: Selling at a loss!' : `💰 Expected Profit: ${formatNaira(profit)} (${margin}%)`}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">In Stock</label>
-                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.stock || ''} onChange={e => setFormData({...formData, stock: Number(e.target.value)})} />
+                    <div className="flex gap-2">
+                      <input 
+                        required 
+                        type="number" 
+                        inputMode="numeric"
+                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                        value={formData.stock || ''} 
+                        onChange={e => setFormData({...formData, stock: Number(e.target.value)})} 
+                      />
+                      <select 
+                        className="bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none px-2 text-[10px] uppercase tracking-widest focus:ring-2 focus:ring-emerald-500"
+                        value={formData.unit}
+                        onChange={e => setFormData({...formData, unit: e.target.value})}
+                      >
+                        {NAIJA_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Alert Level</label>
-                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.minStock || ''} onChange={e => setFormData({...formData, minStock: Number(e.target.value)})} />
+                    <input 
+                      required 
+                      type="number" 
+                      inputMode="numeric"
+                      className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={formData.minStock || ''} 
+                      onChange={e => setFormData({...formData, minStock: Number(e.target.value)})} 
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                    <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Category</label>
-                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs focus:ring-2 focus:ring-emerald-500" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
                       {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Expiry Date</label>
                     <div className="flex gap-2">
-                      <input type="date" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs" value={formData.expiryDate} onChange={e => setFormData({...formData, expiryDate: e.target.value})} />
+                      <input type="date" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs focus:ring-2 focus:ring-emerald-500" value={formData.expiryDate} onChange={e => setFormData({...formData, expiryDate: e.target.value})} />
                       <button type="button" onClick={() => setShowScanner('add')} className="p-4 bg-emerald-100 dark:bg-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-2xl active:scale-90"><Scan size={20}/></button>
                     </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Supplier Name (Optional)</label>
+                  <div className="relative">
+                    <Truck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                    <input 
+                      className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={formData.supplierName} 
+                      onChange={e => setFormData({...formData, supplierName: e.target.value})} 
+                      placeholder="e.g. Alh. Ganiyu Supplies" 
+                    />
                   </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Barcode (Optional)</label>
                   <div className="relative">
                     <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan or type barcode" />
+                    <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan or type barcode" />
                   </div>
                 </div>
               </div>
@@ -501,55 +590,126 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                   </div>
                   <input type="file" accept="image/*" className="hidden" id="edit-img" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'product-edit')} />
                   <label htmlFor="edit-img" className="absolute -bottom-2 -right-2 bg-emerald-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 cursor-pointer"><Camera size={18} /></label>
-                  {editingItem.image && <button type="button" onClick={() => removeImage('product-edit')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-xl shadow-lg active:scale-90"><Trash2 size={14}/></button>}
+                  {editingItem.image && <button type="button" onClick={() => removeImage('product-edit')} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-xl shadow-lg active:scale-90 transition-all"><X size={14}/></button>}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Product Name</label>
-                  <input required className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
+                  <div className="relative">
+                    <input 
+                      required 
+                      className="w-full p-4 pr-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={editingItem.name} 
+                      onChange={e => setEditingItem({...editingItem, name: e.target.value})} 
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setEditingItem({...editingItem, name: ''})} 
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500 transition-colors"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Cost Price (₦)</label>
-                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.costPrice || ''} onChange={e => setEditingItem({...editingItem, costPrice: Number(e.target.value)})} />
+                    <input 
+                      required 
+                      type="number" 
+                      inputMode="decimal"
+                      className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={editingItem.costPrice || ''} 
+                      onChange={e => setEditingItem({...editingItem, costPrice: Number(e.target.value)})} 
+                    />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Selling Price (₦)</label>
-                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.sellingPrice || ''} onChange={e => setEditingItem({...editingItem, sellingPrice: Number(e.target.value)})} />
+                    <input 
+                      required 
+                      type="number" 
+                      inputMode="decimal"
+                      className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={editingItem.sellingPrice || ''} 
+                      onChange={e => setEditingItem({...editingItem, sellingPrice: Number(e.target.value)})} 
+                    />
+                    {editingItem.costPrice > 0 && editingItem.sellingPrice > 0 && (() => {
+                      const { profit, margin } = calculateProfitData(editingItem.costPrice, editingItem.sellingPrice);
+                      const isLoss = profit < 0;
+                      return (
+                        <p className={`text-[10px] font-black uppercase tracking-tight ml-2 mt-1 ${isLoss ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {isLoss ? '⚠️ Warning: Selling at a loss!' : `💰 Expected Profit: ${formatNaira(profit)} (${margin}%)`}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Current Stock</label>
-                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.stock || ''} onChange={e => setEditingItem({...editingItem, stock: Number(e.target.value)})} />
+                    <div className="flex gap-2">
+                      <input 
+                        required 
+                        type="number" 
+                        inputMode="numeric"
+                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                        value={editingItem.stock || ''} 
+                        onChange={e => setEditingItem({...editingItem, stock: Number(e.target.value)})} 
+                      />
+                      <select 
+                        className="bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none px-2 text-[10px] uppercase tracking-widest focus:ring-2 focus:ring-emerald-500"
+                        value={editingItem.unit || 'Pcs'}
+                        onChange={e => setEditingItem({...editingItem, unit: e.target.value})}
+                      >
+                        {NAIJA_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Alert Level</label>
-                    <input required type="number" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.minStock || ''} onChange={e => setEditingItem({...editingItem, minStock: Number(e.target.value)})} />
+                    <input 
+                      required 
+                      type="number" 
+                      inputMode="numeric"
+                      className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={editingItem.minStock || ''} 
+                      onChange={e => setEditingItem({...editingItem, minStock: Number(e.target.value)})} 
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                    <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Category</label>
-                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
+                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs focus:ring-2 focus:ring-emerald-500" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
                       {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Expiry Date</label>
                     <div className="flex gap-2">
-                      <input type="date" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs" value={editingItem.expiryDate} onChange={e => setEditingItem({...editingItem, expiryDate: e.target.value})} />
+                      <input type="date" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs focus:ring-2 focus:ring-emerald-500" value={editingItem.expiryDate} onChange={e => setEditingItem({...editingItem, expiryDate: e.target.value})} />
                       <button type="button" onClick={() => setShowScanner('edit')} className="p-4 bg-emerald-100 dark:bg-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-2xl active:scale-90"><Scan size={20}/></button>
                     </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Supplier Name (Optional)</label>
+                  <div className="relative">
+                    <Truck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                    <input 
+                      className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={editingItem.supplierName || ''} 
+                      onChange={e => setEditingItem({...editingItem, supplierName: e.target.value})} 
+                    />
                   </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Barcode</label>
                   <div className="relative">
                     <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none" value={editingItem.barcode} onChange={e => setEditingItem({...editingItem, barcode: e.target.value})} />
+                    <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={editingItem.barcode} onChange={e => setEditingItem({...editingItem, barcode: e.target.value})} />
                   </div>
                 </div>
               </div>
@@ -570,7 +730,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       {/* Category Modal */}
       {showCatModal && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">New Category</h2>
               <button onClick={() => setShowCatModal(false)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20} /></button>
@@ -603,7 +763,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       {/* Edit Category Modal */}
       {editingCat && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Edit Category</h2>
               <button onClick={() => setEditingCat(null)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20} /></button>

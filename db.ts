@@ -14,6 +14,8 @@ export interface InventoryItem {
   costPrice: number;
   sellingPrice: number;
   stock: number;
+  unit?: string; // New: Pcs, Packs, etc.
+  supplierName?: string; // New: Restock tracking
   minStock?: number;
   expiryDate?: string;
   category: string;
@@ -102,6 +104,7 @@ export interface StockLog {
   type: 'Addition' | 'Manual Update' | 'Sales Deduction' | 'Reconciliation Deduction';
   date: number;
   staff_name: string;
+  supplierName?: string; // New: Log supplier info on restock
 }
 
 export interface Setting {
@@ -130,8 +133,8 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(23).stores({
-  inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock',
+dexieDb.version(24).stores({
+  inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock, unit, supplierName',
   categories: '++id, name',
   customers: '++id, &phone, name, walletBalance, lastTransaction',
   sales: '++id, uuid, timestamp, total, staff_id, staff_name, customer_phone',
