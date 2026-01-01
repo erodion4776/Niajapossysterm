@@ -1,4 +1,3 @@
-
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -6,7 +5,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'prompt',
-      injectRegister: 'inline',
+      injectRegister: 'auto',
       workbox: {
         skipWaiting: true,
         clientsClaim: true,

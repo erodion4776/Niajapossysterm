@@ -1,4 +1,3 @@
-
 import React from 'react';
 // @ts-ignore - handled by vite-plugin-pwa
 import { useRegisterSW } from 'virtual:pwa-register/react';
@@ -11,6 +10,12 @@ export const UpdatePrompt: React.FC = () => {
   } = useRegisterSW({
     onRegistered(r) {
       console.log('PWA: Service Worker Registered');
+      // Background check for updates every 60 minutes
+      if (r) {
+        setInterval(() => {
+          r.update();
+        }, 60 * 60 * 1000);
+      }
     },
     onRegisterError(error) {
       console.error('PWA: Registration failed', error);
@@ -22,6 +27,7 @@ export const UpdatePrompt: React.FC = () => {
   };
 
   const handleUpdate = () => {
+    // Triggers the skipWaiting and reload logic
     updateServiceWorker(true);
   };
 
