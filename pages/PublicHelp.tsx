@@ -11,9 +11,9 @@ const HELP_SECTIONS = [
     category: "Getting Started",
     icon: <Zap className="text-amber-500" size={20} />,
     items: [
-      { q: "How do I install NaijaShop?", a: "On Android, open Chrome and visit the app link. Tap the 'Install' button or the 3 dots in the corner and select 'Add to Home Screen'. On iOS, tap the Share icon and select 'Add to Home Screen'." },
-      { q: "Setting up your first Admin PIN", a: "When you first launch the app as a Shop Owner, you'll receive a 6-digit verification code. After verification, you can create your secret 4-digit Admin PIN to lock your records." },
-      { q: "Adding your first product", a: "Go to the 'Stock' tab, tap the '+' button. Enter the product name, cost price, and selling price. You can also snap a photo of the product for better tracking." }
+      { q: "How do I install NaijaShop?", a: "On Android, open Chrome and visit the app link. Tap the 'Install' button or the 3 dots in the corner and select 'Add to Home Screen'. On iOS, tap the Share icon and select 'Add to Home Screen'. This makes the app work 100% offline." },
+      { q: "Setting up your first Admin PIN", a: "When you first launch the app as a Shop Owner, you'll receive a 6-digit verification code. After verification, you can create your secret 4-digit Admin PIN to lock your records from staff." },
+      { q: "Adding your first product", a: "Go to the 'Stock' tab, tap the '+' button. Enter the product name, cost price, and selling price. You can also snap a photo of the product or use the AI scanner for expiry dates." }
     ]
   },
   {
@@ -21,32 +21,32 @@ const HELP_SECTIONS = [
     icon: <Package className="text-emerald-500" size={20} />,
     items: [
       { q: "How to use Soft POS?", a: "In the POS cart, select 'Transfer'. The app will display your bank details (set up in Admin Settings) to the customer. Once you confirm the alert on your bank app, tap 'YES, ALERT RECEIVED' in NaijaShop." },
-      { q: "Recording partial payments", a: "If a customer pays part cash and owes the rest, choose 'Cash' as payment and enter the amount paid. The app will detect the underpayment and automatically record the balance as Debt." },
-      { q: "Sharing WhatsApp receipts", a: "After every sale, tap the 'WhatsApp' button. The app generates a professional, branded text receipt that you can send directly to your customer's number." }
+      { q: "Recording partial payments", a: "If a customer pays part cash and owes the rest, choose 'Cash' as payment and enter the amount paid. The app will detect the underpayment and automatically record the balance in the Debt Book." },
+      { q: "Sharing WhatsApp receipts", a: "After every sale, tap the 'WhatsApp' button. The app generates a professional, branded text receipt that you can send directly to your customer's number, saving you money on paper." }
     ]
   },
   {
     category: "Inventory & AI",
     icon: <Info className="text-blue-500" size={20} />,
     items: [
-      { q: "Using the AI Expiry Scanner", a: "When adding or editing an item, tap the camera icon next to Expiry Date. Point your camera at the 'EXP' text on the product. Our AI will read the date automatically and fill the form." },
-      { q: "Bulk Inflation Protection", a: "Fuel price go up? Go to Stock > TrendingUp Icon. You can increase prices for your entire shop or a specific category by a percentage (e.g. 10%) or fixed amount instantly." }
+      { q: "Using the AI Expiry Scanner", a: "When adding or editing an item, tap the camera icon next to Expiry Date. Point your camera at the 'EXP' text on the product. Our AI will read the date automatically and fill the form to help you avoid losses." },
+      { q: "Bulk Inflation Protection", a: "Fuel or Dollar price go up? Go to Stock > TrendingUp Icon. You can increase prices for your entire shop or a specific category by a percentage (e.g. 10%) or fixed amount instantly." }
     ]
   },
   {
     category: "Security & Staff",
     icon: <Lock className="text-purple-500" size={20} />,
     items: [
-      { q: "How to clone to staff phones?", a: "In Admin Settings, add a 'Staff' user. Tap the share icon next to their name to generate an 'Invite Code'. On the staff phone, they should choose 'Staff Member' on setup and paste that code." },
-      { q: "Admin vs Staff roles", a: "Admins can delete sales, change prices, and see total profits. Staff can only record sales, view stock, and see their own sales for the day. They cannot delete anything." }
+      { q: "How to clone to staff phones?", a: "In Admin Settings, add a 'Staff' user. Tap the share icon next to their name to generate an 'Invite Code'. On the staff phone, they should choose 'Staff Member' on setup and paste that code. They get the inventory but not your profits." },
+      { q: "Admin vs Staff roles", a: "Admins can delete sales, change prices, and see total profits. Staff can only record sales, view stock, and see their own sales for the day. They cannot delete anything to hide money." }
     ]
   },
   {
     category: "Troubleshooting",
     icon: <RefreshCw className="text-red-500" size={20} />,
     items: [
-      { q: "Fixing 'Site not found'", a: "This usually means your browser cache was cleared. Re-visit the original link and ensure you have 'Installed' the app to your home screen for better stability." },
-      { q: "Restoring from WhatsApp backup", a: "Go to Admin Settings > Database Icon (Restore). Select the .json.gz file from your phone's Downloads folder (the one you sent to yourself on WhatsApp). Everything will come back instantly." }
+      { q: "Fixing 'Site not found'", a: "This usually means your browser cache was cleared. Ensure you have 'Installed' the app to your home screen. Re-visit the link and tap 'Add to Home Screen' for the most stable experience." },
+      { q: "Restoring from WhatsApp backup", a: "Go to Admin Settings > Database Icon (Restore). Select the .json.gz file from your phone's Downloads folder. Your entire business history comes back in 1 second." }
     ]
   }
 ];
@@ -61,7 +61,7 @@ export const PublicHelp: React.FC<PublicHelpProps> = ({ onBack }) => {
     <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto pb-24">
       <header className="p-6 bg-white dark:bg-emerald-900 border-b border-slate-100 dark:border-emerald-800 sticky top-0 z-50">
         <div className="flex items-center gap-4 mb-6">
-          <button onClick={onBack} className="p-2 bg-slate-50 dark:bg-emerald-800 rounded-xl text-slate-400">
+          <button onClick={onBack} className="p-2 bg-slate-50 dark:bg-emerald-800 rounded-xl text-slate-400 active:scale-90 transition-all">
             <ArrowLeft size={24} />
           </button>
           <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 italic">Help Center</h1>
@@ -71,7 +71,7 @@ export const PublicHelp: React.FC<PublicHelpProps> = ({ onBack }) => {
           <input 
             type="text" 
             placeholder="Search documentation..."
-            className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
