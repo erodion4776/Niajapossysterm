@@ -33,7 +33,7 @@ import {
   Loader2, RefreshCw
 } from 'lucide-react';
 
-const ALLOWED_DOMAIN = 'niajapos.netlify.app';
+const ALLOWED_DOMAINS = ['naijashop.com.ng', 'niajapos.netlify.app'];
 const TRIAL_DURATION = 3 * 24 * 60 * 60 * 1000; 
 
 const AppContent: React.FC = () => {
@@ -131,9 +131,14 @@ const AppContent: React.FC = () => {
 
     const startup = async () => {
       const hostname = window.location.hostname;
-      if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== ALLOWED_DOMAIN && !hostname.endsWith('.webcontainer.io')) {
+      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+      const isDevEnv = hostname.endsWith('.webcontainer.io');
+      const isAuthorized = ALLOWED_DOMAINS.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+
+      if (!isLocal && !isDevEnv && !isAuthorized) {
         setIsPirated(true);
       }
+
       await initTrialDate();
       const dbMaxTime = await db.security.get('max_time_reached');
       const lsMaxTime = parseInt(localStorage.getItem('max_time_reached') || '0');
@@ -184,6 +189,7 @@ const AppContent: React.FC = () => {
     <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]">
       <ShieldAlert size={80} className="text-red-500 mb-6 animate-pulse" />
       <h1 className="text-4xl font-black mb-4 uppercase leading-none">Access Denied</h1>
+      <p className="text-red-200 opacity-60 text-xs font-bold uppercase tracking-widest">Unauthorized Domain Detected</p>
     </div>
   );
 
