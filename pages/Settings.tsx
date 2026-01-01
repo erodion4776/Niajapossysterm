@@ -182,11 +182,20 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
             if (data.expenses) await db.expenses.bulkAdd(data.expenses);
             if (data.debts) await db.debts.bulkAdd(data.debts);
             
-            // Fix: Ensure Users table is properly restored from backupData.users
-            // Calling clear again within transaction for absolute certainty
+            // Fix 1: Ensure Users table is properly restored (Clear and bulkAdd)
             await db.users.clear();
             if (data.users && data.users.length > 0) {
               await db.users.bulkAdd(data.users);
+            }
+            
+            // Fix 4 (Part 1): Admin User Verification
+            const finalUserCount = await db.users.count();
+            if (finalUserCount === 0) {
+              await db.users.add({
+                name: 'Admin',
+                pin: '1234',
+                role: 'Admin'
+              });
             }
             
             if (data.categories) await db.categories.bulkAdd(data.categories);
@@ -202,7 +211,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
             await db.settings.put({ key: 'is_activated', value: true });
           });
 
-          // 3. Restore critical Setup and Setup State in LocalStorage
+          // Fix 2: Restore critical Setup and Setup State in LocalStorage
           localStorage.setItem('is_activated', 'true');
           localStorage.setItem('is_setup_pending', 'false');
           localStorage.removeItem('is_trialing');
@@ -223,9 +232,10 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
              localStorage.setItem('device_role', 'Owner');
           }
 
-          alert("Shop Restored Successfully! The app will now reload.");
+          // Fix 4 (Part 2): Confirmation Message
+          alert("Backup Restored Successfully. App is restarting...");
           
-          // 4. Force App Brain Refresh
+          // Fix 3: Force App Brain Reset
           window.location.reload();
         }
       } catch (err) {
