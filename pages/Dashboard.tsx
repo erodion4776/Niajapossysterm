@@ -46,8 +46,9 @@ interface DashboardProps {
 type DatePreset = 'today' | 'yesterday' | 'thisMonth' | 'lastMonth' | 'allTime' | 'custom';
 
 export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventoryFilter }) => {
-  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
-  const isAdmin = role === 'Admin' && !isStaffDevice;
+  const isStaff = localStorage.getItem('user_role') === 'staff';
+  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice' || isStaff;
+  const isAdmin = role === 'Admin' && !isStaffDevice && !isStaff;
   
   const [datePreset, setDatePreset] = useState<DatePreset>('today');
   const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);

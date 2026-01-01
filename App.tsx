@@ -59,6 +59,9 @@ const AppContent: React.FC = () => {
   const [licenseExpiry, setLicenseExpiry] = useState<string | null>(() => localStorage.getItem('license_expiry'));
   const [isExpired, setIsExpired] = useState(false);
 
+  // CRITICAL Lockdown Check
+  const isStaff = localStorage.getItem('user_role') === 'staff';
+
   const trialStartDate = localStorage.getItem('trial_start_date');
   const isTrialValid = trialStartDate ? (Date.now() - parseInt(trialStartDate)) < TRIAL_DURATION : false;
   
@@ -213,19 +216,19 @@ const AppContent: React.FC = () => {
   }
   if (!currentUser) return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || 'StaffDevice'} />;
 
-  const isStaffDevice = deviceRole === 'StaffDevice';
+  const isStaffDevice = deviceRole === 'StaffDevice' || isStaff;
   const renderPage = () => {
     switch (currentPage) {
       case Page.DASHBOARD: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
       case Page.INVENTORY: return <Inventory user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} initialFilter={inventoryFilter} clearInitialFilter={() => navigateTo(Page.INVENTORY, 'all')} setPage={navigateTo} />;
       case Page.POS: return <POS user={currentUser} setNavHidden={setIsNavHidden} />;
       case Page.SALES: return <Sales role={isStaffDevice ? 'Staff' : currentUser.role} />;
-      case Page.DEBTS: return <Debts role={isStaffDevice ? 'Staff' : currentUser.role} />;
+      case Page.DEBTS: return isStaff ? <Dashboard setPage={navigateTo} role="Staff" onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} /> : <Debts role={currentUser.role} />;
       case Page.STOCK_LOGS: return <StockLogs setPage={navigateTo} />;
-      case Page.EXPENSES: return <Expenses role={isStaffDevice ? 'Staff' : currentUser.role} setPage={navigateTo} />;
+      case Page.EXPENSES: return isStaff ? <Dashboard setPage={navigateTo} role="Staff" onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} /> : <Expenses role={currentUser.role} setPage={navigateTo} />;
       case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} />;
       case Page.FAQ: return <FAQ setPage={navigateTo} />;
-      case Page.CUSTOMERS: return <Customers setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} />;
+      case Page.CUSTOMERS: return isStaff ? <Dashboard setPage={navigateTo} role="Staff" onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} /> : <Customers setPage={navigateTo} role={currentUser.role} />;
       case Page.CATEGORY_MANAGER: return <CategoryManager setPage={navigateTo} />;
       default: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
     }
@@ -249,16 +252,20 @@ const AppContent: React.FC = () => {
           <button onClick={() => navigateTo(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
             <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Sales</span>
           </button>
-          <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-            <BookOpen size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Debts</span>
-          </button>
-          <button onClick={() => navigateTo(Page.CUSTOMERS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.CUSTOMERS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-            <Wallet size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Wallet</span>
-          </button>
-          {!isStaffDevice && currentUser?.role === 'Admin' && (
-            <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <SettingsIcon size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Admin</span>
-            </button>
+          
+          {/* Lockdown for Staff: Hide Debts, Wallet, and Admin */}
+          {!isStaff && (
+            <>
+              <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+                <BookOpen size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Debts</span>
+              </button>
+              <button onClick={() => navigateTo(Page.CUSTOMERS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.CUSTOMERS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+                <Wallet size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Wallet</span>
+              </button>
+              <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SETTINGS || currentPage === Page.FAQ ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+                <SettingsIcon size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Admin</span>
+              </button>
+            </>
           )}
         </nav>
       )}

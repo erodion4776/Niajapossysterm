@@ -3,7 +3,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData, User } from '../db.ts';
 import { decodeShopKey } from '../utils/whatsapp.ts';
-import { User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X, RefreshCw, LogIn } from 'lucide-react';
+import { User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X, RefreshCw, LogIn, AlertCircle } from 'lucide-react';
 import { DeviceRole } from '../types.ts';
 
 interface LoginScreenProps {
@@ -22,7 +22,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
   const [isProcessing, setIsProcessing] = useState(false);
 
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const isStaffDevice = deviceRole === 'StaffDevice';
+  const isStaffDevice = deviceRole === 'StaffDevice' || localStorage.getItem('user_role') === 'staff';
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
 
   const displayUsers = useMemo(() => {
@@ -59,35 +59,56 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
   };
 
   const handleImportKey = async () => {
-    const data = decodeShopKey(importKey);
+    let data;
+    try {
+      data = decodeShopKey(importKey);
+    } catch (err) {
+      setImportError('❌ Invalid Invite Key. Please ask your Boss to send a new one.');
+      return;
+    }
+
     if (!data) {
-      setImportError('Invalid Key. Please check the code from Boss.');
+      setImportError('❌ Invalid Invite Key. Please ask your Boss to send a new one.');
       return;
     }
 
     if (data.type === 'STAFF_INVITE') {
-      if (confirm(`Accept invite to join "${data.shopName}" as ${data.staffName}?`)) {
+      if (confirm(`Accept invite to join "${data.shopName}" as ${data.staffName}? Existing records on this phone will be cleared.`)) {
         setIsProcessing(true);
         try {
+          // 1. Clear any existing local data
           await clearAllData();
+
+          // 2. Perform Staff Setup
           await db.transaction('rw', [db.inventory, db.users, db.settings, db.security], async () => {
-            if (data.inventory.length > 0) await db.inventory.bulkAdd(data.inventory);
+            // Restore inventory if provided
+            if (data.inventory && data.inventory.length > 0) {
+               await db.inventory.bulkAdd(data.inventory);
+            }
+            
+            // Add the specific staff user
             await db.users.add({ name: data.staffName, pin: data.staffPin, role: 'Staff' });
+            
+            // Save settings
             await db.settings.put({ key: 'is_activated', value: true });
             
-            // Inherit License
-            if (data.license_expiry && data.license_signature) {
-              await db.security.put({ key: 'license_expiry', value: data.license_expiry });
+            // Setup License
+            if (data.licenseExpiry && data.license_signature) {
+              await db.security.put({ key: 'license_expiry', value: data.licenseExpiry });
               await db.security.put({ key: 'license_signature', value: data.license_signature });
-              localStorage.setItem('license_expiry', data.license_expiry);
+              localStorage.setItem('license_expiry', data.licenseExpiry);
               localStorage.setItem('license_signature', data.license_signature);
             }
           });
           
+          // 3. Set CRITICAL localStorage flags
           localStorage.setItem('shop_name', data.shopName);
-          localStorage.setItem('shop_info', data.shopInfo);
+          localStorage.setItem('shop_info', data.shopInfo || '');
           localStorage.setItem('is_activated', 'true');
           localStorage.setItem('device_role', 'StaffDevice');
+          localStorage.setItem('user_role', 'staff');
+          
+          // 4. Force Reload for Lockdown Activation
           window.location.reload();
         } catch (e) {
           setImportError('Invite setup failed: ' + (e as Error).message);
@@ -106,7 +127,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
             for (const item of data.inventory) {
               const existing = await db.inventory.where('name').equals(item.name).first();
               if (existing) {
-                // Ensure image is updated during stock sync
                 await db.inventory.update(existing.id!, { 
                   stock: item.stock, 
                   sellingPrice: item.sellingPrice,
@@ -169,17 +189,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
         </div>
         <textarea 
           placeholder="Paste INVITE-STAFF-... code here" 
-          className="w-full h-48 bg-slate-50 dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 rounded-3xl p-5 text-xs font-mono mb-6 resize-none dark:text-emerald-50 focus:ring-2 focus:ring-emerald-500 outline-none" 
+          className={`w-full h-48 bg-slate-50 dark:bg-emerald-900/40 border ${importError ? 'border-red-500' : 'border-slate-100 dark:border-emerald-800/40'} rounded-3xl p-5 text-xs font-mono mb-6 resize-none dark:text-emerald-50 focus:ring-2 focus:ring-emerald-500 outline-none`} 
           value={importKey} 
-          onChange={(e) => setImportKey(e.target.value)} 
+          onChange={(e) => { setImportKey(e.target.value); setImportError(''); }} 
         />
-        {importError && <p className="text-red-500 text-xs font-bold mb-4 text-center bg-red-50 p-3 rounded-xl">{importError}</p>}
+        {importError && (
+          <div className="flex items-center gap-2 text-red-500 text-xs font-bold mb-4 bg-red-50 p-3 rounded-xl animate-in shake duration-300">
+             <AlertCircle size={14} />
+             <p>{importError}</p>
+          </div>
+        )}
         <button 
           onClick={handleImportKey} 
           disabled={isProcessing || !importKey}
-          className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2"
+          className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          {isProcessing ? 'Setting up Terminal...' : 'Activate Staff Account'} <ArrowRight size={16} />
+          {isProcessing ? 'Setting up Terminal...' : 'Activate Account'} <ArrowRight size={16} />
         </button>
       </div>
     );

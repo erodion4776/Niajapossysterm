@@ -2,6 +2,8 @@
 import { Sale, db, User, Customer, Category, InventoryItem } from '../db.ts';
 import pako from 'pako';
 
+const MASTER_SALT = "NaijaPOS_2025_Sec" + "ret_Keep_Safe_99";
+
 export const formatNaira = (amount: number) => {
   return new Intl.NumberFormat('en-NG', {
     style: 'currency',
@@ -127,8 +129,11 @@ export const generateStaffInviteKey = async (user: User) => {
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
   const shopInfo = localStorage.getItem('shop_info') || '';
   const inventory = await db.inventory.toArray();
-  const license_expiry = localStorage.getItem('license_expiry');
-  const license_signature = localStorage.getItem('license_signature');
+  const licenseExpiry = localStorage.getItem('license_expiry') || '';
+  const license_signature = localStorage.getItem('license_signature') || '';
+
+  // Simple signature for tampering protection
+  const signature = btoa(shopName + user.name + licenseExpiry + MASTER_SALT).substring(0, 12);
 
   const payload = {
     type: 'STAFF_INVITE',
@@ -136,9 +141,19 @@ export const generateStaffInviteKey = async (user: User) => {
     shopInfo,
     staffName: user.name,
     staffPin: user.pin,
-    inventory: inventory.map(i => ({ name: i.name, sellingPrice: i.sellingPrice, costPrice: i.costPrice, stock: i.stock, category: i.category, barcode: i.barcode, image: i.image })),
-    license_expiry,
+    role: 'staff',
+    licenseExpiry,
     license_signature,
+    signature,
+    inventory: inventory.map(i => ({ 
+      name: i.name, 
+      sellingPrice: i.sellingPrice, 
+      costPrice: i.costPrice, 
+      stock: i.stock, 
+      category: i.category, 
+      barcode: i.barcode, 
+      image: i.image 
+    })),
     timestamp: Date.now()
   };
 
@@ -148,7 +163,7 @@ export const generateStaffInviteKey = async (user: User) => {
   ));
   
   const key = `INVITE-STAFF-${base64}`;
-  const message = `👋 *NaijaShop Invite for ${user.name}*\n\nBoss has authorized you. Copy the code below and paste it into the staff login screen.\n\n${key}`;
+  const message = `👋 *NaijaShop Staff Invite for ${user.name}*\n\nCopy the code below and paste it into your app to join the ${shopName} team.\n\n${key}`;
 
   if (navigator.share && key.length < 1500) {
     try {

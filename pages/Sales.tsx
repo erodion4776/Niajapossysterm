@@ -18,8 +18,9 @@ interface SalesProps {
 }
 
 export const Sales: React.FC<SalesProps> = ({ role }) => {
-  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
-  const isAdmin = role === 'Admin' && !isStaffDevice;
+  const isStaff = localStorage.getItem('user_role') === 'staff';
+  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice' || isStaff;
+  const isAdmin = role === 'Admin' && !isStaffDevice && !isStaff;
   
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDate, setFilterDate] = useState('');
@@ -147,7 +148,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
 
       // 4. UI Feedback - Auto-Refresh
       setSelectedSale(null);
-      // Dexie useLiveQuery automatically updates the filteredSales list
     } catch (err) {
       alert('Failed to void transaction: ' + (err as Error).message);
     }
@@ -348,13 +348,15 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
                   <MessageCircle size={20} /> Share via WhatsApp
                 </button>
                 
-                {/* 3. Security (Admin Only) Button Display Logic */}
-                <button 
-                  onClick={() => handleDeleteSale(selectedSale)}
-                  className={`w-full font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest border ${isAdmin ? 'bg-red-50 text-red-400 border-red-100 hover:bg-red-100' : 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'}`}
-                >
-                  <Trash2 size={16} /> Void Transaction
-                </button>
+                {/* Lockdown: Void Transaction is Admin Only */}
+                {isAdmin && (
+                  <button 
+                    onClick={() => handleDeleteSale(selectedSale)}
+                    className="w-full bg-red-50 text-red-400 border border-red-100 font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest hover:bg-red-100"
+                  >
+                    <Trash2 size={16} /> Void Transaction
+                  </button>
+                )}
               </div>
             </div>
           </div>

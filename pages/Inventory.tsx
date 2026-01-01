@@ -22,8 +22,9 @@ interface InventoryProps {
 }
 
 export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter = 'all', clearInitialFilter, setPage }) => {
-  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice';
-  const isAdmin = role === 'Admin' && !isStaffDevice;
+  const isStaff = localStorage.getItem('user_role') === 'staff';
+  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice' || isStaff;
+  const isAdmin = role === 'Admin' && !isStaffDevice && !isStaff;
   
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const categories = useLiveQuery(() => db.categories.toArray());
@@ -331,7 +332,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
             
             if (viewMode === 'grid') {
               return (
-                <button key={item.id} disabled={!isAdmin} onClick={() => isAdmin && setEditingItem(item)} className="bg-white dark:bg-emerald-900/40 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 overflow-hidden shadow-sm flex flex-col active:scale-[0.97] transition-all text-left group">
+                <button key={item.id} disabled={!isAdmin} onClick={() => isAdmin && setEditingItem(item)} className={`bg-white dark:bg-emerald-900/40 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 overflow-hidden shadow-sm flex flex-col active:scale-[0.97] transition-all text-left group ${!isAdmin ? 'cursor-default' : ''}`}>
                   <div className="h-32 w-full bg-slate-100 dark:bg-emerald-950/40 relative">
                     {item.image ? (
                       <img src={item.image} alt="" className="w-full h-full object-cover" loading="lazy" />
@@ -351,7 +352,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
               );
             }
             return (
-              <button key={item.id} disabled={!isAdmin} onClick={() => isAdmin && setEditingItem(item)} className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] border border-gray-50 dark:border-emerald-800/20 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all text-left">
+              <button key={item.id} disabled={!isAdmin} onClick={() => isAdmin && setEditingItem(item)} className={`bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] border border-gray-50 dark:border-emerald-800/20 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all text-left ${!isAdmin ? 'cursor-default' : ''}`}>
                 <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-emerald-950 overflow-hidden border dark:border-emerald-800/40">
                   {item.image ? (
                     <img src={item.image} alt="" className="w-full h-full object-cover" />
@@ -373,7 +374,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       ) : (
         <div className="grid grid-cols-2 gap-4">
           {filteredCats.map(cat => (
-            <button key={cat.id} onClick={() => isAdmin && setEditingCat(cat)} className="bg-white dark:bg-emerald-900/40 p-4 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-all text-center">
+            <button key={cat.id} onClick={() => isAdmin && setEditingCat(cat)} className={`bg-white dark:bg-emerald-900/40 p-4 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-all text-center ${!isAdmin ? 'cursor-default' : ''}`}>
               <div className="w-full aspect-square bg-slate-50 dark:bg-emerald-950 rounded-2xl overflow-hidden">
                 {cat.image ? (
                   <img src={cat.image} className="w-full h-full object-cover" alt="" />
@@ -392,7 +393,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       {/* MODALS START HERE */}
 
       {/* Add Product Modal */}
-      {showAddModal && (
+      {showAddModal && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-300">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-6">
@@ -479,7 +480,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       )}
 
       {/* Edit Product Modal */}
-      {editingItem && (
+      {editingItem && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-300">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-6">
@@ -567,7 +568,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       )}
 
       {/* Category Modal */}
-      {showCatModal && (
+      {showCatModal && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-6">
@@ -600,7 +601,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       )}
 
       {/* Edit Category Modal */}
-      {editingCat && (
+      {editingCat && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-6">
@@ -638,7 +639,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       )}
 
       {/* Inflation Protector (Bulk Update) Modal */}
-      {showBulkModal && (
+      {showBulkModal && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white dark:bg-emerald-900 w-full max-w-md rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
              <div className="flex justify-between items-center mb-8">
@@ -699,7 +700,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                           type="number"
                           className="w-full p-4 pl-10 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-black text-amber-600 outline-none"
                           value={bulkData.value || ''}
-                          onChange={e => setBulkData({...bulkData, value: Number(e.target.value)})}
+                          onChange={(e) => setBulkData({...bulkData, value: Number(e.target.value)})}
                           placeholder="0"
                         />
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-amber-600/50">{bulkData.updateType === 'Percentage' ? '%' : '₦'}</span>
