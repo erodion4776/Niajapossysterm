@@ -62,6 +62,15 @@ export interface Sale {
   customer_phone?: string;
 }
 
+export interface ParkedOrder {
+  id?: number;
+  cartItems: (SaleItem & { image?: string })[];
+  total: number;
+  customerNote: string;
+  timestamp: number;
+  staff_id: string;
+}
+
 export interface Expense {
   id?: string | number;
   description: string;
@@ -115,11 +124,12 @@ export type NaijaShopDatabase = Dexie & {
   expenses: Table<Expense>;
   debts: Table<Debt>;
   stock_logs: Table<StockLog>;
+  parked_orders: Table<ParkedOrder>;
 };
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(21).stores({
+dexieDb.version(22).stores({
   inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock',
   categories: '++id, name',
   customers: '++id, &phone, name, walletBalance',
@@ -129,7 +139,8 @@ dexieDb.version(21).stores({
   users: '++id, name, pin, role',
   expenses: '++id, date, amount',
   debts: '++id, customerName, customerPhone, status, date, remainingBalance',
-  stock_logs: '++id, item_id, itemName, type, date, staff_name'
+  stock_logs: '++id, item_id, itemName, type, date, staff_name',
+  parked_orders: '++id, timestamp, staff_id'
 });
 
 export const db = dexieDb;
@@ -175,7 +186,7 @@ export async function initTrialDate() {
 }
 
 export async function clearAllData() {
-  await db.transaction('rw', [db.inventory, db.categories, db.customers, db.sales, db.settings, db.security, db.users, db.expenses, db.debts, db.stock_logs], async () => {
+  await db.transaction('rw', [db.inventory, db.categories, db.customers, db.sales, db.settings, db.security, db.users, db.expenses, db.debts, db.stock_logs, db.parked_orders], async () => {
     await db.inventory.clear();
     await db.categories.clear();
     await db.customers.clear();
@@ -186,5 +197,6 @@ export async function clearAllData() {
     await db.expenses.clear();
     await db.debts.clear();
     await db.stock_logs.clear();
+    await db.parked_orders.clear();
   });
 }

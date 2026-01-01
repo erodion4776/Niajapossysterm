@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, SaleItem, Sale, InventoryItem, User as DBUser, Customer, Debt, Category } from '../db.ts';
+import { db, SaleItem, Sale, InventoryItem, User as DBUser, Customer, Debt, Category, ParkedOrder } from '../db.ts';
 import { formatNaira, shareReceiptToWhatsApp } from '../utils/whatsapp.ts';
 import { 
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle, X, 
   MessageCircle, ChevronUp, Scan, Package, Image as ImageIcon, 
   Printer, Loader2, UserPlus, UserCheck, Wallet, Coins, ArrowRight,
   BookOpen, CreditCard, AlertCircle, Banknote, Landmark, CreditCard as CardIcon,
-  ShieldCheck, HelpCircle, ChevronLeft, Tag, Phone, Info
+  ShieldCheck, HelpCircle, ChevronLeft, Tag, Phone, Info, Pause, Play, Clock
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { connectBluetoothPrinter, isPrinterReady, sendRawToPrinter } from '../utils/bluetoothPrinter.ts';
@@ -23,6 +23,7 @@ interface POSProps {
 export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const categories = useLiveQuery(() => db.categories.toArray());
+  const parkedOrders = useLiveQuery(() => db.parked_orders.where('staff_id').equals(String(user.id || user.role)).reverse().toArray());
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -31,6 +32,11 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
   
+  // Parked Orders States
+  const [showParkedList, setShowParkedList] = useState(false);
+  const [showParkModal, setShowParkModal] = useState(false);
+  const [parkNote, setParkNote] = useState('');
+
   // Checkout Configuration
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'Transfer' | 'Card' | 'Debt'>('Cash');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -153,6 +159,34 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
     }
   };
 
+  const handleParkCart = async () => {
+    if (cart.length === 0) return;
+    try {
+      await db.parked_orders.add({
+        cartItems: cart,
+        total: saleTotal,
+        customerNote: parkNote || 'No Note',
+        timestamp: Date.now(),
+        staff_id: String(user.id || user.role)
+      });
+      setCart([]);
+      setParkNote('');
+      setShowParkModal(false);
+      setIsCartExpanded(false);
+      if (navigator.vibrate) navigator.vibrate(100);
+    } catch (err) {
+      alert("Failed to park order");
+    }
+  };
+
+  const handleResumeOrder = (order: ParkedOrder) => {
+    if (cart.length > 0 && !confirm("Current cart has items. Replace with saved order?")) return;
+    setCart(order.cartItems);
+    db.parked_orders.delete(order.id!);
+    setShowParkedList(false);
+    setIsCartExpanded(false);
+  };
+
   useEffect(() => {
     if (customerPhone.length === 11 && !selectedCustomer) {
       handleLookupCustomer(customerPhone);
@@ -260,7 +294,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
               finalPaymentMethod = 'Wallet';
             }
           } else if (paymentMode === 'Cash' && isUnderpaid) {
-            // Underpayment Detection: Split Sale
             appliedFromWallet = walletCreditApplied;
             finalCashPaid = Number(amountPaid || 0);
             netDebtToRecord = balanceOwed;
@@ -270,7 +303,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             await db.debts.add({
               customerName: finalCustomer.name,
               customerPhone: finalCustomer.phone,
-              totalAmount: saleTotal, // Gross amount
+              totalAmount: saleTotal, 
               remainingBalance: netDebtToRecord,
               items: `POS Partial: ${itemsSummary} (Paid ${formatNaira(finalCashPaid)} cash)`,
               date: Date.now(),
@@ -281,9 +314,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
               lastTransaction: Date.now()
             });
           } else {
-            // Standard Cash/Wallet/Card/Transfer
             appliedFromWallet = walletCreditApplied;
-            // Physical cash received for drawer logic:
             finalCashPaid = (modeToSave === 'Cash') ? Math.min(total, Number(amountPaid || 0)) : 0;
             
             let newBalance = finalCustomer.walletBalance - appliedFromWallet;
@@ -298,18 +329,17 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             });
           }
         } else {
-          // No customer identified (Standard Cash/Card/Transfer)
           finalCashPaid = (modeToSave === 'Cash') ? Math.min(total, Number(amountPaid || 0)) : 0;
         }
 
         const sale: Sale = {
           uuid: crypto.randomUUID(),
           items: cart.map(({image, ...rest}) => rest), 
-          total: saleTotal, // ALWAYS use Gross Total for Profit reports
+          total: saleTotal, 
           totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
           walletUsed: appliedFromWallet,
           walletSaved: (paymentMode === 'Debt' ? Math.max(0, Number(amountPaid || 0) - (saleTotal - appliedFromWallet)) : (saveChangeToWallet ? changeDue : 0)),
-          cashPaid: finalCashPaid, // Critical for "Cash in Hand" logic
+          cashPaid: finalCashPaid, 
           paymentMethod: (finalPaymentMethod === 'Soft POS (Transfer)' ? 'Transfer' : (finalPaymentMethod === 'Soft POS' ? 'Transfer' : finalPaymentMethod)) as any,
           timestamp: Date.now(),
           staff_id: String(user.id || user.role),
@@ -411,6 +441,17 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
              </h1>
           </div>
           <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setShowParkedList(true)}
+              className="relative bg-amber-50 dark:bg-amber-900/40 text-amber-600 p-3 rounded-2xl border border-amber-100 dark:border-amber-800 active:scale-90 transition-all"
+            >
+              <Pause size={20} />
+              {parkedOrders && parkedOrders.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-emerald-950">
+                  {parkedOrders.length}
+                </span>
+              )}
+            </button>
             <button onClick={startScanner} className="bg-emerald-600 text-white p-3 rounded-2xl shadow-lg active:scale-90 transition-all">
               <Scan size={20} />
             </button>
@@ -508,7 +549,12 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                   <ShoppingCart size={20} className="text-emerald-600" />
                   {!isCartExpanded && <p className="text-lg font-black text-slate-800 dark:text-emerald-50">{formatNaira(total)}</p>}
                 </div>
-                {!isCartExpanded && <div className="bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase">Checkout <ChevronUp size={14} className="inline ml-1" /></div>}
+                {!isCartExpanded && (
+                   <div className="flex gap-2">
+                      <button onClick={(e) => { e.stopPropagation(); setShowParkModal(true); }} className="bg-amber-500 text-white px-4 py-2.5 rounded-2xl font-black text-[10px] uppercase flex items-center gap-1.5"><Pause size={14}/> Hold</button>
+                      <div className="bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase">Checkout <ChevronUp size={14} className="inline ml-1" /></div>
+                   </div>
+                )}
               </div>
             </button>
 
@@ -540,7 +586,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Customer Information</h4>
                     </div>
 
-                    {/* Underpayment Warning Notice */}
                     {isUnderpaid && (
                       <div className="bg-red-50 border border-red-100 p-3 rounded-2xl flex items-start gap-3 mb-2 animate-in slide-in-from-top duration-300">
                         <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={16} />
@@ -550,7 +595,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                       </div>
                     )}
 
-                    {/* Real-Time Settlement Summary Feedback */}
                     {selectedCustomer && (
                       <div className={`p-4 rounded-2xl border flex items-start gap-3 mb-2 animate-in slide-in-from-top duration-300 ${selectedCustomer.walletBalance > 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-slate-100 border-slate-200'}`}>
                         <div className={`p-2 rounded-xl text-white shadow-lg ${selectedCustomer.walletBalance > 0 ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-slate-400'}`}>
@@ -607,7 +651,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                       </div>
                     </div>
 
-                    {/* Save Change to Wallet Toggle */}
                     {changeDue > 0 && (
                       <label className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900 border-2 border-emerald-100 dark:border-emerald-800 rounded-[24px] mt-2 cursor-pointer active:scale-[0.98] transition-all">
                         <input 
@@ -694,15 +737,13 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                 )}
 
                 <div className="grid grid-cols-1 gap-3 pt-2">
-                  {(paymentMode === 'Debt' || isUnderpaid) && (!customerPhone || !customerName) && (
-                    <div className="bg-red-50 p-3 rounded-xl flex items-center justify-center gap-2 text-red-500 animate-pulse">
-                      <AlertCircle size={14} />
-                      <p className="text-[9px] font-black uppercase tracking-widest">Please provide customer details to record this debt.</p>
-                    </div>
-                  )}
-
                   <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setIsCartExpanded(false)} className="bg-slate-100 dark:bg-emerald-800 text-slate-500 font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all">Cancel</button>
+                    <button 
+                      onClick={() => setShowParkModal(true)} 
+                      className="bg-amber-500 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg"
+                    >
+                      <Pause size={16}/> Hold Order
+                    </button>
                     <button 
                       onClick={() => paymentMode === 'Transfer' ? triggerSoftPOSTerminal() : handleCheckout()} 
                       disabled={((paymentMode === 'Debt' || isUnderpaid) && (!customerPhone || !customerName)) || (saveChangeToWallet && (!customerPhone || !customerName))}
@@ -711,11 +752,92 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                       {paymentMode === 'Debt' || isUnderpaid ? 'Record Debt' : (paymentMode === 'Transfer' ? 'Open Soft POS' : 'Finish Sale')} <ArrowRight size={16} />
                     </button>
                   </div>
+                  <button onClick={() => setIsCartExpanded(false)} className="w-full py-4 text-slate-400 font-bold uppercase text-[10px] tracking-widest">Keep Browsing Catalog</button>
                 </div>
               </div>
             )}
           </div>
         </>
+      )}
+
+      {/* Park Modal */}
+      {showParkModal && (
+        <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-6 backdrop-blur-sm">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300 text-center">
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Pause size={32} />
+            </div>
+            <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight italic">Hold Order</h2>
+            <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest mt-2 mb-6">Enter a note to identify this order</p>
+            
+            <input 
+              type="text" 
+              placeholder="e.g. Customer in Yellow Shirt" 
+              className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none mb-6 text-center"
+              value={parkNote}
+              onChange={(e) => setParkNote(e.target.value)}
+              autoFocus
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+               <button onClick={() => setShowParkModal(false)} className="py-4 bg-slate-100 dark:bg-emerald-800 text-slate-400 font-black rounded-2xl uppercase tracking-widest text-[10px]">Cancel</button>
+               <button onClick={handleParkCart} className="py-4 bg-amber-500 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-lg shadow-amber-200">Hold Order</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Parked Orders List */}
+      {showParkedList && (
+        <div className="fixed inset-0 bg-black/60 z-[300] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
+           <div className="bg-slate-50 dark:bg-emerald-950 w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 max-h-[85vh] flex flex-col">
+              <div className="flex justify-between items-center mb-8">
+                 <div className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-100 dark:bg-amber-900 rounded-xl text-amber-600"><Pause size={20}/></div>
+                    <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight italic">Parked Orders</h2>
+                 </div>
+                 <button onClick={() => setShowParkedList(false)} className="p-2 bg-white dark:bg-emerald-800 rounded-full text-slate-400 shadow-sm"><X size={20}/></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-1">
+                 {parkedOrders && parkedOrders.length > 0 ? (
+                   parkedOrders.map(order => (
+                     <div key={order.id} className="bg-white dark:bg-emerald-900/60 p-5 rounded-[32px] border border-white dark:border-emerald-800 shadow-sm group">
+                        <div className="flex justify-between items-start mb-4">
+                           <div>
+                              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-0.5">Order ID: #{String(order.id).padStart(3, '0')}</p>
+                              <h3 className="font-black text-slate-800 dark:text-emerald-50 text-base leading-tight italic truncate max-w-[180px]">"{order.customerNote}"</h3>
+                           </div>
+                           <p className="text-lg font-black text-slate-900 dark:text-emerald-50 tracking-tighter">{formatNaira(order.total)}</p>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                           <div className="flex items-center gap-2 text-slate-400">
+                              <Clock size={12}/>
+                              <span className="text-[9px] font-bold uppercase tracking-widest">{new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                              <span className="text-[9px] font-bold uppercase tracking-widest">{order.cartItems.length} items</span>
+                           </div>
+                           <div className="flex gap-2">
+                              <button onClick={() => db.parked_orders.delete(order.id!)} className="p-3 text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+                              <button onClick={() => handleResumeOrder(order)} className="bg-emerald-600 text-white px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 active:scale-95 transition-all shadow-md">
+                                <Play size={12} fill="currentColor"/> Resume
+                              </button>
+                           </div>
+                        </div>
+                     </div>
+                   ))
+                 ) : (
+                   <div className="py-20 text-center space-y-4">
+                      <div className="w-20 h-20 bg-slate-100 dark:bg-emerald-900 rounded-[32px] flex items-center justify-center mx-auto text-slate-300">
+                         <Pause size={40} />
+                      </div>
+                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No orders currently on hold</p>
+                   </div>
+                 )}
+              </div>
+           </div>
+        </div>
       )}
 
       {showSuccessModal && (
