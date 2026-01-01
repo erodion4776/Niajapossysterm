@@ -33,7 +33,8 @@ import {
   RotateCcw,
   RefreshCw,
   Loader2,
-  CloudUpload
+  CloudUpload,
+  Info
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -55,6 +56,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const [showDateModal, setShowDateModal] = useState(false);
   const [showAlerts, setShowAlerts] = useState(true);
   const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
+  const [showProfitInfo, setShowProfitInfo] = useState(false);
   const syncInputRef = useRef<HTMLInputElement>(null);
   
   const inventory = useLiveQuery(() => db.inventory.toArray());
@@ -159,8 +161,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     db.expenses.where('date').between(dateRange.start, dateRange.end).toArray()
   , [dateRange]);
 
-  const totalSalesInRange = useMemo(() => salesInRange?.reduce((sum, sale) => sum + sale.total, 0) || 0, [salesInRange]);
-  const totalCostInRange = useMemo(() => salesInRange?.reduce((sum, sale) => sum + (sale.totalCost || 0), 0) || 0, [salesInRange]);
+  // Financial Calculations
+  const totalSalesInRange = useMemo(() => salesInRange?.reduce((sum, sale) => sum + (sale.total || 0), 0) || 0, [salesInRange]);
+  
+  /**
+   * Technical Fix: The True Profit Formula
+   * Robust sum of COGS (Cost of Goods Sold) looping through every item in every sale.
+   * Safety check: Treat missing costPrice as 0 to avoid calculation crashes.
+   */
+  const totalCostInRange = useMemo(() => {
+    if (!salesInRange) return 0;
+    return salesInRange.reduce((acc, sale) => {
+      const saleCogs = sale.items.reduce((iAcc, item) => {
+        const cPrice = Number(item.costPrice || 0); // Safety Check:treat missing as 0
+        return iAcc + (cPrice * item.quantity);
+      }, 0);
+      return acc + saleCogs;
+    }, 0);
+  }, [salesInRange]);
+
   const actualExpensesInRange = useMemo(() => expensesInRange?.reduce((sum, e) => sum + e.amount, 0) || 0, [expensesInRange]);
 
   const revenueBreakdown = useMemo(() => {
@@ -185,7 +204,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const lifetimeStats = useMemo(() => {
     if (!allSales || !allExpenses) return { sales: 0, profit: 0, expenses: 0 };
     const totalSales = allSales.reduce((sum, s) => sum + s.total, 0);
-    const totalCost = allSales.reduce((sum, s) => sum + (s.totalCost || 0), 0);
+    
+    // Explicit COGS calc for lifetime
+    const totalCost = allSales.reduce((sum, s) => {
+      return sum + s.items.reduce((iSum, item) => iSum + (Number(item.costPrice || 0) * item.quantity), 0);
+    }, 0);
+
     const totalExp = allExpenses.reduce((sum, e) => sum + e.amount, 0);
     const netProfit = (totalSales - totalCost) - totalExp;
     return { sales: totalSales, profit: netProfit, expenses: totalExp };
@@ -336,11 +360,48 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
       <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col gap-1">
-          <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
-            {isAdmin ? `Net Profit ${rangeLabel}` : `Revenue ${rangeLabel}`}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
+              {isAdmin ? `Net Profit ${rangeLabel}` : `Revenue ${rangeLabel}`}
+            </p>
+            {isAdmin && (
+              <button 
+                onClick={() => setShowProfitInfo(!showProfitInfo)} 
+                className="p-1.5 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+                title="Profit Breakdown"
+              >
+                <Info size={12} />
+              </button>
+            )}
+          </div>
           <h2 className="text-4xl font-black tracking-tighter">{isAdmin ? formatNaira(netProfitInRange) : formatNaira(totalSalesInRange)}</h2>
-          {isAdmin && (
+          
+          {/* visual "Boss" Breakdown Tooltip */}
+          {showProfitInfo && isAdmin && (
+             <div className="mt-3 bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/10 animate-in zoom-in duration-300">
+                <p className="text-[10px] font-black text-emerald-300 uppercase tracking-widest mb-2 border-b border-white/10 pb-1">Master Calculation</p>
+                <div className="space-y-1.5">
+                   <div className="flex justify-between items-center text-[10px] font-bold">
+                      <span className="text-white/60">Total Revenue:</span>
+                      <span className="text-white">{formatNaira(totalSalesInRange)}</span>
+                   </div>
+                   <div className="flex justify-between items-center text-[10px] font-bold">
+                      <span className="text-white/60">Cost of Goods:</span>
+                      <span className="text-red-300">-{formatNaira(totalCostInRange)}</span>
+                   </div>
+                   <div className="flex justify-between items-center text-[10px] font-bold pb-1.5 border-b border-white/5">
+                      <span className="text-white/60">Shop Expenses:</span>
+                      <span className="text-red-300">-{formatNaira(actualExpensesInRange)}</span>
+                   </div>
+                   <div className="flex justify-between items-center text-[11px] font-black text-emerald-400">
+                      <span>FINAL PROFIT:</span>
+                      <span>{formatNaira(netProfitInRange)}</span>
+                   </div>
+                </div>
+             </div>
+          )}
+
+          {isAdmin && !showProfitInfo && (
             <p className="text-[10px] font-bold text-emerald-200/60 uppercase tracking-[0.1em] mt-0.5">
               Total Revenue: {formatNaira(totalSalesInRange)}
             </p>
