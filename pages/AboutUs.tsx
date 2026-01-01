@@ -1,6 +1,9 @@
 
 import React from 'react';
-import { ArrowLeft, Store, ShieldCheck, Zap, Heart, Globe, Lock } from 'lucide-react';
+import { 
+  ArrowLeft, Store, ShieldCheck, Zap, Heart, Globe, 
+  Lock, CloudOff, MessageCircle, ArrowRight, User 
+} from 'lucide-react';
 
 interface AboutUsProps {
   onBack: () => void;
@@ -8,73 +11,137 @@ interface AboutUsProps {
 
 export const AboutUs: React.FC<AboutUsProps> = ({ onBack }) => {
   return (
-    <div className="min-h-screen bg-white dark:bg-emerald-950 flex flex-col max-w-lg mx-auto">
-      <header className="p-6 flex items-center gap-4">
-        <button onClick={onBack} className="p-2 bg-slate-50 dark:bg-emerald-900 rounded-xl text-slate-400">
+    <div className="min-h-screen bg-white dark:bg-emerald-950 flex flex-col max-w-lg mx-auto transition-colors duration-300">
+      {/* Header */}
+      <header className="p-6 flex items-center gap-4 sticky top-0 bg-white/80 dark:bg-emerald-950/80 backdrop-blur-md z-50">
+        <button onClick={onBack} className="p-2 bg-slate-50 dark:bg-emerald-900 rounded-xl text-slate-400 active:scale-95 transition-all">
           <ArrowLeft size={24} />
         </button>
-        <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 italic">About NaijaShop</h1>
+        <h1 className="text-xl font-black text-slate-900 dark:text-emerald-50 italic">Our Mission</h1>
       </header>
 
-      <main className="flex-1 p-6 space-y-12">
-        {/* Mission */}
-        <section className="text-center space-y-4">
-          <div className="w-20 h-20 bg-emerald-600 rounded-[32px] flex items-center justify-center mx-auto text-white shadow-xl shadow-emerald-200">
-            <Globe size={40} />
+      <main className="flex-1 px-6 pb-24">
+        {/* 1. The Naija-First Hero */}
+        <section className="py-12 space-y-6 text-center">
+          <div className="w-20 h-20 bg-emerald-600 rounded-[32px] flex items-center justify-center mx-auto text-white shadow-xl shadow-emerald-200 dark:shadow-none">
+            <Store size={40} />
           </div>
-          <div className="space-y-2">
-            <h2 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em]">Our Mission</h2>
-            <p className="text-3xl font-black text-slate-900 dark:text-white leading-[0.9] uppercase italic">
-              Ending the Data Tax <br/> for Nigerian SMEs.
+          <div className="space-y-3">
+            <h2 className="text-3xl md:text-4xl font-black text-emerald-950 dark:text-white leading-[1.1] uppercase italic tracking-tighter">
+              Empowering the <br/>
+              <span className="text-emerald-600">Heartbeat of Nigeria.</span>
+            </h2>
+            <p className="text-sm font-medium text-slate-500 dark:text-emerald-400 leading-relaxed max-w-xs mx-auto">
+              NaijaShop was built to solve the 3 biggest problems facing our local retailers: Network issues, Staff theft, and expensive monthly fees.
             </p>
           </div>
-          <p className="text-sm font-medium text-slate-500 leading-relaxed max-w-xs mx-auto">
-            We build software that understands Nigeria. No network? No problem. No data? No problem. Your business shouldn't stop because the network is down.
-          </p>
         </section>
 
-        {/* Story */}
-        <section className="bg-slate-50 dark:bg-emerald-900/40 p-8 rounded-[48px] space-y-6">
-          <div className="flex items-center gap-3">
-             <Heart className="text-red-500 fill-red-500" size={20} />
-             <h3 className="font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">The NaijaShop Story</h3>
+        {/* 2. Our Story (The "Why") */}
+        <section className="py-8 border-t border-slate-100 dark:border-emerald-900">
+          <div className="flex items-center gap-3 mb-6">
+            <Heart className="text-red-500 fill-red-500" size={20} />
+            <h3 className="font-black text-emerald-950 dark:text-emerald-50 uppercase tracking-tight italic">Our Story</h3>
           </div>
-          <p className="text-sm font-medium text-slate-600 dark:text-emerald-400 leading-relaxed">
-            NaijaShop was built by developers who saw their parents and friends struggle with expensive software that required 24/7 internet. 
-            In the local market, network fails, data runs out, and power goes off. 
-          </p>
-          <p className="text-sm font-medium text-slate-600 dark:text-emerald-400 leading-relaxed">
-            We decided to build the world's most powerful <span className="text-emerald-600 font-black">Offline-First</span> POS. 
-            Today, we empower market traders, chemists, and boutiques to manage stock and stop staff theft without paying a kobo for data.
-          </p>
+          <div className="space-y-4">
+            <p className="text-base font-medium text-slate-600 dark:text-emerald-300 leading-relaxed">
+              In a country where "No Network" is a daily song, why should your business stop?
+            </p>
+            <p className="text-base font-medium text-slate-600 dark:text-emerald-300 leading-relaxed">
+              We watched hard-working shop owners lose records to rain, fire, or staff "mistakes". We decided to build a POS that is as tough and reliable as the Nigerian spirit. <span className="text-emerald-600 font-black">100% Offline. 100% Secure.</span>
+            </p>
+          </div>
         </section>
 
-        {/* Privacy Promise */}
-        <section className="space-y-6 px-4">
-           <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900 rounded-2xl flex items-center justify-center text-emerald-600">
-                <Lock size={24} />
+        {/* 3. The 3 Core Promises */}
+        <section className="py-12 space-y-8">
+          <div className="grid grid-cols-1 gap-6">
+            {/* Promise 1 */}
+            <div className="bg-slate-50 dark:bg-emerald-900/40 p-8 rounded-[40px] border border-slate-100 dark:border-emerald-800 space-y-4 shadow-sm group">
+              <div className="w-14 h-14 bg-white dark:bg-emerald-800 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm border border-slate-100 dark:border-emerald-700 group-hover:scale-110 transition-transform">
+                <ShieldCheck size={28} />
               </div>
               <div>
-                <h3 className="font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight italic">Privacy Promise</h3>
-                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Local & Secure</p>
+                <h4 className="font-black text-emerald-950 dark:text-emerald-50 uppercase italic tracking-tight mb-2">Promise 1: Total Privacy</h4>
+                <p className="text-sm font-medium text-slate-500 dark:text-emerald-400 leading-relaxed">
+                  We don't store your sales on any cloud. Your records stay on your phone. Only you have the key.
+                </p>
               </div>
-           </div>
-           <div className="bg-emerald-600 text-white p-6 rounded-[32px] shadow-lg space-y-4">
-              <p className="text-sm font-bold leading-relaxed italic">
-                "Your data stays on your phone. We do not have a 'Cloud' where we track your sales. Your business is your business."
-              </p>
-              <div className="flex items-center gap-2 pt-2 border-t border-white/20">
-                 <ShieldCheck size={16} />
-                 <span className="text-[10px] font-black uppercase tracking-widest">100% On-Device Storage</span>
+            </div>
+
+            {/* Promise 2 */}
+            <div className="bg-slate-50 dark:bg-emerald-900/40 p-8 rounded-[40px] border border-slate-100 dark:border-emerald-800 space-y-4 shadow-sm group">
+              <div className="w-14 h-14 bg-white dark:bg-emerald-800 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm border border-slate-100 dark:border-emerald-700 group-hover:scale-110 transition-transform">
+                <CloudOff size={28} />
               </div>
+              <div>
+                <h4 className="font-black text-emerald-950 dark:text-emerald-50 uppercase italic tracking-tight mb-2">Promise 2: No Data Tax</h4>
+                <p className="text-sm font-medium text-slate-500 dark:text-emerald-400 leading-relaxed">
+                  Stop buying data just to run your shop. Use that money to buy more stock instead.
+                </p>
+              </div>
+            </div>
+
+            {/* Promise 3 */}
+            <div className="bg-slate-50 dark:bg-emerald-900/40 p-8 rounded-[40px] border border-slate-100 dark:border-emerald-800 space-y-4 shadow-sm group">
+              <div className="w-14 h-14 bg-white dark:bg-emerald-800 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm border border-slate-100 dark:border-emerald-700 group-hover:scale-110 transition-transform">
+                <MessageCircle size={28} />
+              </div>
+              <div>
+                <h4 className="font-black text-emerald-950 dark:text-emerald-50 uppercase italic tracking-tight mb-2">Promise 3: Lifetime Support</h4>
+                <p className="text-sm font-medium text-slate-500 dark:text-emerald-400 leading-relaxed">
+                  We are not a faceless foreign company. We are here in Nigeria, ready to support you on WhatsApp 24/7.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. Meet the Developer */}
+        <section className="py-12 bg-emerald-950 dark:bg-black rounded-[48px] p-8 text-white relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-8 opacity-10">
+            <Zap size={100} />
+          </div>
+          <div className="relative z-10 space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center">
+                <User size={32} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black uppercase italic tracking-tight">A Message from the Developer</h3>
+                <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Osarodion • Lead Engineer</p>
+              </div>
+            </div>
+            <p className="text-base font-bold italic leading-relaxed text-emerald-50">
+              "My name is Osarodion, and I believe every Nigerian shop—from the smallest chemist to the biggest boutique—deserves world-class technology without the world-class price tag. NaijaShop is my gift to the Nigerian business community for 2026."
+            </p>
+            <div className="pt-4 flex items-center gap-2 text-emerald-400/60 border-t border-white/10">
+              <Globe size={14} />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em]">Built with 🇳🇬 Pride</span>
+            </div>
+          </div>
+        </section>
+
+        {/* 5. The "Join Us" Footer */}
+        <section className="py-16 text-center space-y-8">
+           <div className="space-y-2">
+             <h3 className="text-xl font-black text-emerald-950 dark:text-emerald-50 uppercase italic">Ready to digitize your shop?</h3>
+             <p className="text-[10px] font-black text-slate-400 dark:text-emerald-800 uppercase tracking-[0.3em]">Start your 100% offline journey today</p>
            </div>
+           <button 
+             onClick={onBack}
+             className="w-full bg-emerald-600 text-white font-black py-6 rounded-[32px] text-lg shadow-xl shadow-emerald-200 dark:shadow-none active:scale-95 transition-all flex items-center justify-center gap-3 uppercase tracking-tighter italic group"
+           >
+             Start Your Free Trial <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+           </button>
         </section>
       </main>
 
-      <footer className="py-12 text-center">
-        <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.4em]">Built with 🇳🇬 for the Market</p>
+      <footer className="py-8 text-center border-t border-slate-50 dark:border-emerald-900 bg-slate-50 dark:bg-emerald-950">
+        <p className="text-[9px] font-black text-slate-300 dark:text-emerald-800 uppercase tracking-[0.5em]">NaijaShop POS Systems Nigeria 🇳🇬</p>
       </footer>
     </div>
   );
 };
+
+export default AboutUs;
