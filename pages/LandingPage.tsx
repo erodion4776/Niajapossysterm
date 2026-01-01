@@ -1,11 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Plane, MessageCircle, Lock, 
   Smartphone, ArrowRight, CheckCircle2, 
   Store, Zap, TrendingUp, AlertCircle, 
   Receipt, Wallet, Landmark, BookOpen, 
-  Scan, PlayCircle, ShieldAlert, FileText, X
+  Scan, PlayCircle, ShieldAlert, FileText, X,
+  Share, PlusSquare, Compass, ChevronDown, ChevronUp
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Page } from '../types.ts';
@@ -17,6 +18,19 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNavigate }) => {
   const [isPreparing, setIsPreparing] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  useEffect(() => {
+    // 1. iOS Device Detection Logic
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const isApple = /ipad|iphone|ipod/.test(userAgent) && !(window as any).MSStream;
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    
+    setIsIOS(isApple);
+    setIsStandalone(standalone);
+  }, []);
 
   const playChime = () => {
     try {
@@ -50,6 +64,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
     setTimeout(() => { onStartTrial(); }, 1800);
   };
 
+  const faqs = [
+    {
+      q: "Does this app really work without internet?",
+      a: "Yes! You only need internet once to activate the app. After that, you can sell in Airplane Mode. All data is saved directly on your phone's memory (IndexedDB)."
+    },
+    {
+      q: "Are there any monthly charges?",
+      a: "No. Once you pay the activation fee, the app is yours forever. You never have to pay another kobo. No subscriptions, no data tax."
+    },
+    {
+      q: "Can I print receipts from my iPhone?",
+      a: "NaijaShop supports WhatsApp Receipts on all devices including iPhone. However, physical Bluetooth Printing is currently only supported on Android devices due to Apple's system restrictions. For physical printing, we recommend using a secondary Android device in your shop."
+    },
+    {
+      q: "What happens if I lose my phone?",
+      a: "This is why daily backup is vital. You can install the app on a new phone, import your WhatsApp backup file, and all your records will be restored instantly."
+    }
+  ];
+
   return (
     <div className={`bg-white min-h-screen text-emerald-950 font-sans overflow-x-hidden selection:bg-emerald-100 transition-all duration-700 ${isPreparing ? 'blur-md scale-[0.98]' : ''}`}>
       {/* Meta Hints for SEO */}
@@ -58,7 +91,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
         <p>NaijaShop POS is the top-rated offline inventory and sales manager for Nigerian SMEs. No internet needed, zero monthly fees.</p>
       </div>
 
-      {/* 1. The "Hook" Hero Section */}
+      {/* Hero Section */}
       <section className="relative px-6 pt-12 pb-24 max-w-5xl mx-auto text-center space-y-8 animate-in fade-in duration-1000">
         <nav className="flex items-center justify-between mb-16">
           <div className="flex items-center gap-2">
@@ -107,7 +140,46 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
         </div>
       </section>
 
-      {/* 2. The "Airplane Mode" Proof */}
+      {/* 2. The "iPhone Install" Section */}
+      {isIOS && !isStandalone && (
+        <section className="px-6 py-16 bg-emerald-50 rounded-[64px] mx-4 mb-24 animate-in slide-in-from-bottom duration-700">
+          <div className="max-w-4xl mx-auto space-y-12">
+            <div className="text-center space-y-4">
+               <div className="w-16 h-16 bg-white rounded-[24px] flex items-center justify-center mx-auto text-emerald-600 shadow-sm">
+                 <Compass size={32} />
+               </div>
+               <h2 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">Install on iPhone <br/><span className="text-emerald-600 text-2xl md:text-3xl">in 3 Simple Steps</span></h2>
+               <p className="text-slate-500 font-bold text-xs uppercase tracking-widest leading-relaxed">Apple doesn't allow one-tap install. Follow this guide to work offline.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="bg-white p-8 rounded-[40px] border border-emerald-100 space-y-4 shadow-sm">
+                 <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center font-black italic">01</div>
+                 <h4 className="font-black uppercase italic text-sm text-emerald-900">Open Safari</h4>
+                 <p className="text-slate-500 text-xs leading-relaxed font-medium">Ensure you are viewing this page in the <span className="font-bold text-emerald-950">Safari browser</span>. Other browsers won't work.</p>
+              </div>
+
+              <div className="bg-white p-8 rounded-[40px] border border-emerald-100 space-y-4 shadow-sm">
+                 <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center font-black italic">02</div>
+                 <h4 className="font-black uppercase italic text-sm text-emerald-900">Tap Share</h4>
+                 <p className="text-slate-500 text-xs leading-relaxed font-medium flex items-center gap-1.5 flex-wrap">
+                   Tap the <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-emerald-950 font-bold"><Share size={12}/> Share</span> button at the bottom center of Safari.
+                 </p>
+              </div>
+
+              <div className="bg-white p-8 rounded-[40px] border border-emerald-100 space-y-4 shadow-sm">
+                 <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center font-black italic">03</div>
+                 <h4 className="font-black uppercase italic text-sm text-emerald-900">Add to Home</h4>
+                 <p className="text-slate-500 text-xs leading-relaxed font-medium flex items-center gap-1.5 flex-wrap">
+                   Scroll down and tap <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-emerald-950 font-bold"><PlusSquare size={12}/> Add to Home Screen</span>.
+                 </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Airplane Mode Proof */}
       <section className="px-6 py-24 bg-emerald-950 text-white overflow-hidden relative">
         <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
           <div className="space-y-8 relative z-10">
@@ -159,7 +231,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
         </div>
       </section>
 
-      {/* 3. Anti-Theft Vault */}
+      {/* Anti-Theft Vault */}
       <section className="px-6 py-24 max-w-5xl mx-auto space-y-16">
         <div className="text-center space-y-4">
           <h2 className="text-4xl md:text-6xl font-black uppercase italic leading-[0.9] tracking-tighter">
@@ -186,55 +258,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
         </div>
       </section>
 
-      {/* 4. Smart Shop Features */}
-      <section className="px-6 py-24 bg-emerald-50 rounded-[64px] mx-4 mb-24">
-        <div className="max-w-5xl mx-auto space-y-16">
-          <div className="text-center space-y-4">
-             <h2 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter">Smart Shop <span className="text-emerald-600">Superpowers.</span></h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[
-              { icon: <Scan />, t: "AI Expiry Scanner", d: "Snap a photo of any drug or product; our AI reads the expiry date automatically and alerts you before items spoil." },
-              { icon: <Landmark />, t: "Soft POS Terminal", d: "Professional transfer screen. No more 'I haven't seen the alert' arguments with customers. Show bank details clearly." },
-              { icon: <MessageCircle />, t: "WhatsApp Receipts", d: "Save ₦30,000 on printers. Send professional branded receipts directly to customers' phones instantly." },
-              { icon: <TrendingUp />, t: "Inflation Protector", d: "Fuel or Dollar go up? Update all your prices across the entire shop or category in just 1-click." }
-            ].map((f, i) => (
-              <div key={i} className="bg-white p-8 rounded-[40px] border border-emerald-100 space-y-4 hover:shadow-xl transition-all group">
-                 <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">{f.icon}</div>
-                 <h4 className="font-black uppercase italic tracking-tight text-xl">{f.t}</h4>
-                 <p className="text-slate-500 text-sm leading-relaxed font-medium">{f.d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 5. Notebook vs. NaijaShop */}
+      {/* FAQ Section */}
       <section className="px-6 py-24 max-w-4xl mx-auto space-y-12">
         <div className="text-center">
-           <h2 className="text-3xl font-black uppercase italic">Notebook vs. NaijaShop</h2>
+           <h2 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">Common <span className="text-emerald-600">Questions</span></h2>
         </div>
-        <div className="bg-white border-2 border-slate-100 rounded-[48px] overflow-hidden shadow-2xl">
-           <div className="grid grid-cols-2 bg-slate-50 border-b-2 border-slate-100">
-              <div className="p-6 text-center border-r-2 border-slate-100"><h3 className="text-xl font-black text-red-500 uppercase italic">Paper Notebook</h3></div>
-              <div className="p-6 text-center"><h3 className="text-xl font-black text-emerald-600 uppercase italic">NaijaShop App</h3></div>
-           </div>
-           {[
-             { o: "Easy to lose or tear", n: "Secure WhatsApp Backup" },
-             { o: "Staff can lie about sales", n: "PIN Protected & Logged" },
-             { o: "Hard to calculate profit", n: "Instant Profit Reports" },
-             { o: "Data connection needed", n: "100% Offline (No Data!)" }
-           ].map((r, i) => (
-             <div key={i} className="grid grid-cols-2 border-b border-slate-50 last:border-0">
-                <div className="p-6 text-center border-r-2 border-slate-100 bg-red-50/10 text-xs font-bold text-slate-500 leading-tight">❌ {r.o}</div>
-                <div className="p-6 text-center bg-emerald-50/10 text-xs font-black text-emerald-700 leading-tight">✅ {r.n}</div>
-             </div>
-           ))}
+        <div className="space-y-4">
+          {faqs.map((faq, i) => (
+            <div key={i} className="bg-white border-2 border-slate-50 rounded-[32px] overflow-hidden shadow-sm transition-all hover:shadow-md">
+              <button 
+                onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                className="w-full p-8 text-left flex justify-between items-center gap-4"
+              >
+                <span className="font-black text-sm md:text-base uppercase tracking-tight text-emerald-950 leading-tight">{faq.q}</span>
+                {openFaq === i ? <ChevronUp size={20} className="text-slate-300 shrink-0" /> : <ChevronDown size={20} className="text-slate-300 shrink-0" />}
+              </button>
+              {openFaq === i && (
+                <div className="px-8 pb-8 animate-in slide-in-from-top duration-300">
+                  <p className="text-sm md:text-base font-medium text-slate-500 leading-relaxed bg-slate-50 p-6 rounded-2xl border border-slate-100 italic">
+                    "{faq.a}"
+                  </p>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* 6. New Year Pricing */}
+      {/* Pricing */}
       <section className="px-6 py-24 bg-slate-950 text-white">
         <div className="max-w-5xl mx-auto space-y-16">
           <div className="text-center space-y-4">
@@ -267,7 +318,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
         </div>
       </section>
 
-      {/* 7. Trust-Building Footer */}
+      {/* Footer */}
       <footer className="bg-white border-t border-slate-100 pt-24 pb-12">
         <div className="max-w-5xl mx-auto px-6 space-y-16">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
