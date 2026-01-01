@@ -275,7 +275,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         const data = JSON.parse(jsonStr);
         
         const result = await applyInventoryUpdate(data);
-        alert(`Inventory Updated! ${result.added} new products added, ${result.updated} prices updated.`);
+        alert(`Shop Updated! ${result.updated + result.added} items updated with new prices/details.`);
         window.location.reload();
       } catch (err) {
         alert('Update failed: ' + (err as Error).message);

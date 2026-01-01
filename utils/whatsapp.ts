@@ -466,7 +466,7 @@ export const applyInventoryUpdate = async (data: any) => {
     }
   });
 
-  localStorage.setItem('inventory_last_updated', Date.now().toString());
+  localStorage.setItem('last_inventory_sync', Date.now().toString());
   return { added, updated };
 };
 

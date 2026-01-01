@@ -32,10 +32,10 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
   
-  // Last Updated Status
-  const lastUpdatedTs = localStorage.getItem('inventory_last_updated');
-  const lastUpdatedText = lastUpdatedTs 
-    ? new Date(parseInt(lastUpdatedTs)).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })
+  // Last Sync Status
+  const lastSyncTs = localStorage.getItem('last_inventory_sync');
+  const lastSyncText = lastSyncTs 
+    ? new Date(parseInt(lastSyncTs)).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })
     : 'Never';
 
   // Parked Orders States
@@ -356,7 +356,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           uuid: crypto.randomUUID(),
           items: cart.map(({image, ...rest}) => rest), 
           total: saleTotal, 
-          totalCost: cart.reduce((sum, item) => sum + (item.costPrice * item.quantity), 0),
+          totalCost: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
           walletUsed: appliedFromWallet,
           walletSaved: (paymentMode === 'Debt' ? Math.max(0, Number(amountPaid || 0) - (saleTotal - appliedFromWallet)) : (saveChangeToWallet ? changeDue : 0)),
           cashPaid: finalCashPaid, 
@@ -492,11 +492,11 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
               </div>
             </div>
           </div>
-          {/* Last Updated Visual Indicator */}
+          {/* Last Sync Visual Indicator */}
           <div className="flex items-center gap-1.5 pl-1">
              <RefreshCw size={8} className="text-slate-400 dark:text-emerald-700" />
              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-emerald-700">
-               Inventory Last Updated: <span className="text-emerald-600 dark:text-emerald-500">{lastUpdatedText}</span>
+               Prices last updated: <span className="text-emerald-600 dark:text-emerald-500">{lastSyncText}</span>
              </p>
           </div>
         </header>

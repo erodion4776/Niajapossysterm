@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
-import { formatNaira } from '../utils/whatsapp.ts';
+import { formatNaira, applyInventoryUpdate } from '../utils/whatsapp.ts';
 import { 
   ShoppingCart, 
   Package, 
@@ -29,7 +30,10 @@ import {
   Check,
   Coins,
   Gem,
-  RotateCcw
+  RotateCcw,
+  RefreshCw,
+  Loader2,
+  CloudUpload
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -49,6 +53,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
   const [showDateModal, setShowDateModal] = useState(false);
   const [showAlerts, setShowAlerts] = useState(true);
+  const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
+  const syncInputRef = useRef<HTMLInputElement>(null);
   
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const debts = useLiveQuery(() => db.debts.toArray());
@@ -219,13 +225,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     }
   }, [datePreset, customDate]);
 
+  const handleImportInventoryUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        setIsUpdatingInventory(true);
+        const jsonStr = event.target?.result as string;
+        const data = JSON.parse(jsonStr);
+        
+        const result = await applyInventoryUpdate(data);
+        alert(`Shop Updated! ${result.updated + result.added} items updated with new prices/details.`);
+        window.location.reload();
+      } catch (err) {
+        alert('Update failed: ' + (err as Error).message);
+      } finally {
+        setIsUpdatingInventory(false);
+        if (syncInputRef.current) syncInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
       <header className="space-y-4">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Home</h1>
-            <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Business Overview</p>
+            <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">{isAdmin ? 'Business Overview' : 'Workplace'}</p>
           </div>
           <div className="flex gap-2 items-center">
             {datePreset !== 'today' && (
@@ -248,6 +278,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
           </div>
         </div>
       </header>
+
+      {/* Staff Sync Button - prominent placement for non-admins */}
+      {!isAdmin && (
+        <section className="bg-white dark:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4 animate-in slide-in-from-top duration-500">
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600 dark:text-emerald-300">
+               <RefreshCw size={18} />
+             </div>
+             <h2 className="text-[11px] font-black text-slate-800 dark:text-emerald-50 uppercase tracking-widest">Inventory Sync</h2>
+          </div>
+          
+          <label className="w-full bg-emerald-50 dark:bg-emerald-800/40 border-2 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all cursor-pointer">
+            <input 
+              type="file" 
+              className="hidden" 
+              accept=".json" 
+              onChange={handleImportInventoryUpdate}
+              ref={syncInputRef}
+            />
+            {isUpdatingInventory ? <Loader2 size={18} className="animate-spin"/> : <RefreshCw size={18}/>}
+            Sync Inventory from Boss
+          </label>
+          <p className="text-[8px] font-bold text-slate-400 text-center uppercase tracking-widest">Update shop prices & items from WhatsApp file</p>
+        </section>
+      )}
 
       {/* ALERT SYSTEM */}
       {(alerts.expiring > 0 || alerts.lowStock > 0) && showAlerts && (
