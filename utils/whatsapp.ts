@@ -90,8 +90,9 @@ export const generateShopKey = async () => {
   const license_expiry = localStorage.getItem('license_expiry');
   const license_signature = localStorage.getItem('license_signature');
 
+  // Include images in the shop setup key
   const payload = {
-    inventory: inventory.map(({image, ...rest}) => rest), 
+    inventory, 
     users,
     settings: { shopName, shopInfo, license_expiry, license_signature }
   };
@@ -135,7 +136,7 @@ export const generateStaffInviteKey = async (user: User) => {
     shopInfo,
     staffName: user.name,
     staffPin: user.pin,
-    inventory: inventory.map(i => ({ name: i.name, sellingPrice: i.sellingPrice, costPrice: i.costPrice, stock: i.stock, category: i.category, barcode: i.barcode })),
+    inventory: inventory.map(i => ({ name: i.name, sellingPrice: i.sellingPrice, costPrice: i.costPrice, stock: i.stock, category: i.category, barcode: i.barcode, image: i.image })),
     license_expiry,
     license_signature,
     timestamp: Date.now()
@@ -164,8 +165,9 @@ export const generateMasterStockKey = async () => {
   const inventory = await db.inventory.toArray();
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
 
+  // Include images in master stock update
   const payload = {
-    inventory: inventory.map(({image, ...rest}) => rest),
+    inventory,
     type: 'STOCK_UPDATE',
     timestamp: Date.now()
   };
@@ -368,12 +370,34 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
   const dateStr = new Date().toISOString().split('T')[0];
   const fileName = `NAIJASHOP_UPDATE_${dateStr}.json`;
 
+  // Explicitly ensure images are included in the export payload
+  const inventoryData = inventory.map(item => ({
+    id: item.id,
+    name: item.name,
+    costPrice: item.costPrice,
+    sellingPrice: item.sellingPrice,
+    stock: item.stock,
+    minStock: item.minStock,
+    expiryDate: item.expiryDate,
+    category: item.category,
+    barcode: item.barcode,
+    image: item.image, // Product Image
+    dateAdded: item.dateAdded
+  }));
+
+  const categoryData = categories.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    image: cat.image, // Category Image
+    dateCreated: cat.dateCreated
+  }));
+
   const payload = {
     type: 'INVENTORY_UPDATE',
     shopName,
     timestamp: Date.now(),
-    inventory,
-    categories,
+    inventory: inventoryData,
+    categories: categoryData,
     resetStock
   };
 
@@ -381,7 +405,7 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
   const blob = new Blob([jsonString], { type: 'application/json' });
   const file = new File([blob], fileName, { type: 'application/json' });
 
-  const message = "Hello Team, I have updated the shop inventory. Please click the file below and select 'Import Update' in your app to see the new products/prices.";
+  const message = "Hello Team, I have updated the shop inventory. Please click the file below and select 'Sync Inventory from Boss' in your app to see the new products/prices/images.";
 
   if (navigator.share) {
     try {
@@ -414,6 +438,7 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
 /**
  * Merges the inventory update on the staff device
  * Implements 'Smart Merge' logic: protects existing stock unless resetStock is true.
+ * Explicitly preserves and updates image data.
  */
 export const applyInventoryUpdate = async (data: any) => {
   if (data.type !== 'INVENTORY_UPDATE') {
@@ -425,12 +450,13 @@ export const applyInventoryUpdate = async (data: any) => {
   const resetStock = data.resetStock === true;
 
   await db.transaction('rw', [db.inventory, db.categories], async () => {
-    // 1. Process Categories (Overwrites/Adds)
+    // 1. Process Categories (Sync Name and Image)
     if (data.categories) {
       for (const cat of data.categories) {
         const { id, ...catWithoutId } = cat;
         const existing = await db.categories.where('name').equals(cat.name).first();
         if (existing) {
+          // Update category details including image
           await db.categories.update(existing.id!, catWithoutId);
         } else {
           await db.categories.add(catWithoutId);
@@ -438,27 +464,29 @@ export const applyInventoryUpdate = async (data: any) => {
       }
     }
 
-    // 2. Process Inventory (Smart Merge)
+    // 2. Process Inventory (Smart Merge with Image Support)
     if (data.inventory) {
       for (const item of data.inventory) {
         const { id, stock, ...itemData } = item;
         const existing = await db.inventory.get(id);
 
         if (existing) {
-          // Update Price and Name. Protect current stock levels unless Boss explicitly chose to reset.
+          // Smart Update: Update Price, Name, and IMAGE. 
+          // Preserve local stock unless Boss specifically requested a reset.
           const updatePayload = resetStock ? { ...itemData, stock } : itemData;
           await db.inventory.update(id, updatePayload);
           updated++;
         } else {
-          // If ID mismatch, try matching by name
+          // If ID mismatch, try matching by name (helps if staff manually added items with same name)
           const byName = await db.inventory.where('name').equals(item.name).first();
           if (byName) {
             const updatePayload = resetStock ? { ...itemData, stock } : itemData;
             await db.inventory.update(byName.id!, updatePayload);
             updated++;
           } else {
-            // Add New Item with provided stock from Boss (initial stock)
-            await db.inventory.add(item);
+            // Completely New Item: Add with everything including Boss's initial stock levels and image
+            const { id: bossId, ...newProduct } = item; 
+            await db.inventory.add(newProduct);
             added++;
           }
         }

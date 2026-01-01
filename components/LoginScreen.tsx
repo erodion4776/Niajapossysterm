@@ -106,10 +106,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
             for (const item of data.inventory) {
               const existing = await db.inventory.where('name').equals(item.name).first();
               if (existing) {
+                // Ensure image is updated during stock sync
                 await db.inventory.update(existing.id!, { 
                   stock: item.stock, 
                   sellingPrice: item.sellingPrice,
-                  costPrice: item.costPrice 
+                  costPrice: item.costPrice,
+                  image: item.image 
                 });
               } else {
                 const { id, ...rest } = item;
