@@ -13,6 +13,7 @@ import {
 import { Role, Page } from '../types.ts';
 import { ExpiryScanner } from '../components/ExpiryScanner.tsx';
 import { processImage } from '../utils/images.ts';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface InventoryProps {
   user: DBUser;
@@ -47,6 +48,11 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [isUpdatingBulk, setIsUpdatingBulk] = useState(false);
   
+  // Barcode Scanner State
+  const [isScanningBarcode, setIsScanningBarcode] = useState<'add' | 'edit' | null>(null);
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerId = "inventory-barcode-reader";
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Bulk Updater State
@@ -104,6 +110,40 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     else if (target === 'product-edit') setEditingItem(prev => prev ? { ...prev, image: '' } : null);
     else if (target === 'cat-add') setCatFormData(prev => ({ ...prev, image: '' }));
     else if (target === 'cat-edit') setEditingCat(prev => prev ? { ...prev, image: '' } : null);
+  };
+
+  const startBarcodeScanner = async (target: 'add' | 'edit') => {
+    setIsScanningBarcode(target);
+    setTimeout(async () => {
+      try {
+        const html5QrCode = new Html5Qrcode(scannerContainerId);
+        html5QrCodeRef.current = html5QrCode;
+        await html5QrCode.start(
+          { facingMode: "environment" }, 
+          { fps: 10, qrbox: { width: 250, height: 150 } }, 
+          async (decodedText) => {
+            if (target === 'add') setFormData(p => ({ ...p, barcode: decodedText }));
+            else if (editingItem) setEditingItem({ ...editingItem, barcode: decodedText });
+            stopBarcodeScanner();
+            if (navigator.vibrate) navigator.vibrate(100);
+          },
+          () => {}
+        );
+      } catch (err) {
+        alert("Camera Access Denied. Please enable camera permissions in your browser settings to use the scanner.");
+        setIsScanningBarcode(null);
+      }
+    }, 300);
+  };
+
+  const stopBarcodeScanner = async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+      } catch (e) {}
+      html5QrCodeRef.current = null;
+    }
+    setIsScanningBarcode(null);
   };
 
   const handleAddItem = async (e: React.FormEvent) => {
@@ -274,6 +314,21 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
         setShowScanner(null);
       }} onClose={() => setShowScanner(null)} />}
 
+      {isScanningBarcode && (
+        <div className="fixed inset-0 bg-black z-[1000] flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+          <button onClick={stopBarcodeScanner} className="absolute top-8 right-8 bg-white/10 p-4 rounded-full text-white z-[1010] backdrop-blur-md active:scale-95"><X size={24} /></button>
+          <div className="text-center space-y-2 mb-8">
+            <h2 className="text-2xl font-black text-white uppercase tracking-tighter italic">Barcode Scanner</h2>
+            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Position product barcode in the frame</p>
+          </div>
+          <div id={scannerContainerId} className="w-full max-w-sm aspect-square rounded-[48px] overflow-hidden border-4 border-emerald-500/30 shadow-[0_0_80px_rgba(5,150,105,0.2)]"></div>
+          <div className="mt-12 flex items-center gap-3 text-emerald-400 opacity-60">
+             <Scan size={20} className="animate-pulse" />
+             <span className="text-[10px] font-black uppercase tracking-[0.3em]">System Active</span>
+          </div>
+        </div>
+      )}
+
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Stock</h1>
@@ -409,15 +464,15 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       {/* Add Product Modal */}
       {showAddModal && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 flex flex-col">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 italic">Stock New Item</h2>
               <button onClick={() => setShowAddModal(false)} className="p-3 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90 transition-all"><X size={20} /></button>
             </div>
             
-            <form onSubmit={handleAddItem} className="space-y-6">
+            <form onSubmit={handleAddItem} className="space-y-8 pt-20 flex-1">
               {/* Image Upload Area */}
-              <div className="flex justify-center">
+              <div className="flex justify-center -mt-16 mb-4">
                 <div className="relative group">
                   <div className="w-32 h-32 rounded-[32px] bg-slate-50 dark:bg-emerald-950 flex items-center justify-center overflow-hidden border-4 border-white dark:border-emerald-800 shadow-xl">
                     {formData.image ? (
@@ -436,7 +491,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Product Name</label>
                   <div className="relative">
@@ -491,43 +546,31 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                     })()}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">In Stock</label>
-                    <div className="flex gap-2">
-                      <input 
-                        required 
-                        type="number" 
-                        inputMode="numeric"
-                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
-                        value={formData.stock || ''} 
-                        onChange={e => setFormData({...formData, stock: Number(e.target.value)})} 
-                      />
-                      <select 
-                        className="bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none px-2 text-[10px] uppercase tracking-widest focus:ring-2 focus:ring-emerald-500"
-                        value={formData.unit}
-                        onChange={e => setFormData({...formData, unit: e.target.value})}
-                      >
-                        {NAIJA_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Alert Level</label>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Stock & Unit</label>
+                  <div className="grid grid-cols-3 sm:flex gap-3">
                     <input 
                       required 
                       type="number" 
                       inputMode="numeric"
-                      className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
-                      value={formData.minStock || ''} 
-                      onChange={e => setFormData({...formData, minStock: Number(e.target.value)})} 
+                      className="col-span-1 sm:w-24 p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 text-center" 
+                      value={formData.stock || ''} 
+                      onChange={e => setFormData({...formData, stock: Number(e.target.value)})} 
+                      placeholder="Qty"
                     />
+                    <select 
+                      className="col-span-2 flex-1 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none px-4 text-xs uppercase tracking-widest focus:ring-2 focus:ring-emerald-500"
+                      value={formData.unit}
+                      onChange={e => setFormData({...formData, unit: e.target.value})}
+                    >
+                      {NAIJA_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                    <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Category</label>
-                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs focus:ring-2 focus:ring-emerald-500" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-sm focus:ring-2 focus:ring-emerald-500 min-w-[150px]" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
                       {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
                   </div>
@@ -553,14 +596,17 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Barcode (Optional)</label>
-                  <div className="relative">
-                    <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan or type barcode" />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                      <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan or type barcode" />
+                    </div>
+                    <button type="button" onClick={() => startBarcodeScanner('add')} className="p-4 bg-emerald-600 text-white rounded-2xl active:scale-90 shadow-lg"><Camera size={20}/></button>
                   </div>
                 </div>
               </div>
 
-              <button type="submit" className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] shadow-xl uppercase tracking-widest text-xs active:scale-[0.98] transition-all">
+              <button type="submit" className="w-full bg-emerald-600 text-white font-black py-6 rounded-[28px] shadow-xl uppercase tracking-widest text-sm active:scale-[0.98] transition-all">
                 Save Product
               </button>
             </form>
@@ -571,14 +617,14 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
       {/* Edit Product Modal */}
       {editingItem && isAdmin && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-lg rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 flex flex-col">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-slate-800 dark:text-emerald-50 italic">Update Item</h2>
               <button onClick={() => setEditingItem(null)} className="p-3 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20} /></button>
             </div>
             
-            <form onSubmit={handleUpdateItem} className="space-y-6">
-              <div className="flex justify-center">
+            <form onSubmit={handleUpdateItem} className="space-y-8 pt-20 flex-1">
+              <div className="flex justify-center -mt-16 mb-4">
                 <div className="relative">
                   <div className="w-32 h-32 rounded-[32px] bg-slate-50 dark:bg-emerald-950 flex items-center justify-center overflow-hidden border-4 border-white dark:border-emerald-800 shadow-xl">
                     {editingItem.image ? (
@@ -594,7 +640,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-6">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Product Name</label>
                   <div className="relative">
@@ -646,43 +692,31 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                     })()}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Current Stock</label>
-                    <div className="flex gap-2">
-                      <input 
-                        required 
-                        type="number" 
-                        inputMode="numeric"
-                        className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
-                        value={editingItem.stock || ''} 
-                        onChange={e => setEditingItem({...editingItem, stock: Number(e.target.value)})} 
-                      />
-                      <select 
-                        className="bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none px-2 text-[10px] uppercase tracking-widest focus:ring-2 focus:ring-emerald-500"
-                        value={editingItem.unit || 'Pcs'}
-                        onChange={e => setEditingItem({...editingItem, unit: e.target.value})}
-                      >
-                        {NAIJA_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Alert Level</label>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Stock & Unit</label>
+                  <div className="grid grid-cols-3 sm:flex gap-3">
                     <input 
                       required 
                       type="number" 
                       inputMode="numeric"
-                      className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" 
-                      value={editingItem.minStock || ''} 
-                      onChange={e => setEditingItem({...editingItem, minStock: Number(e.target.value)})} 
+                      className="col-span-1 sm:w-24 p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500 text-center" 
+                      value={editingItem.stock || ''} 
+                      onChange={e => setEditingItem({...editingItem, stock: Number(e.target.value)})} 
+                      placeholder="Qty"
                     />
+                    <select 
+                      className="col-span-2 flex-1 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none px-4 text-xs uppercase tracking-widest focus:ring-2 focus:ring-emerald-500"
+                      value={editingItem.unit || 'Pcs'}
+                      onChange={e => setEditingItem({...editingItem, unit: e.target.value})}
+                    >
+                      {NAIJA_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                    <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Category</label>
-                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-xs focus:ring-2 focus:ring-emerald-500" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
+                    <select className="w-full p-4 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none text-sm focus:ring-2 focus:ring-emerald-500 min-w-[150px]" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
                       {categories?.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
                   </div>
@@ -707,15 +741,18 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Barcode</label>
-                  <div className="relative">
-                    <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={editingItem.barcode} onChange={e => setEditingItem({...editingItem, barcode: e.target.value})} />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                      <input className="w-full p-4 pl-12 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" value={editingItem.barcode} onChange={e => setEditingItem({...editingItem, barcode: e.target.value})} />
+                    </div>
+                    <button type="button" onClick={() => startBarcodeScanner('edit')} className="p-4 bg-emerald-600 text-white rounded-2xl active:scale-90 shadow-lg"><Camera size={20}/></button>
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-3">
-                <button type="submit" className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] shadow-xl uppercase tracking-widest text-xs active:scale-[0.98] transition-all">
+                <button type="submit" className="w-full bg-emerald-600 text-white font-black py-6 rounded-[28px] shadow-xl uppercase tracking-widest text-sm active:scale-[0.98] transition-all">
                   Update Product
                 </button>
                 <button type="button" onClick={() => editingItem.id && handleDeleteItem(editingItem.id)} className="w-full py-4 text-red-300 font-black uppercase text-[8px] tracking-widest hover:text-red-500 transition-colors">

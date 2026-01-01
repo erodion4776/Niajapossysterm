@@ -428,7 +428,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
               </div>
               <div>
                 <h3 className="text-sm font-black text-white uppercase tracking-tight italic">Software Update</h3>
-                <p className="text-[8px] text-emerald-500/60 font-bold uppercase tracking-widest">Current Version: v1.1.0</p>
+                <p className="text-[8px] text-emerald-500/60 font-bold uppercase tracking-widest">Current Version: v1.1.1</p>
               </div>
             </div>
             {updateStatus === 'success' && <CheckCircle2 className="text-emerald-500 animate-in zoom-in" size={20} />}
@@ -796,7 +796,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
       <div className="py-6 text-center space-y-1">
         <p className="text-[9px] font-black text-slate-300 dark:text-emerald-900 uppercase tracking-[0.5em]">NaijaShop Offline POS • v2.5</p>
-        <p className="text-[8px] font-bold text-slate-400 dark:text-emerald-800/40 uppercase tracking-widest">App Version: 1.1.0</p>
+        <p className="text-[8px] font-bold text-slate-400 dark:text-emerald-800/40 uppercase tracking-widest">App Version: 1.1.1</p>
       </div>
 
       {/* Add User Modal */}
