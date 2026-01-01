@@ -61,6 +61,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
   /**
    * Technical Fix: Bulletproof Staff Onboarding
    * Clears old data and enforces the 'staff' lockdown role
+   * Saves Boss's Soft POS bank details locally
    */
   const processStaffInvite = async (data: any) => {
     setIsProcessing(true);
@@ -84,14 +85,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
         localStorage.setItem('license_signature', data.license_signature);
       }
 
-      // 4. Set GLOBAL LOCKDOWN flags
+      // 4. Sync Soft POS Details
+      if (data.softPosBank) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
+      if (data.softPosNumber) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
+      if (data.softPosAccount) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
+
+      // 5. Set GLOBAL LOCKDOWN flags
       localStorage.setItem('shop_name', data.shopName);
       localStorage.setItem('is_activated', 'true');
       localStorage.setItem('is_setup_pending', 'false');
       localStorage.setItem('device_role', 'StaffDevice');
       localStorage.setItem('user_role', 'staff');
 
-      // 5. Force Clean Reload
+      // 6. Force Clean Reload
       window.location.href = '/app';
     } catch (err) {
       setImportError('❌ Activation failed. Please try again.');
@@ -124,10 +130,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
 
     // Legacy formats
     if (data.type === 'STOCK_UPDATE') {
-      if (confirm(`Update stock levels from Admin?`)) {
+      if (confirm(`Update stock levels and bank details from Admin?`)) {
         setIsProcessing(true);
         try {
-          await db.transaction('rw', [db.inventory], async () => {
+          await db.transaction('rw', [db.inventory, db.settings], async () => {
+            // Sync Soft POS Details if present in stock update
+            if (data.softPosBank !== undefined) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
+            if (data.softPosNumber !== undefined) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
+            if (data.softPosAccount !== undefined) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
+
             for (const item of data.inventory) {
               const existing = await db.inventory.where('name').equals(item.name).first();
               if (existing) {
@@ -143,11 +154,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
               }
             }
           });
-          alert('Stock Synced Successfully!');
+          alert('Sync Successful!');
           setShowImport(false);
           setImportKey('');
         } catch (e) {
-          setImportError('Stock sync failed');
+          setImportError('Sync failed');
         } finally {
           setIsProcessing(false);
         }

@@ -127,11 +127,18 @@ export const generateShopKey = async () => {
 /**
  * Technical Fix: Rebuilt Staff Invite Generator
  * Simple but strict format for 100% reliability
+ * Includes Soft POS details for staff terminal display
  */
 export const generateStaffInviteKey = async (user: User) => {
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
   const expiry = localStorage.getItem('license_expiry') || '';
   const license_signature = localStorage.getItem('license_signature') || '';
+
+  // Fetch current Soft POS settings
+  // Fix: Renamed single-letter variables for clarity and to avoid redeclaration conflicts
+  const bankSetting = await db.settings.get('softPosBank');
+  const numberSetting = await db.settings.get('softPosNumber');
+  const accountSetting = await db.settings.get('softPosAccount');
 
   const data = { 
     shopName, 
@@ -139,6 +146,9 @@ export const generateStaffInviteKey = async (user: User) => {
     staffPin: user.pin, 
     expiry, 
     license_signature,
+    softPosBank: bankSetting?.value || '',
+    softPosNumber: numberSetting?.value || '',
+    softPosAccount: accountSetting?.value || '',
     role: 'staff', 
     secret: 'NAIJA_VERIFIED' 
   };
@@ -267,12 +277,13 @@ export const backupToWhatsApp = async (data: any, excludePhotos = false): Promis
   try {
     const blob = new Blob([compressed], { type: 'application/gzip' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // Fix: Rename 'a' to 'anchor' to avoid confusion with settings variables
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
     
     await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
@@ -355,18 +366,20 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
 
   const blob = new Blob([compressed], { type: 'application/gzip' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // Fix: Rename 'a' to 'anchor' to avoid confusion with settings variables
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
   return { success: true };
 };
 
 /**
  * Pushes the inventory update to staff via WhatsApp
+ * Includes Soft POS bank details to ensure staff terminals are up-to-date
  */
 export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) => {
   const inventory = await db.inventory.toArray();
@@ -374,6 +387,12 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
   const dateStr = new Date().toISOString().split('T')[0];
   const fileName = `NAIJASHOP_UPDATE_${dateStr}.json`;
+
+  // Fetch current Soft POS settings
+  // Fix: Renamed single-letter variables for clarity and to avoid redeclaration conflicts
+  const bankSetting = await db.settings.get('softPosBank');
+  const numberSetting = await db.settings.get('softPosNumber');
+  const accountSetting = await db.settings.get('softPosAccount');
 
   // Explicitly ensure images are included in the export payload
   const inventoryData = inventory.map(item => ({
@@ -403,7 +422,10 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
     timestamp: Date.now(),
     inventory: inventoryData,
     categories: categoryData,
-    resetStock
+    resetStock,
+    softPosBank: bankSetting?.value || '',
+    softPosNumber: numberSetting?.value || '',
+    softPosAccount: accountSetting?.value || ''
   };
 
   const jsonString = JSON.stringify(payload);
@@ -427,12 +449,13 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
 
   // Fallback to download
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // Fix: Rename 'a' to 'anchor' to avoid confusion with settings variables (which included 'a' previously)
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
   
   const encodedMessage = encodeURIComponent(message);
@@ -443,7 +466,7 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
 /**
  * Merges the inventory update on the staff device
  * Implements 'Smart Merge' logic: protects existing stock unless resetStock is true.
- * Explicitly preserves and updates image data.
+ * Explicitly preserves and updates image data and Soft POS details.
  */
 export const applyInventoryUpdate = async (data: any) => {
   if (data.type !== 'INVENTORY_UPDATE') {
@@ -454,7 +477,12 @@ export const applyInventoryUpdate = async (data: any) => {
   let updated = 0;
   const resetStock = data.resetStock === true;
 
-  await db.transaction('rw', [db.inventory, db.categories], async () => {
+  await db.transaction('rw', [db.inventory, db.categories, db.settings], async () => {
+    // 0. Sync Soft POS Details
+    if (data.softPosBank !== undefined) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
+    if (data.softPosNumber !== undefined) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
+    if (data.softPosAccount !== undefined) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
+
     // 1. Process Categories (Sync Name and Image)
     if (data.categories) {
       for (const cat of data.categories) {
