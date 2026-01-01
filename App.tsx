@@ -15,6 +15,9 @@ import { StockLogs } from './pages/StockLogs.tsx';
 import { CategoryManager } from './pages/CategoryManager.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
 import { InstallApp } from './pages/InstallApp.tsx';
+import { PublicHelp } from './pages/PublicHelp.tsx';
+import { AboutUs } from './pages/AboutUs.tsx';
+import { Affiliates } from './pages/Affiliates.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { RoleSelection } from './components/RoleSelection.tsx';
@@ -85,9 +88,23 @@ const AppContent: React.FC = () => {
   }, []);
 
   const syncStateFromUrl = useCallback(() => {
+    const pathname = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page')?.toUpperCase();
     const filterParam = params.get('filter');
+
+    if (pathname === '/help') {
+      setCurrentPage(Page.HELP_CENTER);
+      return;
+    }
+    if (pathname === '/about') {
+      setCurrentPage(Page.ABOUT_US);
+      return;
+    }
+    if (pathname === '/affiliates') {
+      setCurrentPage(Page.AFFILIATES);
+      return;
+    }
 
     if (pageParam && Object.values(Page).includes(pageParam as Page)) {
       setCurrentPage(pageParam as Page);
@@ -105,14 +122,26 @@ const AppContent: React.FC = () => {
   const navigateTo = useCallback((page: Page, filter?: string) => {
     setCurrentPage(page);
     const url = new URL(window.location.href);
-    url.pathname = '/app';
-    url.searchParams.set('page', page.toLowerCase());
-    if (filter && filter !== 'all') {
-      url.searchParams.set('filter', filter);
-      setInventoryFilter(filter as any);
+    
+    if (page === Page.HELP_CENTER) {
+      url.pathname = '/help';
+      url.search = '';
+    } else if (page === Page.ABOUT_US) {
+      url.pathname = '/about';
+      url.search = '';
+    } else if (page === Page.AFFILIATES) {
+      url.pathname = '/affiliates';
+      url.search = '';
     } else {
-      url.searchParams.delete('filter');
-      setInventoryFilter('all');
+      url.pathname = '/app';
+      url.searchParams.set('page', page.toLowerCase());
+      if (filter && filter !== 'all') {
+        url.searchParams.set('filter', filter);
+        setInventoryFilter(filter as any);
+      } else {
+        url.searchParams.delete('filter');
+        setInventoryFilter('all');
+      }
     }
     window.history.pushState({}, '', url.toString());
   }, []);
@@ -193,7 +222,6 @@ const AppContent: React.FC = () => {
   }, [syncStateFromUrl, checkExpiry]);
 
   const handleStartTrial = () => {
-    // Check if app is already running in standalone mode
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     const hasAlreadySkipped = localStorage.getItem('install_onboarding_done') === 'true';
 
@@ -259,8 +287,13 @@ const AppContent: React.FC = () => {
 
   if (!isInitialized) return null;
 
+  // Public Routes (Allow rendering without login)
+  if (currentPage === Page.HELP_CENTER) return <PublicHelp onBack={() => window.history.back()} />;
+  if (currentPage === Page.ABOUT_US) return <AboutUs onBack={() => window.history.back()} />;
+  if (currentPage === Page.AFFILIATES) return <Affiliates onBack={() => window.history.back()} />;
+
   if (isAtLanding && !isActivated && !isTrialing && !showRoleSelection && !showInstallPage) {
-    return <LandingPage onStartTrial={handleStartTrial} />;
+    return <LandingPage onStartTrial={handleStartTrial} onNavigate={(p) => navigateTo(p)} />;
   }
 
   if (showInstallPage) {

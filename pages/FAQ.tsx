@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ChevronLeft, Search, MessageCircle, ChevronDown, ChevronUp, HelpCircle, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, Search, MessageCircle, ChevronDown, ChevronUp, HelpCircle, ShieldCheck, Globe, ArrowRight } from 'lucide-react';
 import { Page } from '../types.ts';
 
 interface FAQProps {
@@ -61,6 +61,23 @@ export const FAQ: React.FC<FAQProps> = ({ setPage }) => {
           <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Support & FAQ</p>
         </div>
       </header>
+
+      {/* New Online Help Center Link */}
+      <button 
+        onClick={() => window.open('https://naijashopapp.com.ng/help', '_blank')}
+        className="w-full bg-emerald-600 text-white p-6 rounded-[32px] flex items-center justify-between shadow-lg shadow-emerald-100 active:scale-95 transition-all"
+      >
+        <div className="flex items-center gap-4 text-left">
+          <div className="p-3 bg-white/20 rounded-2xl">
+            <Globe size={24} />
+          </div>
+          <div>
+            <h3 className="font-black text-base uppercase italic leading-none">Online Help Center</h3>
+            <p className="text-[9px] font-bold uppercase tracking-widest opacity-70">Deep Guides & Video Tutorials</p>
+          </div>
+        </div>
+        <ArrowRight size={20} />
+      </button>
 
       <div className="relative">
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
