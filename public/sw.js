@@ -1,3 +1,4 @@
+
 const CACHE_NAME = 'naijashop-v3-stable';
 const ASSETS_TO_CACHE = [
   '/',
@@ -14,6 +15,7 @@ self.addEventListener('install', (event) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
+  // Force the waiting service worker to become the active service worker.
   self.skipWaiting();
 });
 
@@ -23,6 +25,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)));
     })
   );
+  // Ensure that subsequent queries from that client will be served by this worker.
   self.clients.claim();
 });
 

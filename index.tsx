@@ -1,23 +1,22 @@
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 // @ts-ignore
 import { registerSW } from 'virtual:pwa-register';
 
-// Register the Update Listener for immediate version detection
+// Register the Update Listener for immediate version detection and takeover
 const updateSW = registerSW({
   onNeedRefresh() {
-    // This triggers when the server has a newer version than the cached one
-    if (confirm("🚀 New version available! Update now to get the latest features?")) {
-      updateSW(true);
-    }
+    // Immediate Takeover: Trigger update and reload without manual confirmation
+    updateSW(true);
   },
   onOfflineReady() {
     console.log("App is ready for offline use.");
   },
 });
 
-// Force HTTPS for compatibility in Production (GCP)
+// Force HTTPS for compatibility in Production (GCP/Netlify)
 if (
   window.location.protocol !== 'https:' && 
   window.location.hostname !== 'localhost' && 
