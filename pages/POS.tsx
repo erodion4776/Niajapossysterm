@@ -187,6 +187,17 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
     db.parked_orders.delete(order.id!);
     setShowParkedList(false);
     setIsCartExpanded(false);
+    if (navigator.vibrate) navigator.vibrate(50);
+  };
+
+  const getRelativeTime = (timestamp: number) => {
+    const diff = Date.now() - timestamp;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} mins ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} hours ago`;
+    return new Date(timestamp).toLocaleDateString();
   };
 
   useEffect(() => {
@@ -799,7 +810,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
         </div>
       )}
 
-      {/* Parked Orders List */}
+      {/* Parked Orders Manager */}
       {showParkedList && (
         <div className="fixed inset-0 bg-black/60 z-[300] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
            <div className="bg-slate-50 dark:bg-emerald-950 w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 max-h-[85vh] flex flex-col">
@@ -808,31 +819,40 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                     <div className="p-2 bg-amber-100 dark:bg-amber-900 rounded-xl text-amber-600"><Pause size={20}/></div>
                     <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight italic">Parked Orders</h2>
                  </div>
-                 <button onClick={() => setShowParkedList(false)} className="p-2 bg-white dark:bg-emerald-800 rounded-full text-slate-400 shadow-sm"><X size={20}/></button>
+                 <button onClick={() => setShowParkedList(false)} className="p-2 bg-white dark:bg-emerald-800 rounded-full text-slate-400 shadow-sm active:scale-90 transition-all"><X size={20}/></button>
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-1">
                  {parkedOrders && parkedOrders.length > 0 ? (
                    parkedOrders.map(order => (
-                     <div key={order.id} className="bg-white dark:bg-emerald-900/60 p-5 rounded-[32px] border border-white dark:border-emerald-800 shadow-sm group">
+                     <div key={order.id} className="bg-white dark:bg-emerald-900/60 p-5 rounded-[32px] border border-white dark:border-emerald-800 shadow-sm group animate-in slide-in-from-right duration-300">
                         <div className="flex justify-between items-start mb-4">
-                           <div>
+                           <div className="flex-1 min-w-0 pr-2">
                               <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-0.5">Order ID: #{String(order.id).padStart(3, '0')}</p>
-                              <h3 className="font-black text-slate-800 dark:text-emerald-50 text-base leading-tight italic truncate max-w-[180px]">"{order.customerNote}"</h3>
+                              <h3 className="font-black text-slate-800 dark:text-emerald-50 text-base leading-tight italic truncate uppercase">{order.customerNote}</h3>
                            </div>
-                           <p className="text-lg font-black text-slate-900 dark:text-emerald-50 tracking-tighter">{formatNaira(order.total)}</p>
+                           <p className="text-lg font-black text-slate-900 dark:text-emerald-50 tracking-tighter whitespace-nowrap">{formatNaira(order.total)}</p>
                         </div>
                         
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between pt-4 border-t border-slate-50 dark:border-emerald-800/40">
                            <div className="flex items-center gap-2 text-slate-400">
                               <Clock size={12}/>
-                              <span className="text-[9px] font-bold uppercase tracking-widest">{new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                              <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                              <span className="text-[9px] font-bold uppercase tracking-widest">{getRelativeTime(order.timestamp)}</span>
+                              <span className="w-1 h-1 rounded-full bg-slate-200 dark:bg-emerald-800"></span>
                               <span className="text-[9px] font-bold uppercase tracking-widest">{order.cartItems.length} items</span>
                            </div>
                            <div className="flex gap-2">
-                              <button onClick={() => db.parked_orders.delete(order.id!)} className="p-3 text-red-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
-                              <button onClick={() => handleResumeOrder(order)} className="bg-emerald-600 text-white px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 active:scale-95 transition-all shadow-md">
+                              <button 
+                                onClick={() => { if(confirm("Delete this parked order?")) db.parked_orders.delete(order.id!); }} 
+                                className="p-3 bg-red-50 dark:bg-red-950/20 text-red-400 rounded-xl active:scale-90 transition-all border border-red-100 dark:border-red-900/40"
+                                title="Clear Order"
+                              >
+                                <Trash2 size={16}/>
+                              </button>
+                              <button 
+                                onClick={() => handleResumeOrder(order)} 
+                                className="bg-emerald-600 text-white px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 active:scale-95 transition-all shadow-lg shadow-emerald-100 dark:shadow-none"
+                              >
                                 <Play size={12} fill="currentColor"/> Resume
                               </button>
                            </div>
@@ -841,10 +861,13 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                    ))
                  ) : (
                    <div className="py-20 text-center space-y-4">
-                      <div className="w-20 h-20 bg-slate-100 dark:bg-emerald-900 rounded-[32px] flex items-center justify-center mx-auto text-slate-300">
-                         <Pause size={40} />
+                      <div className="w-24 h-24 bg-slate-100 dark:bg-emerald-900 rounded-[40px] flex items-center justify-center mx-auto text-slate-300">
+                         <Pause size={48} />
                       </div>
-                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No orders currently on hold</p>
+                      <div className="space-y-1">
+                        <p className="text-sm font-black text-slate-400 uppercase tracking-tight">Your Hold list is empty</p>
+                        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Orders you park will show up here</p>
+                      </div>
                    </div>
                  )}
               </div>
