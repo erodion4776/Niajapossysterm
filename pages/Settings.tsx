@@ -12,12 +12,14 @@ import {
   pushInventoryUpdateToStaff,
   applyInventoryUpdate
 } from '../utils/whatsapp.ts';
+import { forceUpdateCheck } from '../utils/updateManager.ts';
 import pako from 'pako';
 import { 
   CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
   Database, ShieldCheck, Share2, RefreshCw, HelpCircle, ChevronDown, BookOpen, Loader2, CheckCircle2,
   Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert, Wifi, TrendingUp, AlertCircle, 
-  ChevronRight, MapPin, Phone, Receipt, Info, LogOut, Landmark, CreditCard, Tag, Download, Globe, Gift
+  ChevronRight, MapPin, Phone, Receipt, Info, LogOut, Landmark, CreditCard, Tag, Download, Globe, Gift,
+  Zap
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -54,6 +56,8 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const [isMerging, setIsMerging] = useState(false);
   const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
   const [isConnectingPrinter, setIsConnectingPrinter] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'success' | 'latest'>('idle');
   
   // Modal Data
   const [newUser, setNewUser] = useState({ name: '', pin: '', role: 'Staff' as Role });
@@ -120,6 +124,25 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       if (outcome === 'accepted') (window as any).deferredPWAPrompt = null;
     } else {
       alert("To install NaijaShop:\n\n1. Click the 3 dots (⋮) in your browser corner.\n2. Select 'Install' or 'Add to Home Screen'.\n\nThis makes the app work perfectly offline.");
+    }
+  };
+
+  const handleForceUpdate = async () => {
+    setIsCheckingUpdate(true);
+    setUpdateStatus('idle');
+    try {
+      const updated = await forceUpdateCheck();
+      if (updated) {
+        setUpdateStatus('success');
+        // Page will reload automatically due to controllerchange listener in index.tsx
+      } else {
+        setUpdateStatus('latest');
+        setTimeout(() => setUpdateStatus('idle'), 3000);
+      }
+    } catch (err: any) {
+      alert(err.message || "Update check failed.");
+    } finally {
+      setIsCheckingUpdate(false);
     }
   };
 
@@ -378,22 +401,59 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         </div>
       </header>
 
-      {/* App Install Helper */}
-      <button 
-        onClick={handleManualInstall}
-        className="w-full flex items-center justify-between p-6 bg-emerald-600 text-white rounded-[32px] shadow-lg shadow-emerald-200 active:scale-95 transition-all"
-      >
-        <div className="flex items-center gap-4 text-left">
-          <div className="p-3 bg-white/20 rounded-2xl">
-            <Smartphone size={24} />
+      {/* App Install & Update Card */}
+      <div className="space-y-3">
+        <button 
+          onClick={handleManualInstall}
+          className="w-full flex items-center justify-between p-6 bg-emerald-600 text-white rounded-[32px] shadow-lg shadow-emerald-200 active:scale-95 transition-all"
+        >
+          <div className="flex items-center gap-4 text-left">
+            <div className="p-3 bg-white/20 rounded-2xl">
+              <Smartphone size={24} />
+            </div>
+            <div>
+              <h3 className="font-black text-base uppercase italic leading-none">Add to Home Screen</h3>
+              <p className="text-[9px] font-bold uppercase tracking-widest opacity-70">Enable 100% Offline App Mode</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-black text-base uppercase italic leading-none">Add to Home Screen</h3>
-            <p className="text-[9px] font-bold uppercase tracking-widest opacity-70">Enable 100% Offline App Mode</p>
+          <Download size={20} />
+        </button>
+
+        {/* Technical Component: Manual Force Update Button */}
+        <div className="bg-slate-900 border border-emerald-500/30 p-6 rounded-[32px] shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400">
+                <Zap size={18} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-tight italic">Software Update</h3>
+                <p className="text-[8px] text-emerald-500/60 font-bold uppercase tracking-widest">Current Version: v1.0.9</p>
+              </div>
+            </div>
+            {updateStatus === 'success' && <CheckCircle2 className="text-emerald-500 animate-in zoom-in" size={20} />}
           </div>
+          
+          <button 
+            onClick={handleForceUpdate}
+            disabled={isCheckingUpdate}
+            className={`w-full py-4 rounded-[20px] font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${
+              updateStatus === 'latest' 
+                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
+                : 'bg-white/5 border border-white/10 text-white active:scale-95'
+            }`}
+          >
+            {isCheckingUpdate ? <Loader2 size={16} className="animate-spin" /> : (updateStatus === 'latest' ? <ShieldCheck size={16} /> : <RefreshCw size={16} />)}
+            {isCheckingUpdate ? 'Checking Netlify...' : (updateStatus === 'latest' ? 'Up to Date' : 'Check for New Features')}
+          </button>
+          
+          {updateStatus === 'success' && (
+            <p className="text-center text-[9px] font-black text-emerald-400 uppercase tracking-widest animate-pulse">
+              Update Found! App is reloading...
+            </p>
+          )}
         </div>
-        <Download size={20} />
-      </button>
+      </div>
 
       {/* Support & Resources */}
       <section className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
@@ -686,7 +746,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
                     </div>
                     <button onClick={() => setReconcileResult(null)} className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Dismiss</button>
                  </div>
-                 <p className="text-[9px] font-bold text-emerald-700/70 dark:text-emerald-500/60 uppercase tracking-wide leading-relaxed pl-6">
+                 <p className="text-[9px] font-bold text-emerald-700/70 dark:text-emerald-50/60 uppercase tracking-wide leading-relaxed pl-6">
                     Merge Complete! Added {reconcileResult.merged} Sales, {reconcileResult.debtsAdded} New Debts, and updated {reconcileResult.walletsSynced} Customer Wallets.
                  </p>
                </div>
@@ -736,7 +796,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
       <div className="py-6 text-center space-y-1">
         <p className="text-[9px] font-black text-slate-300 dark:text-emerald-900 uppercase tracking-[0.5em]">NaijaShop Offline POS • v2.5</p>
-        <p className="text-[8px] font-bold text-slate-400 dark:text-emerald-800/40 uppercase tracking-widest">App Version: 1.0.5</p>
+        <p className="text-[8px] font-bold text-slate-400 dark:text-emerald-800/40 uppercase tracking-widest">App Version: 1.0.9</p>
       </div>
 
       {/* Add User Modal */}
