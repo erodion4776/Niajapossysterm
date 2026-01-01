@@ -28,7 +28,8 @@ import {
   X,
   Check,
   Coins,
-  Gem
+  Gem,
+  RotateCcw
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -227,6 +228,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Business Overview</p>
           </div>
           <div className="flex gap-2 items-center">
+            {datePreset !== 'today' && (
+              <button 
+                onClick={() => setDatePreset('today')}
+                className="bg-red-50 dark:bg-red-950/20 text-red-500 p-2.5 rounded-2xl border border-red-100 dark:border-red-900/40 active:scale-90 transition-all flex items-center gap-1.5"
+                title="Clear Filter"
+              >
+                <RotateCcw size={16} />
+                <span className="text-[8px] font-black uppercase tracking-widest hidden sm:inline">Today</span>
+              </button>
+            )}
             <button 
               onClick={() => setShowDateModal(true)}
               className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2 active:scale-95 transition-all"
@@ -445,7 +456,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       {/* Date Range Modal */}
       {showDateModal && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600"><CalendarIcon size={20}/></div>
