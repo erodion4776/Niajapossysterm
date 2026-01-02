@@ -20,7 +20,8 @@
     "@google/genai": "^1.34.0",
     "pako": "^2.1.0",
     "tesseract.js": "^5.1.1",
-    "canvas-confetti": "^1.9.3"
+    "canvas-confetti": "^1.9.3",
+    "react-ga4": "^4.4.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

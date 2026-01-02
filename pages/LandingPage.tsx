@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import ReactGA from 'react-ga4';
 import { 
   ShieldCheck, Plane, MessageCircle, Lock, 
   Smartphone, ArrowRight, CheckCircle2, 
@@ -49,6 +50,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
   };
 
   const handleStartTrialClick = () => {
+    // GA4 Event Tracking
+    ReactGA.event({ 
+      category: 'User', 
+      action: 'Clicked Start Trial', 
+      label: 'New Year Promo' 
+    });
+
     confetti({ 
       particleCount: 150, 
       spread: 70, 

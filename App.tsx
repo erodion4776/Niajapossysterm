@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ReactGA from 'react-ga4';
 import { Page, Role, DeviceRole } from './types.ts';
 import { initTrialDate, User, db } from './db.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
@@ -59,6 +60,20 @@ const AppContent: React.FC = () => {
 
   const [licenseExpiry, setLicenseExpiry] = useState<string | null>(() => localStorage.getItem('license_expiry'));
   const [isExpired, setIsExpired] = useState(false);
+
+  // GA4 Initialization
+  useEffect(() => {
+    ReactGA.initialize('G-7Q4E8586BF');
+  }, []);
+
+  // GA4 Page Tracking
+  useEffect(() => {
+    ReactGA.send({ 
+      hitType: "pageview", 
+      page: window.location.pathname + window.location.search,
+      title: currentPage
+    });
+  }, [currentPage]);
 
   // Technical Fix: Strict Role Check
   const isStaff = localStorage.getItem('user_role') === 'staff';
