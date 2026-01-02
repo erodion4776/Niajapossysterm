@@ -1,9 +1,14 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData, User } from '../db.ts';
 import { decodeShopKey } from '../utils/whatsapp.ts';
-import { User as UserIcon, Key, ArrowRight, Smartphone, ShieldCheck, X, RefreshCw, LogIn, AlertCircle } from 'lucide-react';
+import { getRequestCode, verifyResetKey } from '../utils/security.ts';
+import { 
+  User as UserIcon, Key, ArrowRight, Smartphone, 
+  ShieldCheck, X, RefreshCw, LogIn, AlertCircle, 
+  MessageCircle, Copy, Check, ShieldAlert
+} from 'lucide-react';
 import { DeviceRole } from '../types.ts';
 
 interface LoginScreenProps {
@@ -16,6 +21,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [pinArr, setPinArr] = useState(new Array(4).fill(''));
   const [error, setError] = useState('');
+  
+  // Recovery States
+  const [showForgotPin, setShowForgotPin] = useState(false);
+  const [resetKeyInput, setResetKeyInput] = useState('');
+  const [requestCode, setRequestCode] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+
   const [showImport, setShowImport] = useState(false);
   const [importKey, setImportKey] = useState('');
   const [importError, setImportError] = useState('');
@@ -24,6 +37,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
   const isStaffDevice = deviceRole === 'StaffDevice' || localStorage.getItem('user_role') === 'staff';
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+
+  useEffect(() => {
+    if (showForgotPin) {
+      getRequestCode().then(setRequestCode);
+    }
+  }, [showForgotPin]);
 
   const displayUsers = useMemo(() => {
     if (!users) return [];
@@ -58,25 +77,46 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
     if (e.key === 'Enter' && pinArr.join('').length === 4) handleLogin();
   };
 
-  /**
-   * Technical Fix: Bulletproof Staff Onboarding
-   * Clears old data and enforces the 'staff' lockdown role
-   * Saves Boss's Soft POS bank details locally
-   */
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(requestCode);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleResetPin = async () => {
+    setRecoveryError('');
+    const isValid = await verifyResetKey(requestCode, resetKeyInput);
+    
+    if (isValid) {
+      try {
+        // Find Admin user
+        const admin = await db.users.where('role').equals('Admin').first();
+        if (admin && admin.id) {
+          await db.users.update(admin.id, { pin: "" });
+        }
+        
+        // Trigger Setup Screen
+        localStorage.setItem('is_setup_pending', 'true');
+        window.location.reload();
+      } catch (err) {
+        setRecoveryError('System error during reset.');
+      }
+    } else {
+      setRecoveryError('Invalid Reset Key. Please try again.');
+      setTimeout(() => setRecoveryError(''), 3000);
+    }
+  };
+
   const processStaffInvite = async (data: any) => {
     setIsProcessing(true);
     try {
-      // 1. Wipe existing users and critical data
       await db.users.clear();
-      
-      // 2. Add the specific staff account
       await db.users.add({ 
         name: data.staffName, 
         pin: data.staffPin, 
         role: 'Staff' 
       });
 
-      // 3. Inject shop and license settings
       await db.settings.put({ key: 'is_activated', value: true });
       if (data.expiry && data.license_signature) {
         await db.security.put({ key: 'license_expiry', value: data.expiry });
@@ -85,19 +125,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
         localStorage.setItem('license_signature', data.license_signature);
       }
 
-      // 4. Sync Soft POS Details
       if (data.softPosBank) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
       if (data.softPosNumber) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
       if (data.softPosAccount) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
 
-      // 5. Set GLOBAL LOCKDOWN flags
       localStorage.setItem('shop_name', data.shopName);
       localStorage.setItem('is_activated', 'true');
       localStorage.setItem('is_setup_pending', 'false');
       localStorage.setItem('device_role', 'StaffDevice');
       localStorage.setItem('user_role', 'staff');
 
-      // 6. Force Clean Reload
       window.location.href = '/app';
     } catch (err) {
       setImportError('❌ Activation failed. Please try again.');
@@ -120,7 +157,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
       return;
     }
 
-    // Handle the new strict Staff Invite format
     if (data.type === 'STAFF_INVITE' && data.secret === 'NAIJA_VERIFIED') {
       if (confirm(`Activate terminal for ${data.staffName} at "${data.shopName}"?`)) {
         await processStaffInvite(data);
@@ -128,13 +164,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
       return;
     }
 
-    // Legacy formats
     if (data.type === 'STOCK_UPDATE') {
       if (confirm(`Update stock levels and bank details from Admin?`)) {
         setIsProcessing(true);
         try {
           await db.transaction('rw', [db.inventory, db.settings], async () => {
-            // Sync Soft POS Details if present in stock update
             if (data.softPosBank !== undefined) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
             if (data.softPosNumber !== undefined) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
             if (data.softPosAccount !== undefined) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
@@ -166,7 +200,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
       return;
     }
 
-    // Full Shop Setup Key (Clone)
     if (data.settings && data.settings.shopName) {
       if (confirm(`Clone "${data.settings.shopName}" to this phone?`)) {
         setIsProcessing(true);
@@ -306,11 +339,90 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
                 ))}
               </div>
               <button onClick={handleLogin} className="w-full bg-white text-emerald-950 font-black py-6 rounded-[32px] shadow-2xl active:scale-95 transition-all uppercase tracking-widest text-sm">Unlock Terminal</button>
+              
+              {/* Forgot PIN Link for Admin */}
+              {selectedUser.role === 'Admin' && (
+                <button 
+                  onClick={() => setShowForgotPin(true)}
+                  className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mt-2 hover:text-emerald-500 transition-colors"
+                >
+                  Forgot Admin PIN?
+                </button>
+              )}
+
               {error && <p className="text-red-400 text-center font-black text-xs uppercase tracking-widest animate-bounce">{error}</p>}
             </div>
           </div>
         )}
       </div>
+
+      {/* PIN Recovery Modal */}
+      {showForgotPin && (
+        <div className="fixed inset-0 z-[550] bg-emerald-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-8 animate-in fade-in duration-300">
+           <div className="w-full max-w-sm bg-white rounded-[48px] p-8 shadow-2xl text-emerald-950 relative overflow-hidden">
+              <button onClick={() => setShowForgotPin(false)} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full text-slate-400 active:scale-90"><X size={20}/></button>
+              
+              <div className="text-center space-y-4 mb-8">
+                 <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                   <ShieldAlert size={32} />
+                 </div>
+                 <h2 className="text-2xl font-black uppercase italic tracking-tighter">PIN Recovery</h2>
+                 <p className="text-xs font-bold text-slate-400 leading-relaxed uppercase">Reset your admin access offline.</p>
+              </div>
+
+              <div className="space-y-6">
+                 <div className="bg-slate-50 border border-slate-100 p-5 rounded-[32px] space-y-2 text-center">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Your Request Code</p>
+                    <div className="flex items-center justify-center gap-3">
+                       <span className="text-2xl font-mono font-black tracking-widest text-emerald-600">{requestCode}</span>
+                       <button onClick={handleCopyCode} className="p-2 bg-white rounded-lg shadow-sm border border-slate-100 active:scale-90">
+                         {isCopied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} className="text-slate-300" />}
+                       </button>
+                    </div>
+                 </div>
+
+                 <div className="bg-amber-50 p-4 rounded-2xl flex gap-3 items-start border border-amber-100">
+                    <MessageCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-[10px] font-bold text-amber-800 leading-relaxed uppercase">
+                      To reset your PIN, send this Request Code to Support on WhatsApp. A technical reset fee may apply.
+                    </p>
+                 </div>
+
+                 <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Enter Reset Key</label>
+                    <input 
+                      type="text" 
+                      placeholder="8-CHAR KEY"
+                      maxLength={8}
+                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-mono font-black text-center text-lg tracking-[0.2em] outline-none focus:ring-4 focus:ring-emerald-500/10 uppercase"
+                      value={resetKeyInput}
+                      onChange={(e) => setResetKeyInput(e.target.value)}
+                    />
+                 </div>
+
+                 <button 
+                   onClick={handleResetPin}
+                   disabled={resetKeyInput.length < 8}
+                   className="w-full bg-emerald-600 text-white font-black py-5 rounded-[28px] shadow-xl uppercase tracking-widest text-xs active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                 >
+                   <Key size={18} /> Verify & Reset
+                 </button>
+
+                 {recoveryError && (
+                   <p className="text-center text-[10px] font-black text-red-500 uppercase animate-bounce">{recoveryError}</p>
+                 )}
+              </div>
+           </div>
+
+           <a 
+            href={`https://wa.me/2347062228026?text=I%20forgot%20my%20Admin%20PIN.%20Request%20Code:%20${requestCode}`}
+            target="_blank"
+            className="mt-8 flex items-center gap-2 text-emerald-400 font-black uppercase text-[10px] tracking-widest"
+           >
+             <MessageCircle size={16} /> Chat with Support
+           </a>
+        </div>
+      )}
     </div>
   );
 };

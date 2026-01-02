@@ -62,6 +62,20 @@ export async function verifyActivationKey(requestCode: string, enteredKey: strin
 }
 
 /**
+ * Verifies a PIN Reset Key.
+ * Formula: SHA256(RequestCode + "RESET_PIN" + MASTER_SALT).substring(0, 8)
+ */
+export async function verifyResetKey(requestCode: string, enteredKey: string): Promise<boolean> {
+  if (!enteredKey || enteredKey.length !== 8) return false;
+  
+  const combo = requestCode.trim().toUpperCase() + "RESET_PIN" + MASTER_SALT;
+  const secretHash = await hashString(combo);
+  const validKey = secretHash.substring(0, 8).toUpperCase();
+  
+  return enteredKey.trim().toUpperCase() === validKey;
+}
+
+/**
  * Validates integrity of stored license values.
  */
 export async function validateLicenseIntegrity(requestCode: string, savedKey: string, savedExpiry: string): Promise<boolean> {
