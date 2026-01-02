@@ -182,13 +182,27 @@ const AppContent: React.FC = () => {
   }, [syncStateFromUrl, checkExpiry]);
 
   const handleStartTrial = () => {
+    setIsTrialing(true);
+    localStorage.setItem('is_trialing', 'true');
+    localStorage.setItem('trial_start_date', Date.now().toString());
+    
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     const hasAlreadySkipped = localStorage.getItem('install_onboarding_done') === 'true';
     if (!isStandalone && !hasAlreadySkipped) { 
       setShowInstallPage(true); 
     } else { 
-      // Straight to activation/trial logic
       setIsAtLanding(false); 
+    }
+  };
+
+  const handleInstallNext = () => {
+    localStorage.setItem('install_onboarding_done', 'true');
+    setShowInstallPage(false);
+    setIsAtLanding(false);
+    // Explicitly update setup pending if starting fresh
+    if (!isActivated && !isTrialing) {
+      localStorage.setItem('is_setup_pending', 'true');
+      setIsSetupPending(true);
     }
   };
 
@@ -220,14 +234,14 @@ const AppContent: React.FC = () => {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={(p) => navigateTo(p)} />;
   }
 
-  // 3. INSTALLATION CHECK (FOR MOBILE)
-  if (showInstallPage) return <InstallApp deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_onboarding_done', 'true'); setShowInstallPage(false); setIsAtLanding(false); }} />;
+  // 3. INSTALLATION CHECK
+  if (showInstallPage) return <InstallApp deferredPrompt={deferredPrompt} onNext={handleInstallNext} />;
 
   // 4. ACTIVATION & TRIAL GUARD (LOCK SCREEN)
   const isTrialValidFinal = isTrialing && isTrialValid;
-  if (!isActivated && !isTrialValidFinal || isExpired) {
-    // Note: Staff can bypass this via Login screen's "Import" which sets isActivated = true
-    if (!isStaff) return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
+  const needsActivation = (!isActivated && !isTrialValidFinal) || isExpired;
+  if (needsActivation && !isStaff) {
+    return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
   }
 
   // 5. SETUP WIZARD (ONBOARDING)

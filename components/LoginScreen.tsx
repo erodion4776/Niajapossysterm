@@ -7,7 +7,7 @@ import { getRequestCode, verifyResetKey } from '../utils/security.ts';
 import { 
   User as UserIcon, Key, ArrowRight, Smartphone, 
   ShieldCheck, X, RefreshCw, LogIn, AlertCircle, 
-  MessageCircle, Copy, Check, ShieldAlert
+  MessageCircle, Copy, Check, ShieldAlert, Store, UserCircle
 } from 'lucide-react';
 import { DeviceRole } from '../types.ts';
 
@@ -286,7 +286,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
                 displayUsers.map(user => (
                   <button key={user.id} onClick={() => setSelectedUser(user)} className="bg-emerald-900/40 backdrop-blur-sm border border-emerald-800/50 p-6 rounded-[32px] flex items-center justify-between group active:scale-[0.97] transition-all shadow-xl">
                     <div className="flex items-center gap-4">
-                      <div className="bg-emerald-500/20 p-3 rounded-2xl text-emerald-400 border border-emerald-400/20"><UserIcon size={24} /></div>
+                      <div className="bg-emerald-500/20 p-3 rounded-2xl text-emerald-400 border border-emerald-400/20">
+                        {user.role === 'Admin' ? <ShieldCheck size={24} /> : <UserCircle size={24} />}
+                      </div>
                       <div className="text-left">
                         <p className="font-black text-xl leading-none">{user.name}</p>
                         <p className="text-[10px] font-bold text-emerald-500 uppercase mt-1.5 tracking-widest">{user.role}</p>
@@ -319,7 +321,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
           <div className="w-full space-y-8 animate-in slide-in-from-bottom duration-500 flex flex-col items-center">
             <button onClick={() => setSelectedUser(null)} className="self-start bg-emerald-900/40 p-3 rounded-2xl text-emerald-500 text-[10px] font-black uppercase flex items-center gap-2 active:scale-95 transition-all"><X size={14} /> Back to Users</button>
             <div className="text-center">
-              <div className="w-24 h-24 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl"><ShieldCheck size={40} /></div>
+              <div className="w-24 h-24 bg-emerald-500/10 text-emerald-400 rounded-[32px] flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 shadow-2xl">
+                {selectedUser.role === 'Admin' ? <ShieldCheck size={40} /> : <UserCircle size={40} />}
+              </div>
               <h2 className="text-2xl font-black">{selectedUser.name}</h2>
               <p className="text-emerald-500/50 text-[10px] font-black uppercase tracking-[0.3em] mt-3">Enter {selectedUser.role} PIN to Unlock</p>
             </div>
