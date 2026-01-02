@@ -356,70 +356,72 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
         )}
       </div>
 
-      {/* PIN Recovery Modal */}
+      {/* PIN Recovery Modal: Optimized for Mobile Scrolling */}
       {showForgotPin && (
-        <div className="fixed inset-0 z-[550] bg-emerald-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-8 animate-in fade-in duration-300">
-           <div className="w-full max-w-sm bg-white rounded-[48px] p-8 shadow-2xl text-emerald-950 relative overflow-hidden">
-              <button onClick={() => setShowForgotPin(false)} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full text-slate-400 active:scale-90"><X size={20}/></button>
+        <div className="fixed inset-0 z-[550] bg-emerald-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+           <div className="w-full max-w-sm bg-white rounded-[40px] shadow-2xl text-emerald-950 relative flex flex-col max-h-[90vh] overflow-hidden">
+              <button onClick={() => setShowForgotPin(false)} className="absolute top-4 right-4 p-2 bg-slate-50 rounded-full text-slate-400 active:scale-90 z-10">
+                <X size={18} />
+              </button>
               
-              <div className="text-center space-y-4 mb-8">
-                 <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
-                   <ShieldAlert size={32} />
-                 </div>
-                 <h2 className="text-2xl font-black uppercase italic tracking-tighter">PIN Recovery</h2>
-                 <p className="text-xs font-bold text-slate-400 leading-relaxed uppercase">Reset your admin access offline.</p>
-              </div>
+              <div className="overflow-y-auto p-6 pb-10 space-y-4 custom-scrollbar">
+                <div className="text-center space-y-2">
+                   <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                     <ShieldAlert size={24} />
+                   </div>
+                   <h2 className="text-xl font-black uppercase italic tracking-tighter">PIN Recovery</h2>
+                   <p className="text-[10px] font-bold text-slate-400 leading-relaxed uppercase">Reset your admin access offline.</p>
+                </div>
 
-              <div className="space-y-6">
-                 <div className="bg-slate-50 border border-slate-100 p-5 rounded-[32px] space-y-2 text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Your Request Code</p>
-                    <div className="flex items-center justify-center gap-3">
-                       <span className="text-2xl font-mono font-black tracking-widest text-emerald-600">{requestCode}</span>
-                       <button onClick={handleCopyCode} className="p-2 bg-white rounded-lg shadow-sm border border-slate-100 active:scale-90">
-                         {isCopied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} className="text-slate-300" />}
-                       </button>
-                    </div>
-                 </div>
+                <div className="bg-slate-50 border border-slate-100 p-3 rounded-[24px] space-y-1 text-center">
+                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Your Request Code</p>
+                   <div className="flex items-center justify-center gap-2">
+                      <span className="text-xl font-mono font-black tracking-widest text-emerald-600">{requestCode}</span>
+                      <button onClick={handleCopyCode} className="p-2 bg-white rounded-lg shadow-sm border border-slate-100 active:scale-90">
+                        {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} className="text-slate-300" />}
+                      </button>
+                   </div>
+                </div>
 
-                 <div className="bg-amber-50 p-4 rounded-2xl flex gap-3 items-start border border-amber-100">
-                    <MessageCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-[10px] font-bold text-amber-800 leading-relaxed uppercase">
-                      To reset your PIN, send this Request Code to Support on WhatsApp. A technical reset fee may apply.
-                    </p>
-                 </div>
+                <div className="bg-amber-50 p-4 rounded-2xl flex gap-2.5 items-start border border-amber-100">
+                   <MessageCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                   <p className="text-[11px] font-bold text-amber-800 leading-tight uppercase">
+                     To reset your PIN, send this Request Code to Support on WhatsApp. A technical reset fee may apply.
+                   </p>
+                </div>
 
-                 <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Enter Reset Key</label>
-                    <input 
-                      type="text" 
-                      placeholder="8-CHAR KEY"
-                      maxLength={8}
-                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-mono font-black text-center text-lg tracking-[0.2em] outline-none focus:ring-4 focus:ring-emerald-500/10 uppercase"
-                      value={resetKeyInput}
-                      onChange={(e) => setResetKeyInput(e.target.value)}
-                    />
-                 </div>
+                <div className="space-y-1">
+                   <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Enter Reset Key</label>
+                   <input 
+                     type="text" 
+                     placeholder="8-CHAR KEY"
+                     maxLength={8}
+                     className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-mono font-black text-center text-base tracking-[0.2em] outline-none focus:ring-4 focus:ring-emerald-500/10 uppercase"
+                     value={resetKeyInput}
+                     onChange={(e) => setResetKeyInput(e.target.value)}
+                   />
+                </div>
 
-                 <button 
-                   onClick={handleResetPin}
-                   disabled={resetKeyInput.length < 8}
-                   className="w-full bg-emerald-600 text-white font-black py-5 rounded-[28px] shadow-xl uppercase tracking-widest text-xs active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                 >
-                   <Key size={18} /> Verify & Reset
-                 </button>
+                <button 
+                  onClick={handleResetPin}
+                  disabled={resetKeyInput.length < 8}
+                  className="w-full bg-emerald-600 text-white font-black py-4 rounded-[24px] shadow-xl uppercase tracking-widest text-xs active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Key size={16} /> Verify & Reset
+                </button>
 
-                 {recoveryError && (
+                {recoveryError && (
                    <p className="text-center text-[10px] font-black text-red-500 uppercase animate-bounce">{recoveryError}</p>
-                 )}
+                )}
               </div>
            </div>
 
            <a 
             href={`https://wa.me/2347062228026?text=I%20forgot%20my%20Admin%20PIN.%20Request%20Code:%20${requestCode}`}
             target="_blank"
-            className="mt-8 flex items-center gap-2 text-emerald-400 font-black uppercase text-[10px] tracking-widest"
+            className="mt-6 flex items-center gap-2 text-emerald-400 font-black uppercase text-[10px] tracking-widest"
            >
-             <MessageCircle size={16} /> Chat with Support
+             <MessageCircle size={14} /> Chat with Support
            </a>
         </div>
       )}
