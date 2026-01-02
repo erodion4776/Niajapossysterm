@@ -22,6 +22,7 @@ import { Affiliates } from './pages/Affiliates.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
+import { SetupWizard } from './components/SetupWizard.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
 import { InstallBanner } from './components/InstallBanner.tsx'; 
 import { UpdatePrompt } from './components/UpdatePrompt.tsx';
@@ -43,72 +44,40 @@ const AppContent: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isPirated, setIsPirated] = useState(false);
-  const [isClockTampered, setIsClockTampered] = useState(false);
   const [isNavHidden, setIsNavHidden] = useState(false);
   
   const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low-stock' | 'expiring'>('all');
 
-  // Core Status Flags
-  const [isAtLanding, setIsAtLanding] = useState(() => window.location.pathname === '/' || window.location.pathname === '');
+  // App Routing & State Flags
+  const [path, setPath] = useState(() => window.location.pathname);
   const [isActivated, setIsActivated] = useState(() => localStorage.getItem('is_activated') === 'true');
   const [isTrialing, setIsTrialing] = useState(() => localStorage.getItem('is_trialing') === 'true');
   const [isSetupPending, setIsSetupPending] = useState(() => localStorage.getItem('is_setup_pending') === 'true');
   const [deviceRole, setDeviceRole] = useState<DeviceRole | null>(() => localStorage.getItem('device_role') as DeviceRole);
   
-  // PWA/Install State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallGate, setShowInstallGate] = useState(false);
-
-  const [licenseExpiry, setLicenseExpiry] = useState<string | null>(() => localStorage.getItem('license_expiry'));
   const [isExpired, setIsExpired] = useState(false);
 
   const isStaff = localStorage.getItem('user_role') === 'staff';
   const trialStartDate = localStorage.getItem('trial_start_date');
   const isTrialValid = trialStartDate ? (Date.now() - parseInt(trialStartDate)) < TRIAL_DURATION : false;
-  
-  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const syncStateFromUrl = useCallback(() => {
-    const pathname = window.location.pathname;
+  // Sync state and path
+  const syncState = useCallback(() => {
+    setPath(window.location.pathname);
+    setIsActivated(localStorage.getItem('is_activated') === 'true');
+    setIsTrialing(localStorage.getItem('is_trialing') === 'true');
+    setIsSetupPending(localStorage.getItem('is_setup_pending') === 'true');
+    
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page')?.toUpperCase();
-
-    if (pathname === '/help') { setCurrentPage(Page.HELP_CENTER); return; }
-    if (pathname === '/about') { setCurrentPage(Page.ABOUT_US); return; }
-    if (pathname === '/affiliates') { setCurrentPage(Page.AFFILIATES); return; }
-
     if (pageParam && Object.values(Page).includes(pageParam as Page)) {
       setCurrentPage(pageParam as Page);
     }
-    
-    setIsAtLanding(window.location.pathname === '/' || window.location.pathname === '');
-  }, []);
-
-  const navigateTo = useCallback((page: Page, filter?: string) => {
-    setCurrentPage(page);
-    const url = new URL(window.location.href);
-    
-    if (page === Page.HELP_CENTER) { url.pathname = '/help'; url.search = ''; }
-    else if (page === Page.ABOUT_US) { url.pathname = '/about'; url.search = ''; }
-    else if (page === Page.AFFILIATES) { url.pathname = '/affiliates'; url.search = ''; }
-    else {
-      url.pathname = '/app';
-      url.searchParams.set('page', page.toLowerCase());
-      if (filter && filter !== 'all') {
-        url.searchParams.set('filter', filter);
-        setInventoryFilter(filter as any);
-      } else {
-        url.searchParams.delete('filter');
-        setInventoryFilter('all');
-      }
-    }
-    window.history.pushState({}, '', url.toString());
   }, []);
 
   useEffect(() => {
-    const installHandler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
-    window.addEventListener('beforeinstallprompt', installHandler);
-
     const startup = async () => {
       const hostname = window.location.hostname;
       const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
@@ -123,8 +92,8 @@ const AppContent: React.FC = () => {
       const dbSig = await db.security.get('license_signature');
       const lsExp = localStorage.getItem('license_expiry');
       const lsSig = localStorage.getItem('license_signature');
+      
       let validExp = '';
-
       if (dbExp?.value && dbSig?.value && await validateLicenseIntegrity(requestCode, dbSig.value, dbExp.value)) {
         validExp = dbExp.value;
       } else if (lsExp && lsSig && await validateLicenseIntegrity(requestCode, lsSig, lsExp)) {
@@ -132,122 +101,144 @@ const AppContent: React.FC = () => {
       }
 
       if (validExp) {
-        setIsExpired(checkExpiry(validExp)); setIsActivated(true); setLicenseExpiry(validExp);
-      } else { setIsActivated(false); }
+        const year = parseInt(validExp.substring(0, 4));
+        const month = parseInt(validExp.substring(4, 6)) - 1;
+        const day = parseInt(validExp.substring(6, 8));
+        const expired = Date.now() > new Date(year, month, day, 23, 59, 59).getTime();
+        setIsExpired(expired);
+        setIsActivated(true);
+        localStorage.setItem('is_activated', 'true');
+      }
 
-      syncStateFromUrl();
-      setTimeout(() => setIsInitialized(true), 800);
+      setIsInitialized(true);
     };
     
     startup();
-    window.addEventListener('popstate', syncStateFromUrl);
+    window.addEventListener('popstate', syncState);
+    const installHandler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
+    window.addEventListener('beforeinstallprompt', installHandler);
+
     return () => {
-      window.removeEventListener('popstate', syncStateFromUrl);
+      window.removeEventListener('popstate', syncState);
       window.removeEventListener('beforeinstallprompt', installHandler);
     };
-  }, [syncStateFromUrl]);
+  }, [syncState]);
 
-  const checkExpiry = (expiryStr: string) => {
-    const year = parseInt(expiryStr.substring(0, 4));
-    const month = parseInt(expiryStr.substring(4, 6)) - 1;
-    const day = parseInt(expiryStr.substring(6, 8));
-    return Date.now() > new Date(year, month, day, 23, 59, 59).getTime();
-  };
+  // Trial auto-redirect effect
+  useEffect(() => {
+    if ((isTrialing && isTrialValid) || isActivated) {
+      if (window.location.pathname === '/') {
+        window.history.pushState({}, '', '/app');
+        setPath('/app');
+      }
+    }
+  }, [isTrialing, isTrialValid, isActivated]);
+
+  const navigateTo = useCallback((page: Page, filter?: string) => {
+    setCurrentPage(page);
+    const url = new URL(window.location.href);
+    url.pathname = '/app';
+    url.searchParams.set('page', page.toLowerCase());
+    if (filter && filter !== 'all') {
+      url.searchParams.set('filter', filter);
+      setInventoryFilter(filter as any);
+    } else {
+      url.searchParams.delete('filter');
+      setInventoryFilter('all');
+    }
+    window.history.pushState({}, '', url.toString());
+    setPath('/app');
+  }, []);
 
   const handleStartTrial = () => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     const hasSkipped = localStorage.getItem('install_skipped') === 'true';
-    
     if (!isStandalone && !hasSkipped) {
       setShowInstallGate(true);
     } else {
-      setIsAtLanding(false);
+      window.location.href = '/app';
     }
   };
 
-  const handleSkipInstall = () => {
-    localStorage.setItem('install_skipped', 'true');
-    setShowInstallGate(false);
-    setIsAtLanding(false);
-  };
-
-  if (isPirated) return <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]"><ShieldAlert size={80} className="text-red-500 mb-6" /><h1 className="text-4xl font-black">ACCESS DENIED</h1></div>;
+  if (isPirated) return <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]"><ShieldAlert size={80} className="text-red-500 mb-6" /><h1 className="text-4xl font-black uppercase">Access Denied</h1></div>;
   if (!isInitialized) return <LoadingScreen />;
 
-  // 1. PUBLIC ROUTES
-  if (currentPage === Page.HELP_CENTER) return <PublicHelp onBack={() => navigateTo(Page.DASHBOARD)} />;
-  if (currentPage === Page.ABOUT_US) return <AboutUs onBack={() => navigateTo(Page.DASHBOARD)} />;
-  if (currentPage === Page.AFFILIATES) return <Affiliates onBack={() => navigateTo(Page.DASHBOARD)} />;
-
-  // 2. LANDING PAGE GATE
-  if (isAtLanding && !isActivated && !isTrialing) {
-    return <LandingPage onStartTrial={handleStartTrial} onNavigate={(p) => navigateTo(p)} />;
+  // 1. PUBLIC LANDING PAGE
+  if (path === '/' && !isActivated && (!isTrialing || !isTrialValid)) {
+    return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
   }
 
-  // 3. MANDATORY INSTALLATION GATE
+  // 2. MANDATORY INSTALLATION GATE
   if (showInstallGate) {
-    return <InstallApp deferredPrompt={deferredPrompt} onNext={handleSkipInstall} />;
+    return <InstallApp deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_skipped', 'true'); window.location.href = '/app'; }} />;
   }
 
-  // 4. ACTIVATION & TRIAL GUARD
-  const isTrialValidFinal = isTrialing && isTrialValid;
-  if ((!isActivated && !isTrialValidFinal) || isExpired) {
-    if (!isStaff) return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
-  }
-
-  // 5. SETUP WIZARD
-  if (isSetupPending && !isStaff) {
-    return <Onboarding onComplete={() => window.location.reload()} />;
-  }
-
-  // 6. LOGIN (ACCOUNT SELECTION)
-  if (!currentUser) {
-    return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || (isStaff ? 'StaffDevice' : 'Owner')} />;
-  }
-
-  // 7. MAIN APP
-  const isStaffDevice = deviceRole === 'StaffDevice' || isStaff;
-  const renderPage = () => {
-    switch (currentPage) {
-      case Page.DASHBOARD: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
-      case Page.INVENTORY: return <Inventory user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} initialFilter={inventoryFilter} clearInitialFilter={() => navigateTo(Page.INVENTORY, 'all')} setPage={navigateTo} />;
-      case Page.POS: return <POS user={currentUser} setNavHidden={setIsNavHidden} />;
-      case Page.SALES: return <Sales role={isStaffDevice ? 'Staff' : currentUser.role} />;
-      case Page.DEBTS: return isStaff ? <Dashboard setPage={navigateTo} role="Staff" onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} /> : <Debts role={currentUser.role} />;
-      case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} />;
-      default: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
+  // 3. APP SWITCHBOARD (LINEAR HIERARCHY)
+  const isAppPath = path.startsWith('/app');
+  if (isAppPath || isActivated || (isTrialing && isTrialValid)) {
+    // Gate 1: Activation/License
+    const trialActive = isTrialing && isTrialValid;
+    if ((!isActivated && !trialActive) || isExpired) {
+      if (!isStaff) return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
     }
-  };
 
-  return (
-    <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 transition-colors duration-300">
-      <main className="flex-1 overflow-auto">{renderPage()}</main>
-      {!isStaffDevice && !isNavHidden && <BackupReminder />}
-      {!isNavHidden && (
-        <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/90 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-2 py-2 safe-bottom z-50">
-          <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
-            <LayoutGrid size={18} /><span className="text-[7px] font-black mt-1 uppercase">Home</span>
-          </button>
-          <button onClick={() => navigateTo(Page.POS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
-            <ShoppingBag size={18} /><span className="text-[7px] font-black mt-1 uppercase">POS</span>
-          </button>
-          <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
-            <Package size={18} /><span className="text-[7px] font-black mt-1 uppercase">Stock</span>
-          </button>
-          <button onClick={() => navigateTo(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
-            <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase">Sales</span>
-          </button>
-          {!isStaff && (
-            <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.SETTINGS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
-              <SettingsIcon size={18} /><span className="text-[7px] font-black mt-1 uppercase">Admin</span>
+    // Gate 2: Setup Wizard
+    if (isSetupPending && !isStaff) {
+      return <SetupWizard onComplete={() => { localStorage.setItem('is_setup_pending', 'false'); window.location.reload(); }} />;
+    }
+
+    // Gate 3: Authentication (Identify Account)
+    if (!currentUser) {
+      return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || (isStaff ? 'StaffDevice' : 'Owner')} />;
+    }
+
+    // Final Gate: Main App Interface
+    const isStaffDevice = deviceRole === 'StaffDevice' || isStaff;
+    const renderPage = () => {
+      switch (currentPage) {
+        case Page.DASHBOARD: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
+        case Page.INVENTORY: return <Inventory user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} initialFilter={inventoryFilter} clearInitialFilter={() => navigateTo(Page.INVENTORY, 'all')} setPage={navigateTo} />;
+        case Page.POS: return <POS user={currentUser} setNavHidden={setIsNavHidden} />;
+        case Page.SALES: return <Sales role={isStaffDevice ? 'Staff' : currentUser.role} />;
+        case Page.DEBTS: return isStaff ? <Dashboard setPage={navigateTo} role="Staff" onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} /> : <Debts role={currentUser.role} />;
+        case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} />;
+        default: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 transition-colors duration-300">
+        <main className="flex-1 overflow-auto">{renderPage()}</main>
+        {!isStaffDevice && !isNavHidden && <BackupReminder />}
+        {!isNavHidden && (
+          <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/90 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-2 py-2 safe-bottom z-50">
+            <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
+              <LayoutGrid size={18} /><span className="text-[7px] font-black mt-1 uppercase">Home</span>
             </button>
-          )}
-        </nav>
-      )}
-      <InstallBanner />
-      <UpdatePrompt />
-    </div>
-  );
+            <button onClick={() => navigateTo(Page.POS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
+              <ShoppingBag size={18} /><span className="text-[7px] font-black mt-1 uppercase">POS</span>
+            </button>
+            <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
+              <Package size={18} /><span className="text-[7px] font-black mt-1 uppercase">Stock</span>
+            </button>
+            <button onClick={() => navigateTo(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
+              <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase">Sales</span>
+            </button>
+            {!isStaff && (
+              <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl ${currentPage === Page.SETTINGS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400'}`}>
+                <SettingsIcon size={18} /><span className="text-[7px] font-black mt-1 uppercase">Admin</span>
+              </button>
+            )}
+          </nav>
+        )}
+        <InstallBanner />
+        <UpdatePrompt />
+      </div>
+    );
+  }
+
+  // Final fallback to Landing Page
+  return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
 };
 
 const App: React.FC = () => (<ThemeProvider><AppContent /></ThemeProvider>);

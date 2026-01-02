@@ -24,11 +24,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
-    // 1. iOS Device Detection Logic
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isApple = /ipad|iphone|ipod/.test(userAgent) && !(window as any).MSStream;
     const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
-    
     setIsIOS(isApple);
     setIsStandalone(standalone);
   }, []);
@@ -50,13 +48,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
   };
 
   const handleStartTrialClick = () => {
-    // Explicit GA4 Conversion Event
     ReactGA.event({
       category: "Conversion",
       action: "Trial Started",
       label: "Landing Page Button"
     });
-    console.log("Analytics: Conversion Event - Trial Started");
 
     confetti({ 
       particleCount: 150, 
@@ -66,11 +62,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
       gravity: 1.2,
       scalar: 1.2
     });
+    
     playChime();
     setIsPreparing(true);
+    
+    // 1. Set Trial State First
     localStorage.setItem('is_trialing', 'true');
     localStorage.setItem('trial_start_date', Date.now().toString());
-    setTimeout(() => { onStartTrial(); }, 1800);
+    localStorage.setItem('is_setup_pending', 'true');
+    localStorage.setItem('temp_otp', '123456'); // Default Trial OTP
+    localStorage.setItem('device_role', 'Owner'); // Defaults to owner for trial
+
+    // 2. Force Redirect after animation
+    setTimeout(() => { 
+      window.location.href = '/app'; 
+    }, 1800);
   };
 
   const faqs = [
@@ -94,11 +100,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
 
   return (
     <div className={`bg-white min-h-screen text-emerald-950 font-sans overflow-x-hidden selection:bg-emerald-100 transition-all duration-700 ${isPreparing ? 'blur-md scale-[0.98]' : ''}`}>
-      {/* Meta Hints for SEO */}
-      <div className="hidden" aria-hidden="true">
-        <h1>Offline POS Nigeria - Best Inventory Manager for Pharmacy & Boutiques</h1>
-        <p>NaijaShop POS is the top-rated offline inventory and sales manager for Nigerian SMEs. No internet needed, zero monthly fees.</p>
-      </div>
+      {/* Visual Overlay for Preparing State */}
+      {isPreparing && (
+        <div className="fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-emerald-950/20 backdrop-blur-md animate-in fade-in duration-500">
+           <div className="bg-white p-10 rounded-[48px] shadow-2xl text-center space-y-4 animate-in zoom-in duration-300">
+              <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                 <Store size={40} />
+              </div>
+              <h2 className="text-2xl font-black uppercase italic tracking-tighter">Welcome Boss!</h2>
+              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Opening your secure terminal...</p>
+           </div>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section className="relative px-6 pt-12 pb-24 max-w-5xl mx-auto text-center space-y-8 animate-in fade-in duration-1000">
@@ -134,7 +147,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
             <button 
               onClick={handleStartTrialClick}
               disabled={isPreparing}
-              className="w-full sm:w-auto bg-emerald-600 text-white font-black px-12 py-7 rounded-[32px] text-xl shadow-[0_20px_50px_-10px_rgba(5,150,105,0.4)] active:scale-95 transition-all flex items-center justify-center gap-3 relative overflow-hidden group animate-bounce"
+              className="w-full sm:w-auto bg-emerald-600 text-white font-black px-12 py-7 rounded-[32px] text-xl shadow-[0_20px_50px_-10px_rgba(5,150,105,0.4)] active:scale-95 transition-all flex items-center justify-center gap-3 relative overflow-hidden group"
             >
               Start 3-Day Free Trial <ArrowRight className="group-hover:translate-x-1 transition-transform" />
             </button>
@@ -267,33 +280,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
         </div>
       </section>
 
-      {/* FAQ Section */}
-      <section className="px-6 py-24 max-w-4xl mx-auto space-y-12">
-        <div className="text-center">
-           <h2 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">Common <span className="text-emerald-600">Questions</span></h2>
-        </div>
-        <div className="space-y-4">
-          {faqs.map((faq, i) => (
-            <div key={i} className="bg-white border-2 border-slate-50 rounded-[32px] overflow-hidden shadow-sm transition-all hover:shadow-md">
-              <button 
-                onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                className="w-full p-8 text-left flex justify-between items-center gap-4"
-              >
-                <span className="font-black text-sm md:text-base uppercase tracking-tight text-emerald-950 leading-tight">{faq.q}</span>
-                {openFaq === i ? <ChevronUp size={20} className="text-slate-300 shrink-0" /> : <ChevronDown size={20} className="text-slate-300 shrink-0" />}
-              </button>
-              {openFaq === i && (
-                <div className="px-8 pb-8 animate-in slide-in-from-top duration-300">
-                  <p className="text-sm md:text-base font-medium text-slate-500 leading-relaxed bg-slate-50 p-6 rounded-2xl border border-slate-100 italic">
-                    "{faq.a}"
-                  </p>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* Pricing */}
       <section className="px-6 py-24 bg-slate-950 text-white">
         <div className="max-w-5xl mx-auto space-y-16">
@@ -350,15 +336,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
                  <li><button onClick={() => onNavigate(Page.ABOUT_US)} className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors">About Us</button></li>
                  <li><button onClick={() => onNavigate(Page.AFFILIATES)} className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors">Affiliate Program</button></li>
                </ul>
-            </div>
-
-            <div className="space-y-6">
-               <h4 className="text-[10px] font-black text-emerald-950 uppercase tracking-[0.3em]">Join Growth Team</h4>
-               <div className="bg-emerald-50 p-6 rounded-[32px] border border-emerald-100 space-y-3">
-                  <p className="text-xs font-black text-emerald-900 uppercase italic">Earn ₦2,000</p>
-                  <p className="text-[10px] font-bold text-emerald-700 leading-relaxed">Invite another shop owner and get paid via Bank Transfer.</p>
-                  <button onClick={() => onNavigate(Page.AFFILIATES)} className="text-[9px] font-black text-emerald-600 uppercase tracking-widest underline underline-offset-4">Learn More</button>
-               </div>
             </div>
           </div>
 
