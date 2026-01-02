@@ -21,7 +21,6 @@ import { AboutUs } from './pages/AboutUs.tsx';
 import { Affiliates } from './pages/Affiliates.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
-import { RoleSelection } from './components/RoleSelection.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
 import { InstallBanner } from './components/InstallBanner.tsx'; 
@@ -31,16 +30,13 @@ import { ThemeProvider } from './ThemeContext.tsx';
 import { getRequestCode, validateLicenseIntegrity } from './utils/security.ts';
 import { 
   LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, 
-  Receipt, ShieldAlert, Users, Wallet, BookOpen, AlertTriangle, MessageCircle, Clock, Wifi,
-  Loader2, RefreshCw
+  Receipt, ShieldAlert, Wallet, BookOpen, Clock
 } from 'lucide-react';
 
 const ALLOWED_DOMAINS = ['naijashop.com.ng', 'niajapos.netlify.app'];
 const TRIAL_DURATION = 3 * 24 * 60 * 60 * 1000; 
 
-// Initialize GA4 outside the component for robustness
 ReactGA.initialize("G-7Q4E8586BF");
-console.log("Analytics: GA4 Initialized");
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
@@ -57,7 +53,6 @@ const AppContent: React.FC = () => {
   const [isTrialing, setIsTrialing] = useState(() => localStorage.getItem('is_trialing') === 'true');
   const [isSetupPending, setIsSetupPending] = useState(() => localStorage.getItem('is_setup_pending') === 'true');
   const [deviceRole, setDeviceRole] = useState<DeviceRole | null>(() => localStorage.getItem('device_role') as DeviceRole);
-  const [showRoleSelection, setShowRoleSelection] = useState(false);
   
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallPage, setShowInstallPage] = useState(false);
@@ -65,24 +60,16 @@ const AppContent: React.FC = () => {
   const [licenseExpiry, setLicenseExpiry] = useState<string | null>(() => localStorage.getItem('license_expiry'));
   const [isExpired, setIsExpired] = useState(false);
 
-  // GA4 Robust Tracking: Fires on component mount and on every page state change
-  useEffect(() => {
-    const currentPath = window.location.pathname + window.location.search;
-    ReactGA.send({ 
-      hitType: "pageview", 
-      page: currentPath,
-      title: currentPage 
-    });
-    console.log(`Analytics: Pageview recorded - ${currentPage} (${currentPath})`);
-  }, [currentPage]);
-
-  // Technical Fix: Strict Role Check
   const isStaff = localStorage.getItem('user_role') === 'staff';
-
   const trialStartDate = localStorage.getItem('trial_start_date');
   const isTrialValid = trialStartDate ? (Date.now() - parseInt(trialStartDate)) < TRIAL_DURATION : false;
   
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const currentPath = window.location.pathname + window.location.search;
+    ReactGA.send({ hitType: "pageview", page: currentPath, title: currentPage });
+  }, [currentPage]);
 
   const saveHeartbeat = async () => {
     const now = Date.now();
@@ -152,9 +139,7 @@ const AppContent: React.FC = () => {
       const isDevEnv = hostname.endsWith('.webcontainer.io');
       const isAuthorized = ALLOWED_DOMAINS.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
 
-      if (!isLocal && !isDevEnv && !isAuthorized) {
-        setIsPirated(true);
-      }
+      if (!isLocal && !isDevEnv && !isAuthorized) setIsPirated(true);
 
       await initTrialDate();
       const dbMaxTime = await db.security.get('max_time_reached');
@@ -182,11 +167,7 @@ const AppContent: React.FC = () => {
       } else { setIsActivated(false); }
 
       syncStateFromUrl();
-      
-      // Delay slightly for smooth transition if data is ready instantly
-      setTimeout(() => {
-        setIsInitialized(true);
-      }, 800);
+      setTimeout(() => setIsInitialized(true), 800);
       
       heartbeatRef.current = setInterval(saveHeartbeat, 5 * 60 * 1000);
       saveHeartbeat();
@@ -203,8 +184,12 @@ const AppContent: React.FC = () => {
   const handleStartTrial = () => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     const hasAlreadySkipped = localStorage.getItem('install_onboarding_done') === 'true';
-    if (!isStandalone && !hasAlreadySkipped) { setShowInstallPage(true); } 
-    else { setShowRoleSelection(true); }
+    if (!isStandalone && !hasAlreadySkipped) { 
+      setShowInstallPage(true); 
+    } else { 
+      // Straight to activation/trial logic
+      setIsAtLanding(false); 
+    }
   };
 
   if (isPirated) return (
@@ -225,30 +210,37 @@ const AppContent: React.FC = () => {
 
   if (!isInitialized) return <LoadingScreen />;
 
-  // PUBLIC ROUTES
-  if (currentPage === Page.HELP_CENTER) return <PublicHelp onBack={() => { navigateTo(Page.DASHBOARD); }} />;
-  if (currentPage === Page.ABOUT_US) return <AboutUs onBack={() => { navigateTo(Page.DASHBOARD); }} />;
-  if (currentPage === Page.AFFILIATES) return <Affiliates onBack={() => { navigateTo(Page.DASHBOARD); }} />;
+  // 1. PUBLIC ROUTES (Help, About, etc)
+  if (currentPage === Page.HELP_CENTER) return <PublicHelp onBack={() => navigateTo(Page.DASHBOARD)} />;
+  if (currentPage === Page.ABOUT_US) return <AboutUs onBack={() => navigateTo(Page.DASHBOARD)} />;
+  if (currentPage === Page.AFFILIATES) return <Affiliates onBack={() => navigateTo(Page.DASHBOARD)} />;
 
-  // LANDING & ONBOARDING
-  if (isAtLanding && !isActivated && !isTrialing && !showRoleSelection && !showInstallPage) {
+  // 2. LANDING PAGE
+  if (isAtLanding && !isActivated && !isTrialing) {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={(p) => navigateTo(p)} />;
   }
-  if (showInstallPage) return <InstallApp deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_onboarding_done', 'true'); setShowInstallPage(false); setShowRoleSelection(true); }} />;
-  if (showRoleSelection) return <RoleSelection onSelect={(role) => { localStorage.setItem('device_role', role); setDeviceRole(role); setShowRoleSelection(false); if(role === 'Owner'){ localStorage.setItem('is_trialing', 'true'); localStorage.setItem('trial_start_date', Date.now().toString()); localStorage.setItem('is_setup_pending', 'true'); navigateTo(Page.DASHBOARD); setIsAtLanding(false); setIsTrialing(true); setIsSetupPending(true); } else { navigateTo(Page.LOGIN); setIsAtLanding(false); setIsTrialing(false); setIsSetupPending(false); } }} />;
-  
-  // PROTECTION LAYER
-  // Switchboard Priority: If staff role is detected, bypass all admin guards
-  if (!isStaff) {
-    if (deviceRole === 'Owner') {
-      if ((!isActivated && (!isTrialing || !isTrialValid)) || isExpired) return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
-      if (isSetupPending) return <Onboarding onComplete={() => window.location.reload()} />;
-    }
+
+  // 3. INSTALLATION CHECK (FOR MOBILE)
+  if (showInstallPage) return <InstallApp deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_onboarding_done', 'true'); setShowInstallPage(false); setIsAtLanding(false); }} />;
+
+  // 4. ACTIVATION & TRIAL GUARD (LOCK SCREEN)
+  const isTrialValidFinal = isTrialing && isTrialValid;
+  if (!isActivated && !isTrialValidFinal || isExpired) {
+    // Note: Staff can bypass this via Login screen's "Import" which sets isActivated = true
+    if (!isStaff) return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
   }
 
-  // Final check for login
-  if (!currentUser) return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || (isStaff ? 'StaffDevice' : 'Owner')} />;
+  // 5. SETUP WIZARD (ONBOARDING)
+  if (isSetupPending && !isStaff) {
+    return <Onboarding onComplete={() => window.location.reload()} />;
+  }
 
+  // 6. LOGIN (IDENTIFY ACCOUNT)
+  if (!currentUser) {
+    return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || (isStaff ? 'StaffDevice' : 'Owner')} />;
+  }
+
+  // 7. MAIN APP INTERFACE
   const isStaffDevice = deviceRole === 'StaffDevice' || isStaff;
   const renderPage = () => {
     switch (currentPage) {
@@ -285,8 +277,6 @@ const AppContent: React.FC = () => {
           <button onClick={() => navigateTo(Page.SALES)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.SALES ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
             <Receipt size={18} /><span className="text-[7px] font-black mt-1 uppercase tracking-tighter">Sales</span>
           </button>
-          
-          {/* Strict Role Lockdown: Hide sensitive tabs for staff */}
           {!isStaff && (
             <>
               <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-1 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>

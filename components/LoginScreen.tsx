@@ -89,13 +89,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
     
     if (isValid) {
       try {
-        // Find Admin user
         const admin = await db.users.where('role').equals('Admin').first();
         if (admin && admin.id) {
           await db.users.update(admin.id, { pin: "" });
         }
-        
-        // Trigger Setup Screen
         localStorage.setItem('is_setup_pending', 'true');
         window.location.reload();
       } catch (err) {
@@ -280,36 +277,41 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
       <div className="w-full max-w-sm px-8 pb-16 flex flex-col items-center flex-1">
         {!selectedUser ? (
           <div className="w-full space-y-6 animate-in slide-in-from-bottom duration-500 flex flex-col items-center">
-            <div className="text-center"><h2 className="text-[10px] font-black text-emerald-100/40 uppercase tracking-[0.3em]">Identify Your Account</h2></div>
+            <div className="text-center">
+              <h2 className="text-[10px] font-black text-emerald-100/40 uppercase tracking-[0.3em]">Identify Your Account</h2>
+            </div>
+            
             <div className="grid grid-cols-1 gap-4 w-full">
-              {displayUsers?.map(user => (
-                <button key={user.id} onClick={() => setSelectedUser(user)} className="bg-emerald-900/40 backdrop-blur-sm border border-emerald-800/50 p-6 rounded-[32px] flex items-center justify-between group active:scale-[0.97] transition-all shadow-xl">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-emerald-500/20 p-3 rounded-2xl text-emerald-400 border border-emerald-400/20"><UserIcon size={24} /></div>
-                    <div className="text-left">
-                      <p className="font-black text-xl leading-none">{user.name}</p>
-                      <p className="text-[10px] font-bold text-emerald-500 uppercase mt-1.5 tracking-widest">{user.role}</p>
+              {displayUsers?.length > 0 ? (
+                displayUsers.map(user => (
+                  <button key={user.id} onClick={() => setSelectedUser(user)} className="bg-emerald-900/40 backdrop-blur-sm border border-emerald-800/50 p-6 rounded-[32px] flex items-center justify-between group active:scale-[0.97] transition-all shadow-xl">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-emerald-500/20 p-3 rounded-2xl text-emerald-400 border border-emerald-400/20"><UserIcon size={24} /></div>
+                      <div className="text-left">
+                        <p className="font-black text-xl leading-none">{user.name}</p>
+                        <p className="text-[10px] font-bold text-emerald-500 uppercase mt-1.5 tracking-widest">{user.role}</p>
+                      </div>
                     </div>
-                  </div>
-                  <ArrowRight size={20} className="text-emerald-700 group-hover:text-emerald-400 transition-colors" />
-                </button>
-              ))}
-              
-              {isStaffDevice && displayUsers.length === 0 && (
-                <div className="text-center py-10 bg-emerald-900/20 rounded-[32px] border border-dashed border-emerald-800/40 w-full space-y-3">
+                    <ArrowRight size={20} className="text-emerald-700 group-hover:text-emerald-400 transition-colors" />
+                  </button>
+                ))
+              ) : (
+                <div className="text-center py-10 bg-emerald-900/20 rounded-[32px] border border-dashed border-emerald-800/40 w-full space-y-4 px-6">
                   <Smartphone className="mx-auto text-emerald-800" size={32} />
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">Terminal Not Activated.<br/>Import Boss Key to begin.</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 leading-relaxed">
+                    New Terminal Found.<br/>Import Boss Key or Sync to start.
+                  </p>
                 </div>
               )}
             </div>
             
             <div className="w-full space-y-3 mt-4">
-              <button onClick={() => setShowImport(true)} className="w-full bg-emerald-950/50 border border-emerald-800/40 text-emerald-400 font-black py-5 rounded-[28px] text-[10px] uppercase tracking-[0.2em] shadow-inner flex items-center justify-center gap-2">
-                <LogIn size={14} /> {isStaffDevice && displayUsers.length === 0 ? 'Activate with Boss Key' : 'Import Code / Sync'}
+              <button onClick={() => setShowImport(true)} className="w-full bg-emerald-950/50 border border-emerald-800/40 text-emerald-400 font-black py-5 rounded-[28px] text-[10px] uppercase tracking-[0.2em] shadow-inner flex items-center justify-center gap-2 active:scale-95 transition-all">
+                <RefreshCw size={14} /> Import Code / Sync
               </button>
               
-              <button onClick={() => { if(confirm("This will completely reset the terminal. Continue?")) { localStorage.clear(); window.location.reload(); } }} className="w-full text-emerald-800 font-black text-[9px] uppercase tracking-[0.3em] py-2">
-                Reset System
+              <button onClick={() => { if(confirm("This will completely reset the terminal. Continue?")) { localStorage.clear(); window.location.reload(); } }} className="w-full text-emerald-800 font-black text-[9px] uppercase tracking-[0.3em] py-2 hover:text-red-400 transition-colors">
+                System Reset
               </button>
             </div>
           </div>
@@ -340,7 +342,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
               </div>
               <button onClick={handleLogin} className="w-full bg-white text-emerald-950 font-black py-6 rounded-[32px] shadow-2xl active:scale-95 transition-all uppercase tracking-widest text-sm">Unlock Terminal</button>
               
-              {/* Forgot PIN Link for Admin */}
               {selectedUser.role === 'Admin' && (
                 <button 
                   onClick={() => setShowForgotPin(true)}
@@ -356,7 +357,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
         )}
       </div>
 
-      {/* PIN Recovery Modal: Optimized for Mobile Scrolling */}
       {showForgotPin && (
         <div className="fixed inset-0 z-[550] bg-emerald-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
            <div className="w-full max-w-sm bg-white rounded-[40px] shadow-2xl text-emerald-950 relative flex flex-col max-h-[90vh] overflow-hidden">
