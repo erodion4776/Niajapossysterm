@@ -50,12 +50,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
   };
 
   const handleStartTrialClick = () => {
-    // GA4 Event Tracking
-    ReactGA.event({ 
-      category: 'User', 
-      action: 'Clicked Start Trial', 
-      label: 'New Year Promo' 
+    // Explicit GA4 Conversion Event
+    ReactGA.event({
+      category: "Conversion",
+      action: "Trial Started",
+      label: "Landing Page Button"
     });
+    console.log("Analytics: Conversion Event - Trial Started");
 
     confetti({ 
       particleCount: 150, 

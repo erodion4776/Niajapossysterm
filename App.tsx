@@ -38,6 +38,10 @@ import {
 const ALLOWED_DOMAINS = ['naijashop.com.ng', 'niajapos.netlify.app'];
 const TRIAL_DURATION = 3 * 24 * 60 * 60 * 1000; 
 
+// Initialize GA4 outside the component for robustness
+ReactGA.initialize("G-7Q4E8586BF");
+console.log("Analytics: GA4 Initialized");
+
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -61,18 +65,15 @@ const AppContent: React.FC = () => {
   const [licenseExpiry, setLicenseExpiry] = useState<string | null>(() => localStorage.getItem('license_expiry'));
   const [isExpired, setIsExpired] = useState(false);
 
-  // GA4 Initialization
+  // GA4 Robust Tracking: Fires on component mount and on every page state change
   useEffect(() => {
-    ReactGA.initialize('G-7Q4E8586BF');
-  }, []);
-
-  // GA4 Page Tracking
-  useEffect(() => {
+    const currentPath = window.location.pathname + window.location.search;
     ReactGA.send({ 
       hitType: "pageview", 
-      page: window.location.pathname + window.location.search,
-      title: currentPage
+      page: currentPath,
+      title: currentPage 
     });
+    console.log(`Analytics: Pageview recorded - ${currentPage} (${currentPath})`);
   }, [currentPage]);
 
   // Technical Fix: Strict Role Check
