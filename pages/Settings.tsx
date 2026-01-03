@@ -27,9 +27,10 @@ interface SettingsProps {
   role: Role;
   setRole: (role: Role) => void;
   setPage: (page: Page) => void;
+  deferredPrompt: any;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage }) => {
+export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage, deferredPrompt }) => {
   const isAdmin = role === 'Admin';
   const { theme, toggleTheme } = useTheme();
   
@@ -114,6 +115,16 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       alert("Update check failed. Please check your connection.");
     } finally {
       setIsCheckingUpdates(false);
+    }
+  };
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`✅ PWA: User response to install: ${outcome}`);
+    } else {
+      alert("Oga, your browser is not ready yet. Please wait 10 seconds or click the 3 dots in Chrome and select 'Install App' manually.");
     }
   };
 
@@ -329,7 +340,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
               <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Install on home screen for faster sales</p>
            </div>
         </div>
-        <button onClick={() => window.location.reload()} className="p-3 bg-blue-600 text-white rounded-xl active:scale-95 transition-all shadow-lg shadow-blue-200">
+        <button onClick={handleInstallClick} className="p-3 bg-blue-600 text-white rounded-xl active:scale-95 transition-all shadow-lg shadow-blue-200">
            <ChevronRight size={20} />
         </button>
       </section>
@@ -438,7 +449,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       {/* Staff Add Modal */}
       {showAddUser && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[40px] p-8 shadow-2xl animate-in zoom-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[40px] p-8 shadow-2xl animate-in zoom-in duration-300">
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-black uppercase italic tracking-tight">New Staff</h2>
                 <button onClick={() => setShowAddUser(false)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400"><X size={20}/></button>

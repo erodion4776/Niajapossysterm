@@ -80,6 +80,10 @@ const AppContent: React.FC = () => {
 
       if (!isLocal && !isDevEnv && !isAuthorized) setIsPirated(true);
 
+      // Standalone check
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+      console.log(`✅ PWA: Running in ${isStandalone ? 'Standalone (Installed)' : 'Browser'} mode`);
+
       await initTrialDate();
       const requestCode = await getRequestCode();
       const dbExp = await db.security.get('license_expiry');
@@ -109,12 +113,18 @@ const AppContent: React.FC = () => {
     
     startup();
     window.addEventListener('popstate', syncState);
-    const installHandler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
-    window.addEventListener('beforeinstallprompt', installHandler);
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      console.log('✅ PWA: Install prompt captured');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     return () => {
       window.removeEventListener('popstate', syncState);
-      window.removeEventListener('beforeinstallprompt', installHandler);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, [syncState]);
 
@@ -190,7 +200,7 @@ const AppContent: React.FC = () => {
         case Page.CUSTOMERS: return <Customers setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} />;
         case Page.STOCK_LOGS: return <StockLogs setPage={navigateTo} />;
         case Page.EXPENSES: return <Expenses setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} />;
-        case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} />;
+        case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} deferredPrompt={deferredPrompt} />;
         case Page.CATEGORY_MANAGER: return <CategoryManager setPage={navigateTo} />;
         default: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
       }
