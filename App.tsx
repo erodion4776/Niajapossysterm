@@ -16,7 +16,7 @@ import { Customers } from './pages/Customers.tsx';
 import { StockLogs } from './pages/StockLogs.tsx';
 import { CategoryLab } from './pages/CategoryLab.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
-import { SetupWizard } from './components/SetupWizard.tsx';
+import { Onboarding } from './components/Onboarding.tsx';
 import { InstallApp } from './pages/InstallApp.tsx';
 import { JoinShop } from './pages/JoinShop.tsx';
 import { AIAssistant } from './pages/AIAssistant.tsx';
@@ -60,7 +60,6 @@ const AppContent: React.FC = () => {
   
   const [shopName, setShopName] = useState<string | null>(null);
   const [ownerName, setOwnerName] = useState<string>('Boss');
-  const [adminUser, setAdminUser] = useState<User | null>(null);
 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isExpired, setIsExpired] = useState(false);
@@ -94,10 +93,8 @@ const AppContent: React.FC = () => {
     
     const sn = await db.settings.get('shop_name');
     const on = await db.settings.get('owner_name');
-    const admin = await db.users.where('role').equals('Admin').first();
     setShopName(sn?.value || null);
     setOwnerName(on?.value?.split(' ')[0] || 'Boss');
-    setAdminUser(admin || null);
 
     const requestCode = await getRequestCode();
     const dbExp = await db.security.get('license_expiry');
@@ -166,10 +163,8 @@ const AppContent: React.FC = () => {
   const refreshOnboarding = async () => {
     const sn = await db.settings.get('shop_name');
     const on = await db.settings.get('owner_name');
-    const admin = await db.users.where('role').equals('Admin').first();
     setShopName(sn?.value || null);
     setOwnerName(on?.value?.split(' ')[0] || 'Boss');
-    setAdminUser(admin || null);
     syncState();
   };
 
@@ -189,9 +184,9 @@ const AppContent: React.FC = () => {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
   }
 
-  // 4. Setup Hierarchy: Ensure setup is done BEFORE expiry check
+  // 4. Onboarding: Captures Identity and PIN in a "new" way
   if (isSetupPending) {
-    return <SetupWizard onComplete={() => { refreshOnboarding(); }} />;
+    return <Onboarding onComplete={() => { refreshOnboarding(); }} />;
   }
 
   // 5. Expiry Check (Only show AFTER setup is completed or for existing users)

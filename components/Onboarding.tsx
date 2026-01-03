@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../db.ts';
 import { 
   ShieldCheck, CheckCircle2, AlertCircle, ArrowRight, ChevronLeft, 
-  Store, Users, Package, Lock, Key, Smartphone, Sparkles 
+  Store, Users, Package, Lock, Key, Smartphone, Sparkles, User, MapPin, Phone
 } from 'lucide-react';
 
 interface OnboardingProps {
@@ -14,6 +14,14 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [tempOtp, setTempOtp] = useState<string>('');
   
+  // Data State
+  const [formData, setFormData] = useState({
+    ownerName: '',
+    shopName: '',
+    address: '',
+    phone: ''
+  });
+
   // Security Inputs
   const [pinArr, setPinArr] = useState(new Array(4).fill(''));
   const [confirmPinArr, setConfirmPinArr] = useState(new Array(4).fill(''));
@@ -23,7 +31,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const confirmRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    const otp = localStorage.getItem('temp_otp') || '000000';
+    const otp = localStorage.getItem('temp_otp') || Math.floor(100000 + Math.random() * 900000).toString();
+    if (!localStorage.getItem('temp_otp')) localStorage.setItem('temp_otp', otp);
     setTempOtp(otp);
   }, []);
 
@@ -62,25 +71,31 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     }
   };
 
-  const validateSecurityStep = () => {
-    const pin = pinArr.join('');
-    const confirm = confirmPinArr.join('');
-    
-    if (pin.length < 4) {
-      setError('Enter a 4-digit PIN');
-      return false;
+  const validateStep = () => {
+    if (currentStep === 1) { // Identity Step
+      if (!formData.ownerName || !formData.shopName || !formData.address) {
+        setError('Please fill all business details');
+        return false;
+      }
     }
-    if (pin !== confirm) {
-      setError('PINs do not match');
-      return false;
+    if (currentStep === 2) { // Security Step
+      const pin = pinArr.join('');
+      const confirm = confirmPinArr.join('');
+      if (pin.length < 4) {
+        setError('Enter a 4-digit PIN');
+        return false;
+      }
+      if (pin !== confirm) {
+        setError('PINs do not match');
+        return false;
+      }
     }
     return true;
   };
 
   const handleNext = () => {
-    if (currentStep === 1) {
-      if (!validateSecurityStep()) return;
-    }
+    if (!validateStep()) return;
+    setError('');
     if (currentStep < 4) {
       setCurrentStep(currentStep + 1);
     } else {
@@ -90,20 +105,31 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
   const finalizeSetup = async () => {
     try {
+      // 1. Save Identity
+      await db.settings.bulkPut([
+        { key: 'owner_name', value: formData.ownerName },
+        { key: 'shop_name', value: formData.shopName },
+        { key: 'shop_address', value: formData.address },
+        { key: 'shop_phone', value: formData.phone }
+      ]);
+      localStorage.setItem('shop_name', formData.shopName);
+      localStorage.setItem('shop_info', formData.address);
+
+      // 2. Save Admin Security
       const newPin = pinArr.join('');
       let admin = await db.users.where('role').equals('Admin').first();
-      
       if (admin && admin.id) {
-        await db.users.update(admin.id, { pin: newPin });
+        await db.users.update(admin.id, { pin: newPin, name: formData.ownerName });
       } else {
         await db.users.add({
-          name: 'Shop Owner',
+          name: formData.ownerName,
           pin: newPin,
           role: 'Admin'
         });
       }
       
       localStorage.setItem('is_setup_pending', 'false');
+      localStorage.removeItem('temp_otp');
       onComplete();
     } catch (err) {
       setError('Failed to save settings');
@@ -113,16 +139,53 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const screens = [
     {
       title: "Welcome, Boss!",
-      desc: "Your shop is now digital. Enjoy 14 days of world-class management for free. No data costs, no hidden fees.",
+      desc: "NaijaShop is now your digital partner. Enjoy 14 days of world-class management for free. No data needed, no stress.",
       img: "https://i.ibb.co/m5y9NjqV/1766529834120-019b4d61-d179-7e3d-aad7-4ae5252e707b.png",
-      icon: <Store className="text-emerald-400" size={32} />
+      icon: <Sparkles className="text-emerald-400" size={32} />
     },
     {
-      title: "Lock Your Profit",
-      desc: "Set your secret Admin PIN. This locks your records and profit dashboard away from prying eyes.",
+      title: "Your Business",
+      desc: "Tell us about your shop. These details will appear on your professional WhatsApp receipts.",
       img: "https://i.ibb.co/XxDDvb3k/gemini-3-pro-image-preview-nano-banana-pro-a-A-high-quality-3-D-is.png",
       content: (
-        <div className="space-y-6 w-full max-w-xs mx-auto">
+        <div className="space-y-4 w-full max-w-sm mx-auto animate-in slide-in-from-bottom duration-500">
+           <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500/40" size={18} />
+              <input 
+                placeholder="Your Full Name" 
+                className="w-full bg-white/10 border border-white/20 rounded-2xl py-4 pl-12 pr-4 font-bold text-white placeholder:text-white/20 focus:outline-none focus:border-emerald-400"
+                value={formData.ownerName}
+                onChange={e => setFormData({...formData, ownerName: e.target.value})}
+              />
+           </div>
+           <div className="relative">
+              <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500/40" size={18} />
+              <input 
+                placeholder="Shop Name" 
+                className="w-full bg-white/10 border border-white/20 rounded-2xl py-4 pl-12 pr-4 font-bold text-white placeholder:text-white/20 focus:outline-none focus:border-emerald-400"
+                value={formData.shopName}
+                onChange={e => setFormData({...formData, shopName: e.target.value})}
+              />
+           </div>
+           <div className="relative">
+              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500/40" size={18} />
+              <input 
+                placeholder="Shop Address / Market" 
+                className="w-full bg-white/10 border border-white/20 rounded-2xl py-4 pl-12 pr-4 font-bold text-white placeholder:text-white/20 focus:outline-none focus:border-emerald-400"
+                value={formData.address}
+                onChange={e => setFormData({...formData, address: e.target.value})}
+              />
+           </div>
+           {error && <p className="text-red-400 text-[10px] font-black uppercase text-center animate-bounce">{error}</p>}
+        </div>
+      )
+    },
+    {
+      title: "Lock Your Gain",
+      desc: "Create your secret Admin PIN. This locks your records and profit from staff and prying eyes.",
+      img: "https://i.ibb.co/XxDDvb3k/gemini-3-pro-image-preview-nano-banana-pro-a-A-high-quality-3-D-is.png",
+      content: (
+        <div className="space-y-6 w-full max-w-xs mx-auto animate-in zoom-in duration-500">
           <div className="space-y-2">
             <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest text-center">Create Admin PIN</p>
             <div className="flex gap-2 justify-center">
@@ -156,11 +219,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       )
     },
     {
-      title: "The Master Key",
-      desc: "Write this code down! You will need it to link other staff phones to your shop inventory.",
+      title: "Master Code",
+      desc: "Write this code down! You will need it to link staff phones to your inventory.",
       img: "https://i.ibb.co/XxDDvb3k/gemini-3-pro-image-preview-nano-banana-pro-a-A-high-quality-3-D-is.png",
       content: (
-        <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-[40px] text-center space-y-3 relative overflow-hidden group shadow-2xl w-full max-w-xs mx-auto">
+        <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-[40px] text-center space-y-3 relative overflow-hidden group shadow-2xl w-full max-w-xs mx-auto animate-in fade-in duration-700">
           <div className="absolute top-0 right-0 p-4 opacity-5 text-white"><Key size={60} /></div>
           <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.3em]">Master Setup Code</p>
           <div className="text-5xl font-mono font-black tracking-[0.2em]">{tempOtp}</div>
@@ -172,16 +235,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       )
     },
     {
-      title: "Staff Protection",
-      desc: "Staff can record sales but they CANNOT delete them or see your total profit. You are in full control.",
+      title: "Ready to Sell",
+      desc: "Everything is set! You can now start selling 100% offline. Remember: No Network, No Problem!",
       img: "https://i.ibb.co/XxDDvb3k/gemini-3-pro-image-preview-nano-banana-pro-a-A-high-quality-3-D-is.png",
-      icon: <Users className="text-emerald-400" size={32} />
-    },
-    {
-      title: "Start Selling",
-      desc: "Everything is set! Tap 'Open My Shop' to start your 14-day risk-free trial. Remember: No data needed!",
-      img: "https://i.ibb.co/XxDDvb3k/gemini-3-pro-image-preview-nano-banana-pro-a-A-high-quality-3-D-is.png",
-      icon: <Package className="text-emerald-400" size={32} />
+      icon: <CheckCircle2 className="text-emerald-400" size={48} />
     }
   ];
 
@@ -208,9 +265,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           </div>
 
           {/* Dynamic Content */}
-          <div className="min-h-[200px] flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
+          <div className="min-h-[260px] flex flex-col items-center justify-center">
             {screens[currentStep].content || (
-              <p className="text-emerald-100/80 text-lg font-medium text-center leading-relaxed drop-shadow-md">
+              <p className="text-emerald-100/80 text-lg font-medium text-center leading-relaxed drop-shadow-md animate-in fade-in duration-500">
                 {screens[currentStep].desc}
               </p>
             )}
@@ -248,7 +305,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
           <div className="flex items-center justify-center gap-3 opacity-50">
             <ShieldCheck size={16} />
-            <p className="text-[9px] font-bold uppercase tracking-[0.2em]">Local Secure POS 🇳🇬</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em]">Secure POS Technology 🇳🇬</p>
           </div>
         </div>
       </div>
