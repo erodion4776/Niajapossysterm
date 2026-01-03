@@ -14,11 +14,11 @@ export interface InventoryItem {
   costPrice: number;
   sellingPrice: number;
   stock: number;
-  unit?: string; // New: Pcs, Packs, etc.
-  supplierName?: string; // New: Restock tracking
+  unit?: string; 
+  supplierName?: string; 
   minStock?: number;
   expiryDate?: string;
-  category: string;
+  category: string; // Linked by name for simplicity in offline sync
   barcode?: string;
   dateAdded?: string;
   image?: string; 
@@ -82,7 +82,7 @@ export interface Expense {
 
 export interface Debt {
   id?: string | number;
-  sale_uuid?: string; // Links debt to specific POS transaction for sync
+  sale_uuid?: string; 
   customerName: string;
   customerPhone: string;
   totalAmount: number;
@@ -104,7 +104,7 @@ export interface StockLog {
   type: 'Addition' | 'Manual Update' | 'Sales Deduction' | 'Reconciliation Deduction';
   date: number;
   staff_name: string;
-  supplierName?: string; // New: Log supplier info on restock
+  supplierName?: string; 
 }
 
 export interface Setting {
@@ -133,9 +133,9 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(24).stores({
+dexieDb.version(25).stores({
   inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock, unit, supplierName',
-  categories: '++id, name',
+  categories: '++id, &name',
   customers: '++id, &phone, name, walletBalance, lastTransaction',
   sales: '++id, uuid, timestamp, total, staff_id, staff_name, customer_phone',
   settings: 'key',
@@ -172,7 +172,7 @@ export async function initTrialDate() {
       { name: 'Uncategorized', dateCreated: Date.now() },
       { name: 'Drinks', dateCreated: Date.now() },
       { name: 'Food', dateCreated: Date.now() },
-      { name: 'Medicine', dateCreated: Date.now() }
+      { name: 'General', dateCreated: Date.now() }
     ]);
   }
 }

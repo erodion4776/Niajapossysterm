@@ -13,7 +13,7 @@ import { Settings } from './pages/Settings.tsx';
 import { FAQ } from './pages/FAQ.tsx';
 import { Customers } from './pages/Customers.tsx';
 import { StockLogs } from './pages/StockLogs.tsx';
-import { CategoryManager } from './pages/CategoryManager.tsx';
+import { CategoryLab } from './pages/CategoryLab.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
 import { RegisterShop } from './pages/RegisterShop.tsx';
 import { SetupPIN } from './pages/SetupPIN.tsx';
@@ -237,7 +237,7 @@ const AppContent: React.FC = () => {
       case Page.STOCK_LOGS: return <StockLogs setPage={navigateTo} />;
       case Page.EXPENSES: return <Expenses setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} />;
       case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} deferredPrompt={deferredPrompt} />;
-      case Page.CATEGORY_MANAGER: return <CategoryManager setPage={navigateTo} />;
+      case Page.CATEGORY_MANAGER: return <CategoryLab setPage={navigateTo} />;
       case Page.AI_ASSISTANT: return <AIAssistant setPage={navigateTo} />;
       default: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
     }

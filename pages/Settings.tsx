@@ -16,7 +16,8 @@ import {
   Moon, Sun, X, Send, Landmark, Save,
   History, FileText, Wallet, Receipt, LogOut, Tag,
   CreditCard, CheckCircle2, Download, Package, Users, Zap,
-  Smartphone, HelpCircle, MessageCircle, ChevronRight, Globe, MapPin, Phone, Edit3, Gift, Info
+  Smartphone, HelpCircle, MessageCircle, ChevronRight, Globe, MapPin, Phone, Edit3, Gift, Info,
+  LayoutGrid, FolderTree
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -377,6 +378,28 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
              </button>
           </div>
           <div className="absolute top-0 right-0 p-8 opacity-5 text-white pointer-events-none"><RefreshCw size={120} /></div>
+        </section>
+      )}
+
+      {/* CATEGORY LAB - NEW HIGH END BUTTON */}
+      {isAdmin && (
+        <section 
+          onClick={() => setPage(Page.CATEGORY_MANAGER)}
+          className="bg-emerald-950 p-7 rounded-[40px] shadow-2xl relative overflow-hidden border-2 border-emerald-400/30 space-y-2 cursor-pointer active:scale-[0.98] transition-all group"
+        >
+          <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          <div className="relative z-10 flex items-center justify-between">
+             <div className="space-y-1">
+                <h2 className="text-2xl font-black text-emerald-400 italic uppercase tracking-tighter">CATEGORY LAB</h2>
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em]">MANAGE SHOP FOLDERS</p>
+             </div>
+             <div className="p-4 bg-emerald-400/10 rounded-3xl text-emerald-400 border border-emerald-400/20 group-hover:scale-110 transition-transform">
+                <LayoutGrid size={32} />
+             </div>
+          </div>
+          <div className="absolute -bottom-8 -left-8 opacity-[0.03] text-white pointer-events-none group-hover:rotate-12 transition-transform duration-700">
+             <FolderTree size={160} />
+          </div>
         </section>
       )}
 
