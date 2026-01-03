@@ -74,6 +74,13 @@
       .dark .custom-scrollbar::-webkit-scrollbar-thumb {
         background: #064e3b;
       }
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
       /* Custom Shimmer Class */
       .btn-shimmer {
         background: linear-gradient(90deg, #059669 0%, #10b981 50%, #059669 100%);
