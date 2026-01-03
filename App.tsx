@@ -16,9 +16,6 @@ import { StockLogs } from './pages/StockLogs.tsx';
 import { CategoryManager } from './pages/CategoryManager.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
 import { InstallApp } from './pages/InstallApp.tsx';
-import { PublicHelp } from './pages/PublicHelp.tsx';
-import { AboutUs } from './pages/AboutUs.tsx';
-import { Affiliates } from './pages/Affiliates.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { SetupWizard } from './components/SetupWizard.tsx';
@@ -30,7 +27,7 @@ import { ThemeProvider } from './ThemeContext.tsx';
 import { getRequestCode, validateLicenseIntegrity } from './utils/security.ts';
 import { 
   LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, 
-  Receipt, ShieldAlert, Wallet, BookOpen, Clock, History, Menu
+  ShieldAlert, BookOpen, Menu
 } from 'lucide-react';
 
 const ALLOWED_DOMAINS = ['naijashop.com.ng', 'niajapos.netlify.app'];
@@ -199,12 +196,12 @@ const AppContent: React.FC = () => {
       }
     };
 
-    // Logical Hubs for Navigation
+    // Logical Hubs for Highlighted States
     const isDashboardActive = currentPage === Page.DASHBOARD;
     const isPosActive = currentPage === Page.POS;
     const isInventoryActive = currentPage === Page.INVENTORY;
     const isDebtsActive = currentPage === Page.DEBTS;
-    // Settings tab stays active for all sub-admin pages
+    // Sub-admin pages all link to the Admin tab
     const isAdminActive = [Page.SETTINGS, Page.CUSTOMERS, Page.SALES, Page.STOCK_LOGS, Page.EXPENSES, Page.CATEGORY_MANAGER].includes(currentPage);
 
     return (
@@ -214,19 +211,19 @@ const AppContent: React.FC = () => {
         {!isNavHidden && (
           <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/95 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-2 py-2 safe-bottom z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
             <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isDashboardActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <LayoutGrid size={22} /><span className="text-[7px] font-black mt-1 uppercase">Home</span>
+              <LayoutGrid size={22} /><span className="text-[10px] sm:text-[11px] font-black mt-1 uppercase">Home</span>
             </button>
             <button onClick={() => navigateTo(Page.POS)} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isPosActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <ShoppingBag size={22} /><span className="text-[7px] font-black mt-1 uppercase">POS</span>
+              <ShoppingBag size={22} /><span className="text-[10px] sm:text-[11px] font-black mt-1 uppercase">POS</span>
             </button>
             <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isInventoryActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <Package size={22} /><span className="text-[7px] font-black mt-1 uppercase">Stock</span>
+              <Package size={22} /><span className="text-[10px] sm:text-[11px] font-black mt-1 uppercase">Stock</span>
             </button>
             <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isDebtsActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <BookOpen size={22} /><span className="text-[7px] font-black mt-1 uppercase">Debts</span>
+              <BookOpen size={22} /><span className="text-[10px] sm:text-[11px] font-black mt-1 uppercase">Debts</span>
             </button>
             <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isAdminActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <Menu size={22} /><span className="text-[7px] font-black mt-1 uppercase">Admin</span>
+              <Menu size={22} /><span className="text-[10px] sm:text-[11px] font-black mt-1 uppercase">Admin</span>
             </button>
           </nav>
         )}

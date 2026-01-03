@@ -116,12 +116,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         if (reconcileInputRef.current) reconcileInputRef.current.value = '';
       }
     };
-
-    if (file.name.endsWith('.gz')) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsArrayBuffer(file);
-    }
+    reader.readAsArrayBuffer(file);
   };
 
   const handlePushUpdateToStaff = async () => {
@@ -178,8 +173,8 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
       <header className="flex justify-between items-center sticky top-0 bg-slate-50 dark:bg-emerald-950 py-2 z-10 transition-colors">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Admin</h1>
-          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Master Control Panel</p>
+          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic">Admin</h1>
+          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Shop Master Control</p>
         </div>
         <div className="flex gap-2">
           <button onClick={toggleTheme} className="p-3 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl shadow-sm text-emerald-600 active:scale-90 transition-all">
@@ -201,15 +196,15 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Business Name</label>
-              <input type="text" value={shopName} onChange={(e) => setShopName(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
+              <input type="text" value={shopName} onChange={(e) => setShopName(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Physical Address / Info</label>
-              <input type="text" value={shopInfo} onChange={(e) => setShopInfo(e.target.value)} placeholder="e.g. Shop 24, Main Market" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
+              <input type="text" value={shopInfo} onChange={(e) => setShopInfo(e.target.value)} placeholder="e.g. Shop 24, Main Market" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Receipt Footer</label>
-              <input type="text" value={receiptFooter} onChange={(e) => setReceiptFooter(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
+              <input type="text" value={receiptFooter} onChange={(e) => setReceiptFooter(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <button onClick={saveShopProfile} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-100">
               <Save size={16}/> Save Branding
@@ -228,15 +223,15 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Bank Name</label>
-              <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. OPay / GTBank" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
+              <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. OPay / GTBank" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Account Number</label>
-              <input type="number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Enter 10 digits" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
+              <input type="number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Enter 10 digits" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Account Name</label>
-              <input type="text" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="As seen in bank app" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
+              <input type="text" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="As seen in bank app" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <button onClick={saveBankDetails} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-100">
               <ShieldCheck size={16}/> Activate Soft POS
@@ -253,56 +248,56 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         <div className="grid grid-cols-2 gap-3">
            <button onClick={() => setPage(Page.SALES)} className="bg-white dark:bg-emerald-900/40 p-5 rounded-[28px] border border-slate-100 dark:border-emerald-800/40 flex flex-col items-center gap-3 shadow-sm active:scale-95 transition-all">
               <div className="p-3 bg-emerald-50 dark:bg-emerald-800 rounded-2xl text-emerald-600"><History size={24}/></div>
-              <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Sales History</span>
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">History</span>
            </button>
            <button onClick={() => setPage(Page.CUSTOMERS)} className="bg-white dark:bg-emerald-900/40 p-5 rounded-[28px] border border-slate-100 dark:border-emerald-800/40 flex flex-col items-center gap-3 shadow-sm active:scale-95 transition-all">
               <div className="p-3 bg-blue-50 dark:bg-blue-900/40 rounded-2xl text-blue-600"><Wallet size={24}/></div>
-              <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Wallets</span>
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Wallets</span>
            </button>
            <button onClick={() => setPage(Page.STOCK_LOGS)} className="bg-white dark:bg-emerald-900/40 p-5 rounded-[28px] border border-slate-100 dark:border-emerald-800/40 flex flex-col items-center gap-3 shadow-sm active:scale-95 transition-all">
               <div className="p-3 bg-amber-50 dark:bg-amber-900/40 rounded-2xl text-amber-600"><FileText size={24}/></div>
-              <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Stock Logs</span>
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Stock Logs</span>
            </button>
            <button onClick={() => setPage(Page.EXPENSES)} className="bg-white dark:bg-emerald-900/40 p-5 rounded-[28px] border border-slate-100 dark:border-emerald-800/40 flex flex-col items-center gap-3 shadow-sm active:scale-95 transition-all">
               <div className="p-3 bg-purple-50 dark:bg-purple-900/40 rounded-2xl text-purple-600"><Receipt size={24}/></div>
-              <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Expenses</span>
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Expenses</span>
            </button>
         </div>
       </section>
 
-      {/* SECTION 4: DAILY RECONCILIATION */}
+      {/* DAILY RECONCILIATION */}
       {isAdmin && (
         <section className="bg-emerald-950 p-7 rounded-[40px] shadow-2xl relative overflow-hidden border-2 border-emerald-500/20 space-y-6">
           <div className="relative z-10 flex flex-col gap-1">
-             <h2 className="text-xl font-black text-emerald-400 italic uppercase tracking-tighter">Daily Reconciliation</h2>
+             <h2 className="text-xl font-black text-emerald-400 italic uppercase tracking-tighter">DAILY RECONCILIATION</h2>
              <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest">Link your staff devices to your ledger</p>
           </div>
           
           <div className="grid grid-cols-1 gap-3 relative z-10">
-             <label className="w-full bg-white text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all cursor-pointer shadow-lg">
+             <label className="w-full bg-white text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all cursor-pointer shadow-lg">
                 <input type="file" ref={reconcileInputRef} className="hidden" accept=".json,.gz" onChange={handleImportStaffSales} />
-                {isReconciling ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 1. Import Staff Sales
+                {isReconciling ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 1. IMPORT STAFF SALES
              </label>
              
-             <button onClick={handlePushUpdateToStaff} disabled={isUpdatingInventory} className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-xl">
-                {isUpdatingInventory ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} 2. Send Master Stock to Staff
+             <button onClick={handlePushUpdateToStaff} disabled={isUpdatingInventory} className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all shadow-xl">
+                {isUpdatingInventory ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} 2. SEND MASTER STOCK TO STAFF
              </button>
           </div>
           <div className="absolute top-0 right-0 p-8 opacity-5 text-white pointer-events-none"><RefreshCw size={120} /></div>
         </section>
       )}
 
-      {/* SECTION 5: DATA SAFETY & STAFF */}
+      {/* SECTION 4: DATA & SYNC */}
       <section className="space-y-6">
         <div className="flex items-center gap-2 px-2">
-          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">System & Team</h2>
+          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data & Sync</h2>
         </div>
 
         {isAdmin && (
           <div className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
             <div className="flex items-center gap-3">
               <Database size={16} className="text-emerald-600" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800 dark:text-emerald-100">Backup & Recovery</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800 dark:text-emerald-100">Business Backup</span>
             </div>
             <div className="grid grid-cols-1 gap-3">
                <button onClick={handleBackup} disabled={isBackingUp} className="w-full bg-slate-900 dark:bg-emerald-800 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] active:scale-95 shadow-lg">
@@ -316,6 +311,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           </div>
         )}
 
+        {/* Staff Members List */}
         {isAdmin && (
           <div className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
             <div className="flex justify-between items-center">
@@ -323,7 +319,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
                 <Users size={16} className="text-emerald-600" />
                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-800 dark:text-emerald-100">Staff Members</span>
               </div>
-              <button onClick={() => setShowAddUser(true)} className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600"><Plus size={16}/></button>
+              <button onClick={() => setShowAddUser(true)} className="p-2 bg-emerald-50 dark:bg-emerald-800 rounded-xl text-emerald-600 active:scale-90 transition-all"><Plus size={16}/></button>
             </div>
             <div className="space-y-3">
               {users?.map(u => (

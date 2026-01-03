@@ -6,7 +6,7 @@ import { formatNaira } from '../utils/whatsapp.ts';
 import { 
   ShoppingCart, Package, TrendingUp, History, Calendar as CalendarIcon, 
   ChevronRight, Landmark, Banknote, BookOpen, Gem, 
-  Info, ShieldAlert, Award, ArrowUpRight
+  Info, ShieldAlert, Award, ArrowUpRight, TrendingDown
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -48,6 +48,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     const revenue = salesInRange.reduce((sum, s) => sum + Number(s.total || 0), 0);
     const expenses = expensesInRange.reduce((sum, e) => sum + Number(e.amount || 0), 0);
     
+    // Split logic: Cash vs Transfers
     const cash = salesInRange
       .filter(s => s.paymentMethod === 'Cash' || s.paymentMethod === 'Partial')
       .reduce((sum, s) => sum + (s.cashPaid || s.total), 0);
@@ -104,13 +105,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       {/* TOP ALERT BAR */}
       {(alerts.lowStock > 0 || alerts.expiring > 0) && (
         <section className="bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 p-4 rounded-[28px] flex items-center gap-4 animate-pulse">
-           <div className="bg-red-500 text-white p-3 rounded-2xl shadow-lg shadow-red-200 dark:shadow-none shrink-0"><ShieldAlert size={20}/></div>
+           <div className="bg-red-500 text-white p-3 rounded-2xl shadow-lg shrink-0"><ShieldAlert size={20}/></div>
            <div className="flex-1">
               <p className="text-[9px] font-black text-red-500 uppercase tracking-widest leading-none mb-1">Attention Required</p>
               <h4 className="text-[11px] font-black text-red-900 dark:text-red-100 leading-tight">
                 {alerts.lowStock > 0 && `${alerts.lowStock} items low`}
                 {alerts.lowStock > 0 && alerts.expiring > 0 && ' & '}
-                {alerts.expiring > 0 && `${alerts.expiring} items expiring soon`}
+                {alerts.expiring > 0 && `${alerts.expiring} expiring soon`}
               </h4>
            </div>
            <button onClick={() => onInventoryFilter('low-stock')} className="p-2 bg-white dark:bg-red-900 rounded-xl text-red-500 shadow-sm"><ChevronRight size={16}/></button>
@@ -174,13 +175,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
         <div className="flex items-center gap-3">
           <div className="bg-amber-50 dark:bg-amber-900/20 p-2 rounded-xl text-amber-600"><Award size={18} /></div>
-          <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Best Sellers ({datePreset})</h3>
+          <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Top Products Today</h3>
         </div>
         <div className="space-y-2">
            {topProducts.length > 0 ? topProducts.map((p, idx) => (
              <div key={idx} className="flex justify-between items-center p-3.5 bg-slate-50 dark:bg-emerald-800/20 rounded-2xl">
                 <span className="text-[10px] font-bold text-slate-600 dark:text-emerald-100 uppercase truncate pr-4">{p.name}</span>
-                <span className="bg-white dark:bg-emerald-950 px-2 py-0.5 rounded-lg text-[9px] font-black text-emerald-600 border border-slate-100 dark:border-emerald-800 whitespace-nowrap">x{p.qty} sold</span>
+                <span className="bg-white dark:bg-emerald-950 px-2 py-0.5 rounded-lg text-[9px] font-black text-emerald-600 border border-slate-100 dark:border-emerald-800">x{p.qty} sold</span>
              </div>
            )) : (
              <p className="text-[9px] text-slate-300 font-black uppercase text-center py-4 italic">No items sold yet</p>
@@ -195,7 +196,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-xl text-blue-600"><History size={18} /></div>
             <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Recent Sales</h3>
           </div>
-          <button onClick={() => setPage(Page.SALES)} className="text-[8px] font-black text-emerald-600 uppercase flex items-center gap-1">Ledger <ArrowUpRight size={10}/></button>
+          <button onClick={() => setPage(Page.SALES)} className="text-[8px] font-black text-emerald-600 uppercase flex items-center gap-1">View Ledger <ArrowUpRight size={10}/></button>
         </div>
         <div className="space-y-3">
           {salesInRange?.length === 0 ? (
@@ -222,7 +223,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <h2 className="text-xl font-black mb-6 uppercase text-center italic tracking-tight">Change Period</h2>
             <div className="grid grid-cols-1 gap-2">
               {(['today', 'yesterday', 'thisMonth', 'allTime'] as DatePreset[]).map(p => (
-                <button key={p} onClick={() => { setDatePreset(p); setShowDateModal(false); }} className={`p-5 rounded-[24px] font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all ${datePreset === p ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'bg-slate-50 dark:bg-emerald-800 text-slate-400'}`}>{p}</p>
+                <button key={p} onClick={() => { setDatePreset(p); setShowDateModal(false); }} className={`p-5 rounded-[24px] font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all ${datePreset === p ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'bg-slate-50 dark:bg-emerald-800 text-slate-400'}`}>{p}</button>
               ))}
             </div>
             <button onClick={() => setShowDateModal(false)} className="w-full mt-4 py-3 text-[10px] font-black uppercase text-slate-300">Close</button>
