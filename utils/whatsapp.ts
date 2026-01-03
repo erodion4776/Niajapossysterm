@@ -13,7 +13,6 @@ export const formatNaira = (amount: number) => {
 };
 
 export const shareReceiptToWhatsApp = async (sale: Sale) => {
-  // Fetch latest business details from DB
   const snSetting = await db.settings.get('shop_name');
   const saSetting = await db.settings.get('shop_address');
   
@@ -41,8 +40,6 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   });
   
   message += `--------------------------\n`;
-  
-  // The "Smart" Receipt Breakdown
   message += `💰 *Total Bill: ${formatNaira(sale.total)}*\n`;
 
   if (sale.walletUsed && sale.walletUsed > 0) {
@@ -57,10 +54,7 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
     const remainingDebt = Math.max(0, sale.total - (sale.walletUsed || 0) - (sale.cashPaid || 0));
     message += `--------------------------\n`;
     message += `⚠️ *BALANCE OWED (DEBT): ${formatNaira(remainingDebt)}*\n`;
-    message += `*Please kindly clear your balance soon. Thank you!*\n`;
     message += `📌 Status: Partially Settled\n`;
-  } else if (sale.paymentMethod === 'Wallet' && (sale.walletUsed || 0) + (sale.cashPaid || 0) >= sale.total) {
-    message += `✅ Fully Settled via Wallet/Cash\n`;
   } else {
     const totalPayment = (sale.walletUsed || 0) + (sale.cashPaid || 0);
     message += `✅ Total Paid: ${formatNaira(totalPayment)}\n`;
@@ -86,62 +80,120 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   window.open(`https://api.whatsapp.com/send?text=${encodedMessage}`, '_blank');
 };
 
-/**
- * Generates a full shop setup key (Inventory + Staff Users + License)
- */
-export const generateShopKey = async () => {
-  const inventory = await db.inventory.toArray();
-  const users = await db.users.toArray();
-  const sn = await db.settings.get('shop_name');
-  const sa = await db.settings.get('shop_address');
-  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
-  const shopInfo = sa?.value || localStorage.getItem('shop_info') || '';
-  const license_expiry = localStorage.getItem('license_expiry');
-  const license_signature = localStorage.getItem('license_signature');
+export const backupToWhatsApp = async (data: any, excludePhotos = false): Promise<BackupResult> => {
+  const finalData = excludePhotos ? {
+    ...data,
+    inventory: data.inventory.map(({image, ...rest}: any) => rest),
+    categories: data.categories.map(({image, ...rest}: any) => rest)
+  } : data;
 
-  const payload = {
-    inventory, 
-    users,
-    settings: { shopName, shopInfo, license_expiry, license_signature }
-  };
+  // Mark as Master Backup for restore identification
+  finalData.type = 'MASTER_BACKUP';
 
-  const jsonStr = JSON.stringify(payload);
-  const base64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => 
-    String.fromCharCode(parseInt(p1, 16))
-  ));
-  
-  const key = `SHOP-KEY-${base64}`;
-  const message = `🚀 *Shop Setup Key for ${shopName}*\n\nCopy the text below and paste it into your Shop Manager app.\n\n${key}`;
+  const jsonString = JSON.stringify(finalData);
+  const sizeMB = jsonString.length / (1024 * 1024);
+  const isLarge = sizeMB > 20;
 
-  try {
-    await navigator.clipboard.writeText(key);
-    alert('Setup Key copied to clipboard!');
-  } catch (err) {
-    console.error('Clipboard failed', err);
+  if (isLarge && !excludePhotos) {
+    if (confirm(`⚠️ LARGE BACKUP: Your data is ${Math.round(sizeMB)}MB because of photos. This might fail on slow WhatsApp networks. Backup text-only instead?`)) {
+      return backupToWhatsApp(data, true);
+    }
   }
 
-  if (navigator.share && key.length < 1500) {
+  const shopName = data.shopName || 'NaijaShop';
+  const timestamp = Date.now();
+  const dateStr = new Date(timestamp).toISOString().split('T')[0];
+  const fileName = `NAIJASHOP_MASTER_${excludePhotos ? 'LITE_' : ''}${dateStr}.json.gz`;
+
+  const uint8Data = new TextEncoder().encode(jsonString);
+  const compressed = pako.gzip(uint8Data);
+  
+  if (navigator.share) {
     try {
-      await navigator.share({ title: 'Staff Setup Key', text: message });
+      const blob = new Blob([compressed], { type: 'application/gzip' });
+      const file = new File([blob], fileName, { type: 'application/gzip' });
+      await navigator.share({ 
+        title: `Master Backup: ${shopName}`, 
+        text: `Secure encrypted shop backup. Keep this file safe. Date: ${dateStr}`, 
+        files: [file] 
+      });
+      await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
+      return { success: true, method: 'FILE_SHARE', fileName };
     } catch (e) {
-      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
+      console.warn("Share failed, falling back to download...");
     }
-  } else {
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message.substring(0, 1500))}`, '_blank');
+  }
+
+  try {
+    const blob = new Blob([compressed], { type: 'application/gzip' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
+    return { success: true, method: 'DOWNLOAD', fileName };
+  } catch (e) {
+    return { success: false, method: 'DOWNLOAD' };
   }
 };
 
 /**
- * Updated Staff Invite Generator
- * Now creates a full onboarding URL for one-tap setup.
+ * FULL SYSTEM RESTORE
+ * Wipes the database and injects 100% of the backed-up data.
  */
+export const restoreFullBackup = async (data: any) => {
+  if (data.type !== 'MASTER_BACKUP') {
+    throw new Error("Invalid file. This is not a NaijaShop Master Backup.");
+  }
+
+  // 1. Wipe everything first to avoid ID collisions
+  await clearAllData();
+
+  // 2. Atomic Injection
+  await db.transaction('rw', [
+    db.inventory, db.categories, db.customers, db.sales, 
+    db.settings, db.security, db.users, db.expenses, 
+    db.debts, db.stock_logs, db.parked_orders
+  ], async () => {
+    if (data.inventory) await db.inventory.bulkPut(data.inventory);
+    if (data.categories) await db.categories.bulkPut(data.categories);
+    if (data.customers) await db.customers.bulkPut(data.customers);
+    if (data.sales) await db.sales.bulkPut(data.sales);
+    if (data.settings) await db.settings.bulkPut(data.settings);
+    if (data.security) await db.security.bulkPut(data.security);
+    if (data.users) await db.users.bulkPut(data.users);
+    if (data.expenses) await db.expenses.bulkPut(data.expenses);
+    if (data.debts) await db.debts.bulkPut(data.debts);
+    if (data.stock_logs) await db.stock_logs.bulkPut(data.stock_logs);
+    if (data.parked_orders) await db.parked_orders.bulkPut(data.parked_orders);
+  });
+
+  // 3. Update Activation States
+  const licenseExp = data.security?.find((s: any) => s.key === 'license_expiry')?.value;
+  const licenseSig = data.security?.find((s: any) => s.key === 'license_signature')?.value;
+  const shopName = data.settings?.find((s: any) => s.key === 'shop_name')?.value;
+
+  if (licenseExp) localStorage.setItem('license_expiry', licenseExp);
+  if (licenseSig) localStorage.setItem('license_signature', licenseSig);
+  if (licenseExp && licenseSig) localStorage.setItem('is_activated', 'true');
+  if (shopName) localStorage.setItem('shop_name', shopName);
+  
+  localStorage.setItem('is_setup_pending', 'false');
+  localStorage.setItem('install_skipped', 'true');
+  
+  return { success: true, shopName: shopName || 'Shop' };
+};
+
 export const generateStaffInviteKey = async (user: User) => {
   const sn = await db.settings.get('shop_name');
   const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
   const expiry = localStorage.getItem('license_expiry') || '';
   const license_signature = localStorage.getItem('license_signature') || '';
 
-  // Fetch current Soft POS settings
   const bankSetting = await db.settings.get('softPosBank');
   const numberSetting = await db.settings.get('softPosNumber');
   const accountSetting = await db.settings.get('softPosAccount');
@@ -175,9 +227,6 @@ export const generateStaffInviteKey = async (user: User) => {
   }
 };
 
-/**
- * Processes a staff invite URL key
- */
 export const processStaffInvite = async (base64Key: string) => {
   try {
     const jsonStr = atob(base64Key);
@@ -185,19 +234,16 @@ export const processStaffInvite = async (base64Key: string) => {
 
     if (data.secret !== 'NAIJA_VERIFIED') throw new Error("Invalid invite key");
 
-    // 1. Clear existing local data for fresh setup
     await clearAllData();
 
-    // 2. Set Device & User Configuration
     localStorage.setItem('user_role', 'staff');
     localStorage.setItem('device_role', 'StaffDevice');
     localStorage.setItem('shop_name', data.shopName);
     localStorage.setItem('is_activated', 'true');
     localStorage.setItem('license_expiry', data.expiry);
     localStorage.setItem('license_signature', data.license_signature);
-    localStorage.setItem('is_setup_pending', 'false'); // Bypass setup wizard
+    localStorage.setItem('is_setup_pending', 'false');
 
-    // 3. Save to database for persistence
     await db.users.add({
       name: data.staffName,
       pin: data.staffPin,
@@ -218,134 +264,6 @@ export const processStaffInvite = async (base64Key: string) => {
   }
 };
 
-export const generateMasterStockKey = async () => {
-  const inventory = await db.inventory.toArray();
-  const sn = await db.settings.get('shop_name');
-  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
-
-  const payload = {
-    inventory,
-    type: 'STOCK_UPDATE',
-    timestamp: Date.now()
-  };
-
-  const jsonStr = JSON.stringify(payload);
-  const base64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => 
-    String.fromCharCode(parseInt(p1, 16))
-  ));
-  
-  const key = `STOCK-SYNC-${base64}`;
-  const message = `📦 *Master Stock Update: ${shopName}*\n\n${key}`;
-
-  if (navigator.share && key.length < 1500) {
-    try {
-      await navigator.share({ title: 'Stock Update Key', text: message });
-    } catch (e) {
-      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
-    }
-  } else {
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message.substring(0, 1500))}`, '_blank');
-  }
-};
-
-export const decodeShopKey = (key: string) => {
-  const trimmedKey = key.trim();
-  const isSetup = trimmedKey.includes('SHOP-KEY-');
-  const isStock = trimmedKey.includes('STOCK-SYNC-');
-  const isStaffInvite = trimmedKey.includes('STAFF-INVITE-');
-  
-  if (!isSetup && !isStock && !isStaffInvite) return null;
-  
-  try {
-    const match = trimmedKey.match(/(?:SHOP-KEY-|STOCK-SYNC-|STAFF-INVITE-)([A-Za-z0-9+/=]+)/);
-    if (!match) return null;
-    
-    const base64 = match[1];
-    
-    // For the simple STAFF-INVITE format, we use standard atob
-    if (isStaffInvite) {
-      const jsonStr = atob(base64);
-      return { ...JSON.parse(jsonStr), type: 'STAFF_INVITE' };
-    }
-
-    // For other keys, use the URI component decoder
-    const jsonStr = decodeURIComponent(Array.prototype.map.call(atob(base64), (c: any) => 
-      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
-    ).join(''));
-    
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    console.error('Decode error:', e);
-    return null;
-  }
-};
-
-export const backupToWhatsApp = async (data: any, excludePhotos = false): Promise<BackupResult> => {
-  const finalData = excludePhotos ? {
-    ...data,
-    inventory: data.inventory.map(({image, ...rest}: any) => rest),
-    categories: data.categories.map(({image, ...rest}: any) => rest)
-  } : data;
-
-  const jsonString = JSON.stringify(finalData);
-  const sizeMB = jsonString.length / (1024 * 1024);
-  const isLarge = sizeMB > 30;
-
-  if (isLarge && !excludePhotos) {
-    if (confirm(`⚠️ LARGE BACKUP: Your backup is ${Math.round(sizeMB)}MB because of product photos. This might be hard to send on slow network. Backup without photos instead?`)) {
-      return backupToWhatsApp(data, true);
-    }
-  }
-
-  const shopName = data.shopName || 'NaijaShop';
-  const timestamp = data.timestamp || Date.now();
-  const dateStr = new Date(timestamp).toISOString().split('T')[0];
-  const fileName = `NAIJASHOP_BACKUP_${excludePhotos ? 'LITE_' : ''}${dateStr}.json.gz`;
-  
-  const totalRecords = Object.values(finalData).reduce((acc: number, val: any) => {
-    return acc + (Array.isArray(val) ? val.length : 0);
-  }, 0) as number;
-
-  const uint8Data = new TextEncoder().encode(jsonString);
-  const compressed = pako.gzip(uint8Data);
-  
-  const shareTitle = `Shop Backup: ${shopName}`;
-  const shareText = `Compressed Secure Shop Backup for ${dateStr}. ${excludePhotos ? '(Text Only)' : '(Includes Photos)'}`;
-
-  if (navigator.share) {
-    try {
-      const blob = new Blob([compressed], { type: 'application/gzip' });
-      const file = new File([blob], fileName, { type: 'application/gzip' });
-      await navigator.share({ title: shareTitle, text: shareText, files: [file] });
-      await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-      return { success: true, method: 'FILE_SHARE', fileName, totalRecords, isLarge };
-    } catch (stage1Error) {
-      console.warn("Share files failed, falling back to text...");
-    }
-  }
-
-  try {
-    const blob = new Blob([compressed], { type: 'application/gzip' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-    
-    await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-    return { success: true, method: 'DOWNLOAD', fileName, totalRecords, isLarge };
-  } catch (stage3Error) {
-    return { success: false, method: 'DOWNLOAD' };
-  }
-};
-
-/**
- * Reconcile Staff Sales Logic
- * Merges Sales, Debts, and Customer Wallets from Staff report into Admin's master ledger.
- */
 export const reconcileStaffSales = async (staffData: any, adminName: string = 'Admin') => {
   const staffSales = staffData.sales || [];
   const staffDebts = staffData.debts || [];
@@ -357,7 +275,6 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
   let walletsSynced = 0;
 
   await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
-    // 1. Process Sales (Merges history and handles stock deduction)
     for (const sale of staffSales) {
       const existing = await db.sales.where('uuid').equals(sale.uuid).first();
       if (existing) {
@@ -391,7 +308,6 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
       mergedCount++;
     }
 
-    // 2. Process Debts (Duplicate protection via sale_uuid or primary key)
     for (const debt of staffDebts) {
       let isDuplicate = false;
       if (debt.sale_uuid) {
@@ -406,11 +322,9 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
       }
     }
 
-    // 3. Process Customer Wallets (Unique key: Phone Number)
     for (const sCustomer of staffCustomers) {
       const existing = await db.customers.where('phone').equals(sCustomer.phone).first();
       if (existing) {
-        // Timestamp resolution: Trust the record that was updated more recently
         const staffTs = Number(sCustomer.lastTransaction || 0);
         const adminTs = Number(existing.lastTransaction || 0);
 
@@ -423,7 +337,6 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
           walletsSynced++;
         }
       } else {
-        // Completely new customer added by staff
         const { id, ...custWithoutOldId } = sCustomer;
         await db.customers.add({
           ...custWithoutOldId,
@@ -443,10 +356,6 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
   };
 };
 
-/**
- * Export Staff Sales Report
- * Filters for today's data to keep sync files lightweight.
- */
 export const exportStaffSalesReport = async (sales: Sale[]) => {
   const sn = await db.settings.get('shop_name');
   const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
@@ -454,14 +363,8 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
   const fileName = `SALES_REPORT_${shopName}_${dateStr}.json.gz`;
   
   const startOfDay = new Date().setHours(0,0,0,0);
-
-  // Fetch today's debts and customers updated since start of day
   const debts = await db.debts.where('date').aboveOrEqual(startOfDay).toArray();
-  
-  const customers = await db.customers
-    .where('lastTransaction')
-    .aboveOrEqual(startOfDay)
-    .toArray();
+  const customers = await db.customers.where('lastTransaction').aboveOrEqual(startOfDay).toArray();
 
   const payload = { 
     sales, 
@@ -482,7 +385,7 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
       const file = new File([blob], fileName, { type: 'application/gzip' });
       await navigator.share({
         title: `Sales Report: ${shopName}`,
-        text: `Boss, here is my report for ${dateStr}. Contains Sales, Debts and Wallet updates.`,
+        text: `Boss, here is my report for ${dateStr}.`,
         files: [file]
       });
       return { success: true };
@@ -503,10 +406,6 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
   return { success: true };
 };
 
-/**
- * Pushes the inventory update to staff via WhatsApp
- * Includes staff users (excluding Admin) to sync credentials.
- */
 export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) => {
   const inventory = await db.inventory.toArray();
   const categories = await db.categories.toArray();
@@ -521,34 +420,13 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
   const numberSetting = await db.settings.get('softPosNumber');
   const accountSetting = await db.settings.get('softPosAccount');
 
-  const inventoryData = inventory.map(item => ({
-    id: item.id,
-    name: item.name,
-    costPrice: item.costPrice,
-    sellingPrice: item.sellingPrice,
-    stock: item.stock,
-    minStock: item.minStock,
-    expiryDate: item.expiryDate,
-    category: item.category,
-    barcode: item.barcode,
-    image: item.image, 
-    dateAdded: item.dateAdded
-  }));
-
-  const categoryData = categories.map(cat => ({
-    id: cat.id,
-    name: cat.name,
-    image: cat.image, 
-    dateCreated: cat.dateCreated
-  }));
-
   const payload = {
     type: 'INVENTORY_UPDATE',
     shopName,
     timestamp: Date.now(),
-    inventory: inventoryData,
-    categories: categoryData,
-    staffUsers, // Include updated staff list
+    inventory,
+    categories,
+    staffUsers,
     resetStock,
     softPosBank: bankSetting?.value || '',
     softPosNumber: numberSetting?.value || '',
@@ -588,10 +466,6 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
   return true;
 };
 
-/**
- * Merges the inventory update on the staff device
- * Enforces profile changes/deletions and forces logout if current user affected.
- */
 export const applyInventoryUpdate = async (data: any) => {
   if (data.type !== 'INVENTORY_UPDATE') {
     throw new Error('Invalid update file type');
@@ -600,18 +474,14 @@ export const applyInventoryUpdate = async (data: any) => {
   let added = 0;
   let updated = 0;
   const resetStock = data.resetStock === true;
-
-  // Track if current logged in staff is affected
   let shouldLogout = false;
   const currentStaffName = localStorage.getItem('logged_in_staff_name');
 
   await db.transaction('rw', [db.inventory, db.categories, db.settings, db.users], async () => {
-    // 1. Sync Soft POS
     if (data.softPosBank !== undefined) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
     if (data.softPosNumber !== undefined) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
     if (data.softPosAccount !== undefined) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
 
-    // 2. Sync Categories
     if (data.categories) {
       for (const cat of data.categories) {
         const { id, ...catWithoutId } = cat;
@@ -624,7 +494,6 @@ export const applyInventoryUpdate = async (data: any) => {
       }
     }
 
-    // 3. Sync Inventory
     if (data.inventory) {
       for (const item of data.inventory) {
         const { id, stock, ...itemData } = item;
@@ -649,24 +518,16 @@ export const applyInventoryUpdate = async (data: any) => {
       }
     }
 
-    // 4. Sync Staff Users & Enforce Access
     if (data.staffUsers) {
-      // Find current user's local record before wipe
       let currentLocalStaff = null;
       if (currentStaffName) {
         currentLocalStaff = await db.users.where('name').equals(currentStaffName).first();
       }
-
-      // Clear local staff (preserve Admin)
       await db.users.where('role').equals('Staff').delete();
-      
-      // Re-add incoming staff
       for (const staff of data.staffUsers) {
         const { id, ...staffData } = staff;
         await db.users.add(staffData);
       }
-
-      // Check if current user still exists and if credentials changed
       if (currentStaffName) {
         const updatedStaffRecord = data.staffUsers.find((u: any) => u.name === currentStaffName);
         if (!updatedStaffRecord || (currentLocalStaff && currentLocalStaff.pin !== updatedStaffRecord.pin)) {
@@ -677,7 +538,7 @@ export const applyInventoryUpdate = async (data: any) => {
   });
 
   if (shouldLogout) {
-    alert("Security Update: Your Boss has updated your profile or removed your access. Please log in again.");
+    alert("Security Update: Boss has updated your profile. Log in again.");
     localStorage.removeItem('user_role');
     localStorage.removeItem('logged_in_staff_name');
     window.location.reload();

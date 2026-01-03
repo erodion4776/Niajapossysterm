@@ -2,7 +2,8 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, clearAllData, User } from '../db.ts';
-import { decodeShopKey } from '../utils/whatsapp.ts';
+// Fixed: Replaced non-existent decodeShopKey with processStaffInvite
+import { processStaffInvite } from '../utils/whatsapp.ts';
 import { getRequestCode, verifyResetKey } from '../utils/security.ts';
 import { 
   User as UserIcon, Key, ArrowRight, Smartphone, 
@@ -115,6 +116,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
     }
   };
 
+  // Fixed: Implemented terminal activation logic using processStaffInvite
+  const handleActivateTerminal = async () => {
+    if (!importKey || isProcessing) return;
+    setIsProcessing(true);
+    setImportError('');
+    try {
+      const result = await processStaffInvite(importKey);
+      if (result.success) {
+        alert(`✅ Welcome to ${result.shopName}!`);
+        window.location.reload();
+      } else {
+        setImportError(result.error || "Invalid Invite Code.");
+      }
+    } catch (err) {
+      setImportError("Failed to process code.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (showImport) {
     return (
       <div className="fixed inset-0 z-[550] bg-white dark:bg-emerald-950 flex flex-col p-6 overflow-y-auto">
@@ -124,7 +145,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
           <h2 className="text-2xl font-black uppercase">Terminal Activation</h2>
         </div>
         <textarea placeholder="Paste STAFF-INVITE code here" className="w-full h-48 bg-slate-50 border rounded-3xl p-5 text-xs font-mono mb-6" value={importKey} onChange={(e) => setImportKey(e.target.value)} />
-        <button onClick={() => {}} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl uppercase text-[10px] tracking-widest">Activate Terminal</button>
+        {/* Fixed: Connected button to handleActivateTerminal */}
+        <button onClick={handleActivateTerminal} disabled={isProcessing || !importKey} className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl uppercase text-[10px] tracking-widest disabled:opacity-50">
+          {isProcessing ? 'Activating...' : 'Activate Terminal'}
+        </button>
+        {/* Fixed: Added error message display for import failures */}
+        {importError && <p className="text-red-500 text-xs font-bold text-center mt-4">{importError}</p>}
       </div>
     );
   }
