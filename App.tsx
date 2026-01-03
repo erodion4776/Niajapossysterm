@@ -199,11 +199,12 @@ const AppContent: React.FC = () => {
       }
     };
 
-    // Primary Active Indicators
+    // Logical Hubs for Navigation
     const isDashboardActive = currentPage === Page.DASHBOARD;
     const isPosActive = currentPage === Page.POS;
     const isInventoryActive = currentPage === Page.INVENTORY;
     const isDebtsActive = currentPage === Page.DEBTS;
+    // Settings tab stays active for all sub-admin pages
     const isAdminActive = [Page.SETTINGS, Page.CUSTOMERS, Page.SALES, Page.STOCK_LOGS, Page.EXPENSES, Page.CATEGORY_MANAGER].includes(currentPage);
 
     return (
@@ -211,21 +212,21 @@ const AppContent: React.FC = () => {
         <main className="flex-1 overflow-auto">{renderPage()}</main>
         {!isStaffDevice && !isNavHidden && <BackupReminder />}
         {!isNavHidden && (
-          <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/90 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-2 py-2 safe-bottom z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
+          <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/95 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 flex justify-between items-center px-2 py-2 safe-bottom z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
             <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isDashboardActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <LayoutGrid size={20} /><span className="text-[7px] font-black mt-1 uppercase">Home</span>
+              <LayoutGrid size={22} /><span className="text-[7px] font-black mt-1 uppercase">Home</span>
             </button>
             <button onClick={() => navigateTo(Page.POS)} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isPosActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <ShoppingBag size={20} /><span className="text-[7px] font-black mt-1 uppercase">POS</span>
+              <ShoppingBag size={22} /><span className="text-[7px] font-black mt-1 uppercase">POS</span>
             </button>
             <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isInventoryActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <Package size={20} /><span className="text-[7px] font-black mt-1 uppercase">Stock</span>
+              <Package size={22} /><span className="text-[7px] font-black mt-1 uppercase">Stock</span>
             </button>
             <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isDebtsActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <BookOpen size={20} /><span className="text-[7px] font-black mt-1 uppercase">Debts</span>
+              <BookOpen size={22} /><span className="text-[7px] font-black mt-1 uppercase">Debts</span>
             </button>
             <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isAdminActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <SettingsIcon size={20} /><span className="text-[7px] font-black mt-1 uppercase">Admin</span>
+              <Menu size={22} /><span className="text-[7px] font-black mt-1 uppercase">Admin</span>
             </button>
           </nav>
         )}
