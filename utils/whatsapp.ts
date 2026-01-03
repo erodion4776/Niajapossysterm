@@ -1,5 +1,5 @@
 
-import { Sale, db, User, Customer, Category, InventoryItem } from '../db.ts';
+import { Sale, db, User, Customer, Category, InventoryItem, clearAllData } from '../db.ts';
 import pako from 'pako';
 
 const MASTER_SALT = "NaijaPOS_2025_Sec" + "ret_Keep_Safe_99";
@@ -125,9 +125,8 @@ export const generateShopKey = async () => {
 };
 
 /**
- * Technical Fix: Rebuilt Staff Invite Generator
- * Simple but strict format for 100% reliability
- * Includes Soft POS details for staff terminal display
+ * Updated Staff Invite Generator
+ * Now creates a full onboarding URL for one-tap setup.
  */
 export const generateStaffInviteKey = async (user: User) => {
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
@@ -153,18 +152,61 @@ export const generateStaffInviteKey = async (user: User) => {
   };
 
   const base64String = btoa(JSON.stringify(data));
-  const key = `STAFF-INVITE-${base64String}`;
+  const inviteLink = window.location.origin + '/join?key=' + base64String;
   
-  const message = `👋 *NaijaShop Staff Invite for ${user.name}*\n\nBoss has authorized you to use the POS. Copy the code below and paste it into your app to start.\n\n${key}`;
+  const message = `👋 *Hello ${user.name},*\n\nBoss has added you to *${shopName}* on NaijaShop. Click the private link below to set up your terminal automatically:\n\n🔗 ${inviteLink}\n\n_Keep this link secret._`;
 
   if (navigator.share) {
     try {
-      await navigator.share({ title: 'Staff Invite Code', text: message });
+      await navigator.share({ title: 'NaijaShop Staff Invite', text: message });
     } catch (e) {
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
     }
   } else {
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message.substring(0, 1500))}`, '_blank');
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
+  }
+};
+
+/**
+ * Processes a staff invite URL key
+ */
+export const processStaffInvite = async (base64Key: string) => {
+  try {
+    const jsonStr = atob(base64Key);
+    const data = JSON.parse(jsonStr);
+
+    if (data.secret !== 'NAIJA_VERIFIED') throw new Error("Invalid invite key");
+
+    // 1. Clear existing local data for fresh setup
+    await clearAllData();
+
+    // 2. Set Device & User Configuration
+    localStorage.setItem('user_role', 'staff');
+    localStorage.setItem('device_role', 'StaffDevice');
+    localStorage.setItem('shop_name', data.shopName);
+    localStorage.setItem('is_activated', 'true');
+    localStorage.setItem('license_expiry', data.expiry);
+    localStorage.setItem('license_signature', data.license_signature);
+    localStorage.setItem('is_setup_pending', 'false'); // Bypass setup wizard
+
+    // 3. Save to database for persistence
+    await db.users.add({
+      name: data.staffName,
+      pin: data.staffPin,
+      role: 'Staff'
+    });
+
+    if (data.softPosBank) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
+    if (data.softPosNumber) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
+    if (data.softPosAccount) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
+    
+    await db.security.put({ key: 'license_expiry', value: data.expiry });
+    await db.security.put({ key: 'license_signature', value: data.license_signature });
+
+    return { success: true, shopName: data.shopName };
+  } catch (e) {
+    console.error("Invite processing failed", e);
+    return { success: false, error: (e as Error).message };
   }
 };
 

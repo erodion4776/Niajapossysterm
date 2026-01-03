@@ -16,6 +16,7 @@ import { StockLogs } from './pages/StockLogs.tsx';
 import { CategoryManager } from './pages/CategoryManager.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
 import { InstallApp } from './pages/InstallApp.tsx';
+import { JoinShop } from './pages/JoinShop.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { SetupWizard } from './components/SetupWizard.tsx';
@@ -129,13 +130,22 @@ const AppContent: React.FC = () => {
   }, [syncState]);
 
   useEffect(() => {
+    // 1. Staff device redirection logic
+    if (isStaff) {
+      if (window.location.pathname === '/' || window.location.pathname === '') {
+         window.history.pushState({}, '', '/app');
+         setPath('/app');
+         return;
+      }
+    }
+
     if ((isTrialing && isTrialValid) || isActivated) {
       if (window.location.pathname === '/') {
         window.history.pushState({}, '', '/app');
         setPath('/app');
       }
     }
-  }, [isTrialing, isTrialValid, isActivated]);
+  }, [isTrialing, isTrialValid, isActivated, isStaff]);
 
   const navigateTo = useCallback((page: Page, filter?: string) => {
     setCurrentPage(page);
@@ -166,7 +176,13 @@ const AppContent: React.FC = () => {
   if (isPirated) return <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]"><ShieldAlert size={80} className="text-red-500 mb-6" /><h1 className="text-4xl font-black uppercase">Access Denied</h1></div>;
   if (!isInitialized) return <LoadingScreen />;
 
-  if (path === '/' && !isActivated && (!isTrialing || !isTrialValid)) {
+  // 2. Add /join route check before landing page logic
+  if (path.startsWith('/join')) {
+    return <JoinShop />;
+  }
+
+  // 3. Ensure staff never see the Landing Page
+  if (path === '/' && !isActivated && (!isTrialing || !isTrialValid) && !isStaff) {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
   }
 
@@ -175,12 +191,14 @@ const AppContent: React.FC = () => {
   }
 
   const isAppPath = path.startsWith('/app');
-  if (isAppPath || isActivated || (isTrialing && isTrialValid)) {
+  if (isAppPath || isActivated || (isTrialing && isTrialValid) || isStaff) {
     const trialActive = isTrialing && isTrialValid;
-    if ((!isActivated && !trialActive) || isExpired) {
-      if (!isStaff) return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
+    // 4. Staff bypass trial/activation lock as they depend on Admin state
+    if (!isStaff && ((!isActivated && !trialActive) || isExpired)) {
+      return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
     }
 
+    // 5. Staff bypass setup wizard
     if (isSetupPending && !isStaff) {
       return <SetupWizard onComplete={() => { localStorage.setItem('is_setup_pending', 'false'); window.location.reload(); }} />;
     }
@@ -255,6 +273,11 @@ const AppContent: React.FC = () => {
         <UpdatePrompt />
       </div>
     );
+  }
+
+  // 6. Final fallback ensures staff don't see landing page if some state check fails
+  if (isStaff) {
+    return <LoadingScreen />;
   }
 
   return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
