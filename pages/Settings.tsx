@@ -15,7 +15,8 @@ import {
   Database, ShieldCheck, Share2, RefreshCw, Loader2,
   Moon, Sun, X, Send, Landmark, Save,
   History, FileText, Wallet, Receipt, LogOut, Tag,
-  CreditCard, CheckCircle2, Download, Package, Users
+  CreditCard, CheckCircle2, Download, Package, Users, Zap,
+  Smartphone, HelpCircle, MessageCircle, ChevronRight, Globe
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -47,6 +48,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [showBackupSuccess, setShowBackupSuccess] = useState(false);
   const [backupFileName, setBackupFileName] = useState('');
   const [newUser, setNewUser] = useState({ name: '', pin: '', role: 'Staff' as Role });
@@ -82,6 +84,37 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     await db.settings.put({ key: 'softPosNumber', value: accountNumber.trim() });
     await db.settings.put({ key: 'softPosAccount', value: accountName.trim() });
     alert("Soft POS Configuration Saved!");
+  };
+
+  const handleManualUpdate = async () => {
+    if (!navigator.onLine) {
+      alert("Oga, you need internet to check for updates!");
+      return;
+    }
+    setIsCheckingUpdates(true);
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        await registration.update();
+        // Delay to allow service worker to process the check
+        await new Promise(r => setTimeout(r, 1500));
+        
+        if (registration.waiting) {
+          if (confirm("New features found! Restart app to update?")) {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            window.location.reload();
+          }
+        } else {
+          alert("Oga, your app is already up to date with the latest features! (V1.1.4)");
+        }
+      } else {
+        alert("Could not find update channel. Try refreshing the page manually.");
+      }
+    } catch (err) {
+      alert("Update check failed. Please check your connection.");
+    } finally {
+      setIsCheckingUpdates(false);
+    }
   };
 
   const handleImportStaffSales = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -286,6 +319,70 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           <div className="absolute top-0 right-0 p-8 opacity-5 text-white pointer-events-none"><RefreshCw size={120} /></div>
         </section>
       )}
+
+      {/* ADD TO HOME SCREEN PROMPT */}
+      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-50 dark:border-emerald-800/40 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-4">
+           <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-600"><Smartphone size={24}/></div>
+           <div>
+              <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Offline App Mode</h3>
+              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Install on home screen for faster sales</p>
+           </div>
+        </div>
+        <button onClick={() => window.location.reload()} className="p-3 bg-blue-600 text-white rounded-xl active:scale-95 transition-all shadow-lg shadow-blue-200">
+           <ChevronRight size={20} />
+        </button>
+      </section>
+
+      {/* SOFTWARE UPDATE CARD */}
+      <section className="bg-emerald-950 p-6 rounded-[32px] border border-emerald-800/40 space-y-4 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-5 text-white pointer-events-none"><Zap size={80} /></div>
+        <div className="flex items-center gap-3 relative z-10">
+          <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400"><Zap size={18} /></div>
+          <div>
+            <h2 className="text-xs font-black text-white uppercase tracking-tight italic">Software Update</h2>
+            <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest mt-0.5">Current Version: V1.1.4</p>
+          </div>
+        </div>
+        <button 
+          onClick={handleManualUpdate}
+          disabled={isCheckingUpdates}
+          className="w-full bg-transparent border-2 border-emerald-500/30 text-emerald-400 font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all relative z-10 disabled:opacity-50"
+        >
+          {isCheckingUpdates ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+          {isCheckingUpdates ? 'Checking for updates...' : 'Check for New Features'}
+        </button>
+      </section>
+
+      {/* SUPPORT & RESOURCES SECTION */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 px-2">
+          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Support & Resources</h2>
+        </div>
+        <div className="space-y-3">
+           <button onClick={() => setPage(Page.FAQ)} className="w-full bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 flex items-center justify-between shadow-sm active:scale-[0.98] transition-all">
+              <div className="flex items-center gap-4">
+                 <div className="p-3 bg-emerald-50 dark:bg-emerald-800 rounded-2xl text-emerald-600"><HelpCircle size={20}/></div>
+                 <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Help Center / FAQ</h3>
+              </div>
+              <ChevronRight size={18} className="text-slate-300" />
+           </button>
+           <button onClick={() => window.open('https://wa.me/2347062228026', '_blank')} className="w-full bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 flex items-center justify-between shadow-sm active:scale-[0.98] transition-all">
+              <div className="flex items-center gap-4">
+                 <div className="p-3 bg-emerald-50 dark:bg-emerald-800 rounded-2xl text-emerald-600"><MessageCircle size={20}/></div>
+                 <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">WhatsApp Support</h3>
+              </div>
+              <ChevronRight size={18} className="text-slate-300" />
+           </button>
+           <button onClick={() => window.open('https://naijashop.com.ng', '_blank')} className="w-full bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 flex items-center justify-between shadow-sm active:scale-[0.98] transition-all">
+              <div className="flex items-center gap-4">
+                 <div className="p-3 bg-emerald-50 dark:bg-emerald-800 rounded-2xl text-emerald-600"><Globe size={20}/></div>
+                 <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Visit Website</h3>
+              </div>
+              <ChevronRight size={18} className="text-slate-300" />
+           </button>
+        </div>
+      </section>
 
       {/* SECTION 4: DATA & SYNC */}
       <section className="space-y-6">
