@@ -1,18 +1,12 @@
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, Sale } from '../db.ts';
+import { formatNaira } from '../utils/whatsapp.ts';
 import { 
-  formatNaira, 
-  applyInventoryUpdate, 
-  exportStaffSalesReport 
-} from '../utils/whatsapp.ts';
-import { 
-  ShoppingCart, Package, TrendingUp, History, Calendar as CalendarIcon, 
-  ChevronRight, Landmark, Banknote, BookOpen, Gem, 
-  Info, ShieldAlert, Award, ArrowUpRight, TrendingDown,
-  Download, Send, Loader2, CheckCircle2, RefreshCw, Hand, CalendarDays, X, BarChart3,
-  Gift, ExternalLink, MessageCircle
+  Package, TrendingUp, History, Landmark, Banknote, BookOpen, Gem, 
+  Info, ShieldAlert, ArrowUpRight, CheckCircle2, CalendarDays, 
+  BarChart3, Gift, MessageCircle, AlertTriangle, ChevronRight
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -22,36 +16,17 @@ interface DashboardProps {
   onInventoryFilter: (filter: 'all' | 'low-stock' | 'expiring') => void;
 }
 
-type DatePreset = 'today' | 'yesterday' | 'thisMonth' | 'allTime' | 'custom';
-
 export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventoryFilter }) => {
-  const isStaff = localStorage.getItem('user_role') === 'staff';
-  const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice' || isStaff;
-  const isAdmin = role === 'Admin' && !isStaffDevice;
   const isActivated = localStorage.getItem('is_activated') === 'true';
+  const isAdmin = role === 'Admin';
   
-  const [datePreset, setDatePreset] = useState<DatePreset>('today');
-  const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [showDateModal, setShowDateModal] = useState(false);
-  const [showProfitInfo, setShowProfitInfo] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [selectedSaleForModal, setSelectedSaleForModal] = useState<Sale | null>(null);
-  
-  // Trial Management States
-  const [showTrialPopup, setShowTrialPopup] = useState(false);
-  const [showGraceNotice, setShowGraceNotice] = useState(false);
-
-  const [ownerGreeting, setOwnerGreeting] = useState('');
-  const [displayShopName, setDisplayShopName] = useState('NaijaShop');
-
-  const syncInputRef = useRef<HTMLInputElement>(null);
+  // Real-time Data Queries
   const inventory = useLiveQuery(() => db.inventory.toArray());
-  const debts = useLiveQuery(() => db.debts.toArray());
-
-  // LIFETIME DATA (Always visible at bottom for comparison)
   const allSales = useLiveQuery(() => db.sales.toArray());
   const allExpenses = useLiveQuery(() => db.expenses.toArray());
+  const allDebts = useLiveQuery(() => db.debts.toArray());
+  const shopNameSetting = useLiveQuery(() => db.settings.get('shop_name'));
+  const ownerUser = useLiveQuery(() => db.users.where('role').equals('Admin').first());
 
   // Trial Logic
   const trialDaysLeft = useMemo(() => {
@@ -63,135 +38,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     return Math.max(0, Math.ceil((fourteenDays - elapsed) / (24 * 60 * 60 * 1000)));
   }, [isActivated]);
 
-  useEffect(() => {
-    const loadIdentity = async () => {
-      const sn = await db.settings.get('shop_name');
-      const on = await db.settings.get('owner_name');
-      if (sn) setDisplayShopName(sn.value);
-      if (on) setOwnerGreeting(on.value.split(' ')[0]); 
-    };
-    loadIdentity();
-
-    // Proactive Grace Period Notice (2 days left)
-    if (!isActivated && trialDaysLeft <= 2) {
-      const lastShown = sessionStorage.getItem('last_grace_notice');
-      const todayStr = new Date().toDateString();
-      if (lastShown !== todayStr) {
-        setShowGraceNotice(true);
-        sessionStorage.setItem('last_grace_notice', todayStr);
-      }
-    }
-  }, [isActivated, trialDaysLeft]);
-
-  const dateRange = useMemo(() => {
-    const start = new Date();
-    const end = new Date();
-    if (datePreset === 'today') { 
-      start.setHours(0,0,0,0); 
-      end.setHours(23,59,59,999); 
-    }
-    else if (datePreset === 'yesterday') { 
-      start.setDate(start.getDate()-1); 
-      start.setHours(0,0,0,0); 
-      end.setDate(end.getDate()-1); 
-      end.setHours(23,59,59,999); 
-    }
-    else if (datePreset === 'thisMonth') { 
-      start.setDate(1); 
-      start.setHours(0,0,0,0); 
-    }
-    else if (datePreset === 'custom' && customDate) {
-      const [y, m, d] = customDate.split('-').map(Number);
-      start.setFullYear(y, m - 1, d);
-      start.setHours(0,0,0,0);
-      end.setFullYear(y, m - 1, d);
-      end.setHours(23,59,59,999);
-    }
-    else if (datePreset === 'allTime') { 
-      start.setTime(0); 
-    }
-    return { start: start.getTime(), end: end.getTime() };
-  }, [datePreset, customDate]);
-
-  const salesInRange = useLiveQuery(() => db.sales.where('timestamp').between(dateRange.start, dateRange.end).toArray(), [dateRange]);
-  const expensesInRange = useLiveQuery(() => db.expenses.where('date').between(dateRange.start, dateRange.end).toArray(), [dateRange]);
-
-  const calculateStats = (sales: Sale[] | undefined, expenses: any[] | undefined) => {
-    if (!sales || !expenses) return { revenue: 0, costOfGoods: 0, expenses: 0, netProfit: 0, cash: 0, transfers: 0, itemsSold: 0 };
+  // Alert Calculations
+  const alerts = useMemo(() => {
+    if (!inventory) return { lowStock: 0, expiring: 0 };
+    const now = new Date();
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     
-    const revenue = sales.reduce((sum, s) => sum + Number(s.total || 0), 0);
-    const expenseTotal = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-    const itemsSold = sales.reduce((sum, s) => sum + s.items.reduce((iSum, item) => iSum + item.quantity, 0), 0);
+    return {
+      lowStock: inventory.filter(i => i.stock <= (i.minStock || 5)).length,
+      expiring: inventory.filter(i => i.expiryDate && new Date(i.expiryDate) <= nextWeek).length
+    };
+  }, [inventory]);
 
-    const cash = sales
+  // Financial Aggregations
+  const stats = useMemo(() => {
+    if (!allSales || !allExpenses || !allDebts) return null;
+
+    const revenue = allSales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const cogs = allSales.reduce((sum, s) => sum + (Number(s.totalCost) || 0), 0);
+    const expenseTotal = allExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    
+    const cash = allSales
       .filter(s => s.paymentMethod === 'Cash' || s.paymentMethod === 'Partial')
-      .reduce((sum, s) => sum + (s.cashPaid || s.total), 0);
+      .reduce((sum, s) => sum + (s.cashPaid || (s.paymentMethod === 'Cash' ? s.total : 0)), 0);
     
-    const transfers = sales
-      .filter(s => s.paymentMethod === 'Transfer' || s.paymentMethod === 'Card' || s.paymentMethod === 'Wallet')
-      .reduce((sum, s) => sum + Number(s.total - (s.paymentMethod === 'Partial' ? (s.cashPaid || 0) : 0)), 0);
-    
-    const costOfGoods = sales.reduce((acc, sale) => {
-      const saleCogs = sale.items.reduce((iSum, item) => iSum + (Number(item.costPrice || 0) * item.quantity), 0);
-      return acc + saleCogs;
-    }, 0);
-    
-    const netProfit = revenue - costOfGoods - expenseTotal;
-    return { revenue, costOfGoods, expenses: expenseTotal, netProfit, cash, transfers, itemsSold };
-  };
+    const bank = allSales
+      .filter(s => ['Transfer', 'Card'].includes(s.paymentMethod))
+      .reduce((sum, s) => sum + (s.total - (s.walletUsed || 0)), 0);
 
-  const financialStats = useMemo(() => calculateStats(salesInRange, expensesInRange), [salesInRange, expensesInRange]);
-  const lifetimeStats = useMemo(() => calculateStats(allSales, allExpenses), [allSales, allExpenses]);
+    const moneyOutside = allDebts
+      .filter(d => d.status === 'Unpaid')
+      .reduce((sum, d) => sum + (Number(d.remainingBalance) || 0), 0);
 
-  const totalMoneyOutside = useMemo(() => debts?.filter(d => d.status === 'Unpaid').reduce((sum, d) => sum + Number(d.remainingBalance || 0), 0) || 0, [debts]);
-
-  const handleSyncFromBoss = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsSyncing(true);
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const content = event.target?.result as string;
-        const data = JSON.parse(content);
-        const result = await applyInventoryUpdate(data);
-        alert(`✅ Shop Updated! ${result.added + result.updated} items received from Boss.`);
-        window.location.reload();
-      } catch (err) {
-        alert("Sync failed: Invalid file.");
-      } finally {
-        setIsSyncing(false);
-      }
+    return {
+      revenue,
+      netProfit: revenue - cogs - expenseTotal,
+      cash,
+      bank,
+      moneyOutside,
+      totalSalesCount: allSales.length
     };
-    reader.readAsText(file);
-  };
-
-  const handleSendReport = async () => {
-    if (!salesInRange || salesInRange.length === 0) {
-      alert("No sales to report today!");
-      return;
-    }
-    setIsExporting(true);
-    try {
-      await exportStaffSalesReport(salesInRange);
-    } catch (err) {
-      alert("Failed to generate report.");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const topProducts = useMemo(() => {
-    if (!salesInRange) return [];
-    const counts: Record<string, { name: string, qty: number }> = {};
-    salesInRange.forEach(s => {
-      s.items.forEach(i => {
-        if (!counts[i.name]) counts[i.name] = { name: i.name, qty: 0 };
-        counts[i.name].qty += i.quantity;
-      });
-    });
-    return Object.values(counts).sort((a, b) => b.qty - a.qty).slice(0, 3);
-  }, [salesInRange]);
+  }, [allSales, allExpenses, allDebts]);
 
   const getTrialBadgeColor = () => {
     if (trialDaysLeft >= 7) return 'bg-emerald-50 text-emerald-600 border-emerald-200';
@@ -200,325 +87,169 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   };
 
   return (
-    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
+    <div className="p-4 space-y-6 pb-28 animate-in fade-in duration-500">
+      {/* 1. PERSONALIZED HEADER */}
       <header className="flex justify-between items-center">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase truncate max-w-[150px]">{displayShopName}</h1>
-            
-            {/* Trial Countdown Badge */}
-            {!isActivated && isAdmin && (
-              <button 
-                onClick={() => setShowTrialPopup(true)}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-tighter transition-all active:scale-95 ${getTrialBadgeColor()}`}
-              >
-                <Gift size={10} /> {trialDaysLeft} Days Left
-              </button>
-            )}
-          </div>
+          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase">
+            Welcome, Boss {ownerUser?.name?.split(' ')[0] || ''}!
+          </h1>
           <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5">
-            {isAdmin ? <><span className="text-emerald-600">Welcome, {ownerGreeting}!</span> <Hand size={10}/></> : 'Staff Terminal'}
+            Managing <span className="text-emerald-600 dark:text-emerald-400">{shopNameSetting?.value || 'NaijaShop'}</span>
           </p>
         </div>
-        <button onClick={() => setShowDateModal(true)} className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
-          <CalendarIcon size={20} /><span className="text-[10px] font-black uppercase">{datePreset === 'custom' ? customDate : datePreset}</span>
-        </button>
+        {!isActivated && isAdmin && (
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-tighter ${getTrialBadgeColor()}`}>
+            <Gift size={10} /> {trialDaysLeft} Days Left
+          </div>
+        )}
       </header>
 
-      {/* DASHBOARD SUMMARY CARD */}
-      <section className="bg-emerald-600 text-white p-8 rounded-[40px] shadow-xl relative overflow-hidden group">
-        <div className="relative z-10 flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em]">
-              {isAdmin 
-                ? (datePreset === 'custom' ? `Net Profit on ${customDate}` : `Net Profit (${datePreset})`) 
-                : `Activity Volume (${datePreset})`}
-            </p>
-            {isAdmin && <button onClick={() => setShowProfitInfo(!showProfitInfo)} className="p-1.5 bg-white/20 rounded-full hover:bg-white/30 transition-colors"><Info size={12}/></button>}
-          </div>
-          
-          <h2 className="text-4xl font-black tracking-tighter">
-            {isAdmin 
-              ? formatNaira(financialStats.netProfit) 
-              : `${salesInRange?.length || 0} Sales Recorded`}
-          </h2>
-
-          <div className="flex items-center gap-2 mt-2">
-             <div className="px-2.5 py-1 bg-white/10 rounded-full border border-white/10 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5">
-               <TrendingUp size={10} /> 
-               {isAdmin 
-                 ? `Revenue: ${formatNaira(financialStats.revenue)}` 
-                 : `${financialStats.itemsSold} Items Moved`}
-             </div>
-          </div>
-          
-          {showProfitInfo && isAdmin && (
-            <div className="mt-5 bg-emerald-900/50 backdrop-blur-md p-5 rounded-3xl border border-white/10 text-[10px] font-bold uppercase space-y-2.5 animate-in slide-in-from-top-4 duration-300">
-              <div className="flex justify-between items-center opacity-70"><span>Gross Revenue:</span><span>{formatNaira(financialStats.revenue)}</span></div>
-              <div className="flex justify-between items-center text-red-300"><span>- Cost of Stock:</span><span>{formatNaira(financialStats.costOfGoods)}</span></div>
-              <div className="flex justify-between items-center text-red-300"><span>- Business Expenses:</span><span>{formatNaira(financialStats.expenses)}</span></div>
-              <div className="pt-2 border-t border-white/10 flex justify-between items-center text-emerald-300 font-black text-xs"><span>NET PROFIT:</span><span>{formatNaira(financialStats.netProfit)}</span></div>
-            </div>
+      {/* 2. ALERT BAR */}
+      {(alerts.lowStock > 0 || alerts.expiring > 0) && (
+        <section className="space-y-2">
+          {alerts.lowStock > 0 && (
+            <button 
+              onClick={() => onInventoryFilter('low-stock')}
+              className="w-full bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 p-4 rounded-2xl flex items-center justify-between animate-pulse"
+            >
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="text-orange-500" size={18} />
+                <p className="text-[10px] font-black text-orange-700 dark:text-orange-400 uppercase tracking-widest">
+                  {alerts.lowStock} Items are running low!
+                </p>
+              </div>
+              <ChevronRight size={16} className="text-orange-300" />
+            </button>
           )}
+          {alerts.expiring > 0 && (
+            <button 
+              onClick={() => onInventoryFilter('expiring')}
+              className="w-full bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 p-4 rounded-2xl flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <ShieldAlert className="text-red-500" size={18} />
+                <p className="text-[10px] font-black text-red-700 dark:text-red-400 uppercase tracking-widest">
+                  {alerts.expiring} Items expiring soon!
+                </p>
+              </div>
+              <ChevronRight size={16} className="text-red-300" />
+            </button>
+          )}
+        </section>
+      )}
+
+      {/* 3. MAIN PROFIT CARD */}
+      <section className="bg-emerald-600 bg-gradient-to-br from-emerald-600 to-emerald-800 text-white p-8 rounded-[40px] shadow-xl relative overflow-hidden group">
+        <div className="relative z-10 space-y-4">
+          <div className="flex items-center gap-2">
+            <p className="text-emerald-100 text-[10px] font-black uppercase tracking-[0.2em]">Net Business Profit</p>
+            <Info size={12} className="opacity-40" />
+          </div>
+          
+          <div className="space-y-1">
+            <h2 className="text-5xl font-black tracking-tighter">
+              {formatNaira(stats?.netProfit || 0)}
+            </h2>
+            <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full border border-white/10">
+               <TrendingUp size={10} className="text-emerald-300" />
+               <p className="text-[9px] font-black uppercase tracking-widest">
+                 Revenue: {formatNaira(stats?.revenue || 0)}
+               </p>
+            </div>
+          </div>
         </div>
-        <div className="absolute -right-8 -bottom-8 opacity-10 group-hover:rotate-12 transition-transform duration-700">
+        <div className="absolute -right-8 -bottom-8 opacity-10 group-hover:rotate-12 transition-transform duration-700 pointer-events-none">
            <Gem size={180} />
         </div>
       </section>
 
-      {/* STAFF WORKSPACE TOOLS */}
-      {isStaffDevice && (
-        <section className="bg-white dark:bg-emerald-900/40 border-2 border-dashed border-emerald-200 dark:border-emerald-800 p-6 rounded-[32px] space-y-4">
-          <div className="flex items-center gap-3">
-             <div className="p-2 bg-emerald-50 dark:bg-emerald-950 rounded-xl text-emerald-600"><CheckCircle2 size={18}/></div>
-             <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Staff Sync Loop</h2>
-          </div>
-          <div className="grid grid-cols-1 gap-3">
-            <label className="w-full bg-emerald-50 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300 font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all cursor-pointer border border-emerald-100 dark:border-emerald-700/50">
-               <input type="file" ref={syncInputRef} className="hidden" accept=".json" onChange={handleSyncFromBoss} />
-               {isSyncing ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} 📥 Update Stock from Boss
-            </label>
-            <button onClick={handleSendReport} disabled={isExporting} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-100 dark:shadow-none">
-               {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} 📤 Send Daily Report to Boss
-            </button>
-          </div>
-        </section>
-      )}
+      {/* 4. THE 3-CARD ROW */}
+      <div className="grid grid-cols-3 gap-2">
+         <div className="bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all">
+            <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-800 rounded-2xl flex items-center justify-center mx-auto mb-3 text-emerald-600">
+               <Banknote size={20} />
+            </div>
+            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Cash In Hand</p>
+            <p className="text-[11px] font-black text-emerald-600 truncate">{formatNaira(stats?.cash || 0)}</p>
+         </div>
+         
+         <div className="bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all">
+            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-800 rounded-2xl flex items-center justify-center mx-auto mb-3 text-blue-600">
+               <Landmark size={20} />
+            </div>
+            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Bank / POS</p>
+            <p className="text-[11px] font-black text-blue-600 truncate">{formatNaira(stats?.bank || 0)}</p>
+         </div>
 
-      {/* ADMIN MONEY BREAKDOWN */}
-      {isAdmin && (
-        <div className="grid grid-cols-3 gap-2">
-           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all">
-              <Banknote size={16} className="text-emerald-500 mx-auto mb-1" />
-              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Cash</p>
-              <p className="text-[10px] font-black text-emerald-600 truncate">{formatNaira(financialStats.cash)}</p>
-           </div>
-           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all">
-              <Landmark size={16} className="text-blue-500 mx-auto mb-1" />
-              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Bank / POS</p>
-              <p className="text-[10px] font-black text-blue-600 truncate">{formatNaira(financialStats.transfers)}</p>
-           </div>
-           <div onClick={() => setPage(Page.DEBTS)} className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all cursor-pointer">
-              <BookOpen size={16} className="text-red-500 mx-auto mb-1" />
-              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Debt Book</p>
-              <p className="text-[10px] font-black text-red-500 truncate">{formatNaira(totalMoneyOutside)}</p>
-           </div>
-        </div>
-      )}
+         <div onClick={() => setPage(Page.DEBTS)} className="bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all cursor-pointer">
+            <div className="w-10 h-10 bg-red-50 dark:bg-red-800 rounded-2xl flex items-center justify-center mx-auto mb-3 text-red-600">
+               <BookOpen size={20} />
+            </div>
+            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Money Outside</p>
+            <p className="text-[11px] font-black text-red-600 truncate">{formatNaira(stats?.moneyOutside || 0)}</p>
+         </div>
+      </div>
 
-      {/* HISTORICAL SALES FEED */}
-      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
-        <div className="flex justify-between items-center">
+      {/* 5. SALES FEED */}
+      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[40px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
+        <div className="flex justify-between items-center px-2">
           <div className="flex items-center gap-3">
             <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-xl text-blue-600"><History size={18} /></div>
-            <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">
-              {datePreset === 'custom' ? `Sales on ${customDate}` : 'Recent Sales'}
-            </h3>
+            <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Recent Sales</h3>
           </div>
-          <button onClick={() => setPage(Page.SALES)} className="text-[8px] font-black text-emerald-600 uppercase flex items-center gap-1">Full Ledger <ArrowUpRight size={10}/></button>
+          <button onClick={() => setPage(Page.SALES)} className="text-[9px] font-black text-emerald-600 uppercase flex items-center gap-1 hover:gap-2 transition-all">View All <ArrowUpRight size={12}/></button>
         </div>
+        
         <div className="space-y-3">
-          {salesInRange && salesInRange.length > 0 ? (
-            salesInRange.slice(-15).reverse().map(sale => (
-              <button 
-                key={sale.id} 
-                onClick={() => setSelectedSaleForModal(sale)}
-                className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-800/20 rounded-2xl active:scale-95 transition-all"
-              >
-                <div className="text-left">
-                  <p className="text-[10px] font-black text-slate-800 dark:text-emerald-100 uppercase tracking-tight">#{String(sale.id).slice(-4)}</p>
-                  <p className="text-[8px] font-bold text-slate-400 uppercase">{new Date(sale.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+          {allSales && allSales.length > 0 ? (
+            allSales.slice(-5).reverse().map(sale => (
+              <div key={sale.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-800/20 rounded-[24px]">
+                <div className="flex items-center gap-3">
+                   <div className="w-10 h-10 rounded-xl bg-white dark:bg-emerald-900 flex items-center justify-center text-slate-400">
+                      <CheckCircle2 size={18} className="text-emerald-500" />
+                   </div>
+                   <div>
+                     <p className="text-[10px] font-black text-slate-800 dark:text-emerald-100 uppercase tracking-tight">#{String(sale.id).slice(-4)}</p>
+                     <p className="text-[8px] font-bold text-slate-400 uppercase">{new Date(sale.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-black text-emerald-600">{isAdmin ? formatNaira(sale.total) : 'RECOGNIZED'}</p>
-                  <p className="text-[7px] font-bold text-slate-300 uppercase">{sale.paymentMethod}</p>
+                  <p className="text-xs font-black text-emerald-600">{formatNaira(sale.total)}</p>
+                  <p className="text-[7px] font-bold text-slate-300 uppercase tracking-widest">{sale.paymentMethod}</p>
                 </div>
-              </button>
+              </div>
             ))
           ) : (
-            <div className="py-12 text-center bg-slate-50/50 dark:bg-emerald-950/20 rounded-3xl border border-dashed border-slate-200 dark:border-emerald-800">
-               <CalendarDays size={32} className="mx-auto text-slate-200 mb-2" />
-               <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest px-6">
-                 No records found for this date. The shop might have been closed.
-               </p>
+            <div className="py-12 text-center space-y-3 opacity-20">
+               <CalendarDays size={32} className="mx-auto" />
+               <p className="text-[9px] font-black uppercase tracking-widest">No Sales Recorded Yet</p>
             </div>
           )}
         </div>
       </section>
 
-      {/* TOP SELLERS */}
-      <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-amber-50 dark:bg-amber-900/20 p-2 rounded-xl text-amber-600"><Award size={18} /></div>
-          <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight italic">Top Items ({datePreset === 'custom' ? customDate : datePreset})</h3>
-        </div>
-        <div className="space-y-2">
-           {topProducts.length > 0 ? topProducts.map((p, idx) => (
-             <div key={idx} className="flex justify-between items-center p-3.5 bg-slate-50 dark:bg-emerald-800/20 rounded-2xl">
-                <span className="text-[10px] font-bold text-slate-600 dark:text-emerald-100 uppercase truncate pr-4">{p.name}</span>
-                <span className="bg-white dark:bg-emerald-950 px-2 py-0.5 rounded-lg text-[9px] font-black text-emerald-600 border border-slate-100 dark:border-emerald-800">x{p.qty}</span>
-             </div>
-           )) : <p className="text-[9px] text-slate-300 font-black uppercase text-center py-4 italic">No top items for this period</p>}
-        </div>
-      </section>
-
-      {/* SHOP LIFETIME RECORDS */}
-      {isAdmin && (
-        <section className="bg-slate-900 text-white p-7 rounded-[40px] shadow-2xl relative overflow-hidden">
-           <div className="relative z-10 space-y-6">
-              <div className="flex items-center gap-3">
-                 <div className="p-2 bg-white/10 rounded-xl"><Gem size={18} className="text-emerald-400" /></div>
-                 <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500/60">Lifetime Records</h3>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Sales</p>
-                    <p className="text-2xl font-black tracking-tighter">{allSales?.length || 0}</p>
-                 </div>
-                 <div>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Profit</p>
-                    <p className="text-2xl font-black text-emerald-400 tracking-tighter">{formatNaira(lifetimeStats.netProfit)}</p>
-                 </div>
-              </div>
-           </div>
-           <BarChart3 size={160} className="absolute -right-8 -bottom-8 opacity-5 text-white" />
-        </section>
-      )}
-
-      {/* TRIAL STATUS MODAL */}
-      {showTrialPopup && (
-        <div className="fixed inset-0 bg-black/60 z-[500] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in duration-300">
-           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[48px] p-10 text-center space-y-6 shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300">
-              <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-800 rounded-[32px] flex items-center justify-center mx-auto text-emerald-600 dark:text-emerald-400">
-                 <Gift size={40} />
-              </div>
-              <div className="space-y-2">
-                 <h2 className="text-2xl font-black uppercase italic tracking-tighter">Trial Status</h2>
-                 <p className="text-sm font-bold text-slate-500 dark:text-emerald-100/60 leading-relaxed uppercase">
-                    You have <span className="text-emerald-600 dark:text-emerald-400 font-black">{trialDaysLeft} Days</span> left to enjoy NaijaShop for free.
-                 </p>
-              </div>
-              <div className="space-y-3">
-                 <button 
-                  onClick={() => { setShowTrialPopup(false); setPage(Page.SETTINGS); }}
-                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] shadow-xl uppercase text-[10px] tracking-widest active:scale-95 flex items-center justify-center gap-2"
-                 >
-                   Activate Lifetime Access <ArrowUpRight size={14}/>
-                 </button>
-                 <button onClick={() => setShowTrialPopup(false)} className="w-full py-4 text-slate-400 font-bold uppercase text-[9px] tracking-[0.2em]">Maybe Later</button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* GRACE PERIOD ONE-TIME POPUP */}
-      {showGraceNotice && (
-        <div className="fixed inset-0 bg-emerald-950 z-[600] flex flex-col items-center justify-center p-10 text-white text-center animate-in fade-in duration-500">
-           <div className="w-24 h-24 bg-red-500 rounded-[32px] flex items-center justify-center mb-8 shadow-[0_0_50px_rgba(239,68,68,0.4)] animate-bounce">
-              <ShieldAlert size={48} className="text-white" />
-           </div>
-           <h2 className="text-4xl font-black uppercase italic tracking-tighter leading-tight mb-4">Trial Ending <br/> Soon, Boss!</h2>
-           <p className="text-lg font-bold text-emerald-100/70 mb-10 leading-relaxed">
-             Your 14-day trial is almost over. Don't let your records get locked! Activate your lifetime license now to keep selling offline.
-           </p>
-           <div className="w-full space-y-4">
-              <button 
-                onClick={() => { setShowGraceNotice(false); setPage(Page.SETTINGS); }}
-                className="w-full bg-white text-emerald-950 font-black py-7 rounded-[32px] shadow-2xl uppercase tracking-widest text-sm flex items-center justify-center gap-3 active:scale-95"
-              >
-                Secure Shop Forever <ExternalLink size={18} />
-              </button>
-              <button onClick={() => setShowGraceNotice(false)} className="w-full py-4 text-emerald-500 font-black uppercase text-[10px] tracking-[0.4em]">I will pay later</button>
-           </div>
-           <div className="absolute bottom-10 opacity-30 flex items-center gap-2">
-              <MessageCircle size={14} />
-              <span className="text-[9px] font-black uppercase tracking-widest">Support: 07062228026</span>
-           </div>
-        </div>
-      )}
-
-      {/* DATE SELECTION MODAL */}
-      {showDateModal && (
-        <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-xs rounded-[40px] p-8 shadow-2xl animate-in zoom-in duration-300">
-            <div className="flex justify-between items-center mb-6">
-               <h2 className="text-xl font-black uppercase italic tracking-tight">Select Period</h2>
-               <button onClick={() => setShowDateModal(false)} className="text-slate-300"><X size={20}/></button>
+      {/* 6. LIFETIME CARD */}
+      <section className="bg-slate-900 text-white p-8 rounded-[48px] shadow-2xl relative overflow-hidden border-t border-white/5">
+         <div className="relative z-10 space-y-6">
+            <div className="flex items-center gap-3">
+               <div className="p-2 bg-emerald-500/20 rounded-xl"><Gem size={18} className="text-emerald-400" /></div>
+               <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500/60 italic">Shop Lifetime Records</h3>
             </div>
             
-            <div className="grid grid-cols-1 gap-2 mb-6">
-              {(['today', 'yesterday', 'thisMonth', 'allTime'] as DatePreset[]).map(p => (
-                <button key={p} onClick={() => { setDatePreset(p); setShowDateModal(false); }} className={`py-4 rounded-[20px] font-black uppercase text-[10px] tracking-widest transition-all ${datePreset === p ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-50 dark:bg-emerald-800 text-slate-400'}`}>{p}</button>
-              ))}
+            <div className="grid grid-cols-2 gap-8">
+               <div>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 opacity-50">Total Transactions</p>
+                  <p className="text-3xl font-black tracking-tighter">{stats?.totalSalesCount || 0}</p>
+               </div>
+               <div>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 opacity-50">Accumulated Gain</p>
+                  <p className="text-3xl font-black text-emerald-400 tracking-tighter">{formatNaira(stats?.netProfit || 0)}</p>
+               </div>
             </div>
-
-            <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-emerald-800">
-               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Lookup Specific Day</p>
-               <input 
-                  type="date" 
-                  value={customDate}
-                  onChange={(e) => setCustomDate(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-emerald-950 border border-slate-200 dark:border-emerald-800 rounded-2xl p-4 font-black text-emerald-600 outline-none text-center"
-               />
-               <button 
-                onClick={() => { setDatePreset('custom'); setShowDateModal(false); }}
-                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-[0.2em] active:scale-95 transition-all shadow-xl"
-               >
-                 Check Date
-               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SALE DETAILS MODAL (FOR FEED) */}
-      {selectedSaleForModal && (
-        <div className="fixed inset-0 bg-black/60 z-[400] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300">
-            <div className="flex justify-between items-center mb-8">
-              <div className="flex items-center gap-3">
-                 <div className="p-2 bg-blue-50 dark:bg-blue-900 rounded-xl text-blue-600"><History size={18}/></div>
-                 <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight italic">Receipt History</h2>
-              </div>
-              <button onClick={() => setSelectedSaleForModal(null)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90"><X size={20} /></button>
-            </div>
-
-            <div className="space-y-6">
-              <div className="bg-slate-50 dark:bg-emerald-950/40 p-6 rounded-[32px] font-mono text-xs space-y-3 border border-slate-100 dark:border-emerald-800">
-                <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 border-b border-dashed border-slate-200 dark:border-emerald-800 pb-2 mb-2">
-                   <span>TRANS #{String(selectedSaleForModal.id).padStart(4, '0')}</span>
-                   <span>{new Date(selectedSaleForModal.timestamp).toLocaleString()}</span>
-                </div>
-                {selectedSaleForModal.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between">
-                    <span className="truncate pr-4 uppercase">{item.name} x{item.quantity}</span>
-                    <span className="font-bold">{isAdmin ? formatNaira(item.price * item.quantity) : '***'}</span>
-                  </div>
-                ))}
-                {isAdmin && (
-                  <div className="border-t border-dashed border-slate-200 dark:border-emerald-800 mt-2 pt-2 flex justify-between font-black text-sm text-emerald-600">
-                    <span>TOTAL</span>
-                    <span>{formatNaira(selectedSaleForModal.total)}</span>
-                  </div>
-                )}
-                <div className="pt-2 text-[8px] font-black text-slate-400 uppercase">
-                   Payment: {selectedSaleForModal.paymentMethod} • Recorded by {selectedSaleForModal.staff_name}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                <button 
-                  onClick={() => { exportStaffSalesReport([selectedSaleForModal]); setSelectedSaleForModal(null); }} 
-                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest shadow-xl active:scale-95"
-                >
-                  <Send size={16}/> Export Record
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+         </div>
+         <BarChart3 size={200} className="absolute -right-12 -bottom-12 opacity-[0.03] text-white pointer-events-none" />
+      </section>
     </div>
   );
 };
