@@ -53,10 +53,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
       scalar: 1.2
     });
     
+    // Atomic Initialization of Trial State
+    const now = Date.now().toString();
+    localStorage.setItem('is_trialing', 'true');
+    localStorage.setItem('trial_start_date', now);
+    localStorage.setItem('is_setup_pending', 'true');
+    localStorage.setItem('device_role', 'Owner');
+
     setIsPreparing(true);
     
+    // Hard refresh to trigger App.tsx router logic with new storage state
     setTimeout(() => { 
-      onStartTrial();
+      window.location.href = '/app';
     }, 1500);
   };
 

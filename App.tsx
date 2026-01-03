@@ -16,8 +16,7 @@ import { Customers } from './pages/Customers.tsx';
 import { StockLogs } from './pages/StockLogs.tsx';
 import { CategoryLab } from './pages/CategoryLab.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
-import { RegisterShop } from './pages/RegisterShop.tsx';
-import { SetupPIN } from './pages/SetupPIN.tsx';
+import { SetupWizard } from './components/SetupWizard.tsx';
 import { InstallApp } from './pages/InstallApp.tsx';
 import { JoinShop } from './pages/JoinShop.tsx';
 import { AIAssistant } from './pages/AIAssistant.tsx';
@@ -38,7 +37,7 @@ import {
 } from 'lucide-react';
 
 const ALLOWED_DOMAINS = ['naijashop.com.ng', 'niajapos.netlify.app'];
-// Updated to 14 Days
+// Trial Period: 14 Days
 const TRIAL_DURATION = 14 * 24 * 60 * 60 * 1000; 
 
 ReactGA.initialize("G-7Q4E8586BF");
@@ -123,7 +122,10 @@ const AppContent: React.FC = () => {
       localStorage.setItem('is_activated', 'true');
     }
 
-    setIsInitialized(true);
+    // Loading Guard: Wait 500ms for state to settle to prevent flashing LockScreen
+    setTimeout(() => {
+      setIsInitialized(true);
+    }, 500);
   };
 
   useEffect(() => {
@@ -158,8 +160,7 @@ const AppContent: React.FC = () => {
     localStorage.setItem('trial_start_date', Date.now().toString());
     localStorage.setItem('device_role', 'Owner');
     localStorage.setItem('is_setup_pending', 'true');
-    window.history.pushState({}, '', '/register');
-    setPath('/register');
+    window.location.href = '/app';
   };
 
   const refreshOnboarding = async () => {
@@ -173,24 +174,29 @@ const AppContent: React.FC = () => {
   };
 
   if (isPirated) return <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]"><ShieldAlert size={80} className="text-red-500 mb-6" /><h1 className="text-4xl font-black uppercase">Access Denied</h1></div>;
+  
+  // 1. Initializing State (Prevents flash)
   if (!isInitialized) return <LoadingScreen />;
 
+  // 2. Public Static Pages
   if (path.startsWith('/join')) return <JoinShop />;
   if (path === '/help') return <PublicHelp onBack={() => window.history.back()} />;
   if (path === '/about') return <AboutUs onBack={() => window.history.back()} />;
   if (path === '/affiliates') return <Affiliates onBack={() => window.history.back()} />;
 
+  // 3. Landing Page Logic
   if (path === '/' && !isActivated && (!isTrialing || !isTrialValid) && !isStaff) {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
   }
 
-  if (!isStaff && ((!isActivated && !(isTrialing && isTrialValid)) || isExpired)) {
-    return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
+  // 4. Setup Hierarchy: Ensure setup is done BEFORE expiry check
+  if (isSetupPending) {
+    return <SetupWizard onComplete={() => { refreshOnboarding(); }} />;
   }
 
-  if (isSetupPending) {
-    if (!shopName) return <RegisterShop onComplete={() => { refreshOnboarding(); window.history.pushState({}, '', '/setup-pin'); setPath('/setup-pin'); }} />;
-    return <SetupPIN onBack={() => { window.history.pushState({}, '', '/register'); setPath('/register'); }} onComplete={() => { refreshOnboarding(); }} />;
+  // 5. Expiry Check (Only show AFTER setup is completed or for existing users)
+  if (!isStaff && ((!isActivated && !(isTrialing && isTrialValid)) || isExpired)) {
+    return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
   }
 
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
@@ -198,6 +204,7 @@ const AppContent: React.FC = () => {
     return <InstallApp ownerName={ownerName} deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_skipped', 'true'); syncState(); }} />;
   }
 
+  // 6. Auth Check
   if (!currentUser) {
     return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || (isStaff ? 'StaffDevice' : 'Owner')} />;
   }
@@ -223,11 +230,6 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const isDashboardActive = currentPage === Page.DASHBOARD;
-  const isPosActive = currentPage === Page.POS;
-  const isInventoryActive = currentPage === Page.INVENTORY;
-  const isDebtsActive = currentPage === Page.DEBTS;
-  const isWalletActive = currentPage === Page.CUSTOMERS;
   const isAdminActive = [Page.SETTINGS, Page.SALES, Page.EXPENSES, Page.CATEGORY_MANAGER].includes(currentPage);
 
   return (
@@ -237,19 +239,19 @@ const AppContent: React.FC = () => {
       {!isNavHidden && (
         <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/95 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] safe-bottom overflow-hidden">
           <div className="flex overflow-x-auto no-scrollbar items-center px-2 py-2 scroll-smooth">
-            <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${isDashboardActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+            <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
               <LayoutGrid size={24} /><span className="text-[10px] font-black mt-1 uppercase">Home</span>
             </button>
-            <button onClick={() => navigateTo(Page.POS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${isPosActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+            <button onClick={() => navigateTo(Page.POS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
               <ShoppingBag size={24} /><span className="text-[10px] font-black mt-1 uppercase">POS</span>
             </button>
-            <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${isInventoryActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+            <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
               <Package size={24} /><span className="text-[10px] font-black mt-1 uppercase">Stock</span>
             </button>
-            <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${isDebtsActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+            <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
               <BookOpen size={24} /><span className="text-[10px] font-black mt-1 uppercase">Debts</span>
             </button>
-            <button onClick={() => navigateTo(Page.CUSTOMERS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${isWalletActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
+            <button onClick={() => navigateTo(Page.CUSTOMERS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.CUSTOMERS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
               <Wallet size={24} /><span className="text-[10px] font-black mt-1 uppercase">Wallet</span>
             </button>
             
