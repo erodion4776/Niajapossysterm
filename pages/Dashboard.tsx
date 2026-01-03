@@ -1,12 +1,17 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
-import { formatNaira } from '../utils/whatsapp.ts';
+import { 
+  formatNaira, 
+  applyInventoryUpdate, 
+  exportStaffSalesReport 
+} from '../utils/whatsapp.ts';
 import { 
   ShoppingCart, Package, TrendingUp, History, Calendar as CalendarIcon, 
   ChevronRight, Landmark, Banknote, BookOpen, Gem, 
-  Info, ShieldAlert, Award, ArrowUpRight, TrendingDown
+  Info, ShieldAlert, Award, ArrowUpRight, TrendingDown,
+  Download, Send, Loader2, CheckCircle2, RefreshCw
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -26,7 +31,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const [datePreset, setDatePreset] = useState<DatePreset>('today');
   const [showDateModal, setShowDateModal] = useState(false);
   const [showProfitInfo, setShowProfitInfo] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
+  const syncInputRef = useRef<HTMLInputElement>(null);
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const debts = useLiveQuery(() => db.debts.toArray());
 
@@ -48,7 +56,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     const revenue = salesInRange.reduce((sum, s) => sum + Number(s.total || 0), 0);
     const expenses = expensesInRange.reduce((sum, e) => sum + Number(e.amount || 0), 0);
     
-    // Split logic: Cash vs Transfers
     const cash = salesInRange
       .filter(s => s.paymentMethod === 'Cash' || s.paymentMethod === 'Partial')
       .reduce((sum, s) => sum + (s.cashPaid || s.total), 0);
@@ -80,7 +87,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     return Object.values(counts).sort((a, b) => b.qty - a.qty).slice(0, 3);
   }, [salesInRange]);
 
-  // Intelligence Alerts
   const alerts = useMemo(() => {
     if (!inventory) return { lowStock: 0, expiring: 0 };
     const weekOut = new Date(); weekOut.setDate(weekOut.getDate() + 7);
@@ -89,6 +95,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       expiring: inventory.filter(i => i.expiryDate && new Date(i.expiryDate) <= weekOut).length
     };
   }, [inventory]);
+
+  const handleSyncFromBoss = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsSyncing(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = event.target?.result as string;
+        const data = JSON.parse(content);
+        const result = await applyInventoryUpdate(data);
+        alert(`✅ Shop Updated! ${result.added + result.updated} items received from Boss.`);
+        // Reload is not strictly necessary but ensures everything is clean
+        window.location.reload();
+      } catch (err) {
+        alert("Sync failed: Invalid file from Boss.");
+      } finally {
+        setIsSyncing(false);
+        if (syncInputRef.current) syncInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSendReport = async () => {
+    if (!salesInRange || salesInRange.length === 0) {
+      alert("No sales recorded today to report, Boss!");
+      return;
+    }
+    setIsExporting(true);
+    try {
+      await exportStaffSalesReport(salesInRange);
+    } catch (err) {
+      alert("Failed to generate report.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
@@ -118,7 +163,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </section>
       )}
 
-      {/* MAIN PROFIT CARD */}
+      {/* MAIN PROFIT/REVENUE CARD */}
       <section className="bg-emerald-600 text-white p-8 rounded-[40px] shadow-xl relative overflow-hidden group">
         <div className="relative z-10 flex flex-col gap-1">
           <div className="flex items-center gap-2">
@@ -150,7 +195,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </div>
       </section>
 
-      {/* STATS ROW (CASH, BANK, DEBT) */}
+      {/* STAFF WORKSPACE */}
+      {isStaffDevice && (
+        <section className="bg-white dark:bg-emerald-900/40 border-2 border-dashed border-emerald-200 dark:border-emerald-800 p-6 rounded-[32px] space-y-4">
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-emerald-50 dark:bg-emerald-950 rounded-xl text-emerald-600"><CheckCircle2 size={18}/></div>
+             <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Staff Workspace</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <label className="w-full bg-emerald-50 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300 font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all cursor-pointer border border-emerald-100 dark:border-emerald-700/50">
+               <input type="file" ref={syncInputRef} className="hidden" accept=".json" onChange={handleSyncFromBoss} />
+               {isSyncing ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} 📥 Update Shop Inventory
+            </label>
+            <button 
+              onClick={handleSendReport}
+              disabled={isExporting}
+              className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-100 dark:shadow-none"
+            >
+               {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} 📤 Send Daily Report to Boss
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* STATS ROW (CASH, BANK, DEBT) - ADMIN ONLY */}
       {isAdmin && (
         <div className="grid grid-cols-3 gap-2">
            <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all">
