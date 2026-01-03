@@ -19,6 +19,7 @@ import { RegisterShop } from './pages/RegisterShop.tsx';
 import { SetupPIN } from './pages/SetupPIN.tsx';
 import { InstallApp } from './pages/InstallApp.tsx';
 import { JoinShop } from './pages/JoinShop.tsx';
+import { AIAssistant } from './pages/AIAssistant.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
@@ -174,7 +175,7 @@ const AppContent: React.FC = () => {
     setShopName(sn?.value || null);
     setOwnerName(on?.value?.split(' ')[0] || 'Boss');
     setAdminUser(admin || null);
-    setIsSetupPending(localStorage.getItem('is_setup_pending') === 'true');
+    syncState();
   };
 
   if (isPirated) return <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]"><ShieldAlert size={80} className="text-red-500 mb-6" /><h1 className="text-4xl font-black uppercase">Access Denied</h1></div>;
@@ -229,6 +230,7 @@ const AppContent: React.FC = () => {
       case Page.EXPENSES: return <Expenses setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} />;
       case Page.SETTINGS: return <Settings user={currentUser} role={isStaffDevice ? 'Staff' : currentUser.role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} deferredPrompt={deferredPrompt} />;
       case Page.CATEGORY_MANAGER: return <CategoryManager setPage={navigateTo} />;
+      case Page.AI_ASSISTANT: return <AIAssistant setPage={navigateTo} />;
       default: return <Dashboard setPage={navigateTo} role={isStaffDevice ? 'Staff' : currentUser.role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
     }
   };
