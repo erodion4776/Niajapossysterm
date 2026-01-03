@@ -16,7 +16,7 @@ import {
   Moon, Sun, X, Send, Landmark, Save,
   History, FileText, Wallet, Receipt, LogOut, Tag,
   CreditCard, CheckCircle2, Download, Package, Users, Zap,
-  Smartphone, HelpCircle, MessageCircle, ChevronRight, Globe, MapPin, Phone, Edit3
+  Smartphone, HelpCircle, MessageCircle, ChevronRight, Globe, MapPin, Phone, Edit3, Gift, Info
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -146,6 +146,11 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     } else {
       alert("Oga, your browser is not ready yet. Please wait 10 seconds or click the 3 dots in Chrome and select 'Install App' manually.");
     }
+  };
+
+  const navigateToPublic = (path: string) => {
+    window.history.pushState({}, '', path);
+    window.dispatchEvent(new Event('popstate'));
   };
 
   const handleImportStaffSales = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -412,29 +417,41 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       {/* SUPPORT & RESOURCES SECTION */}
       <section className="space-y-4">
         <div className="flex items-center gap-2 px-2">
+          <HelpCircle size={14} className="text-slate-400" />
           <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Support & Resources</h2>
         </div>
-        <div className="space-y-3">
-           <button onClick={() => setPage(Page.FAQ)} className="w-full bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 flex items-center justify-between shadow-sm active:scale-[0.98] transition-all">
+        <div className="bg-emerald-900/20 rounded-[32px] border border-emerald-800/20 p-2 space-y-1">
+           <button 
+             onClick={() => navigateToPublic('/help')}
+             className="w-full flex items-center justify-between p-5 hover:bg-white/5 active:scale-[0.98] transition-all rounded-[24px]"
+           >
               <div className="flex items-center gap-4">
-                 <div className="p-3 bg-emerald-50 dark:bg-emerald-800 rounded-2xl text-emerald-600"><HelpCircle size={20}/></div>
-                 <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Help Center / FAQ</h3>
+                 <div className="text-emerald-500"><Globe size={20}/></div>
+                 <span className="text-xs font-black uppercase tracking-tight text-slate-800 dark:text-emerald-50 italic">Online Help Center</span>
               </div>
-              <ChevronRight size={18} className="text-slate-300" />
+              <ChevronRight size={18} className="text-slate-400 dark:text-emerald-800" />
            </button>
-           <button onClick={() => window.open('https://wa.me/2347062228026', '_blank')} className="w-full bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 flex items-center justify-between shadow-sm active:scale-[0.98] transition-all">
+
+           <button 
+             onClick={() => navigateToPublic('/affiliates')}
+             className="w-full flex items-center justify-between p-5 hover:bg-white/5 active:scale-[0.98] transition-all rounded-[24px]"
+           >
               <div className="flex items-center gap-4">
-                 <div className="p-3 bg-emerald-50 dark:bg-emerald-800 rounded-2xl text-emerald-600"><MessageCircle size={20}/></div>
-                 <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">WhatsApp Support</h3>
+                 <div className="text-amber-500"><Gift size={20}/></div>
+                 <span className="text-xs font-black uppercase tracking-tight text-slate-800 dark:text-emerald-50 italic">Join Affiliate Program</span>
               </div>
-              <ChevronRight size={18} className="text-slate-300" />
+              <ChevronRight size={18} className="text-slate-400 dark:text-emerald-800" />
            </button>
-           <button onClick={() => window.open('https://naijashop.com.ng', '_blank')} className="w-full bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 flex items-center justify-between shadow-sm active:scale-[0.98] transition-all">
+
+           <button 
+             onClick={() => navigateToPublic('/about')}
+             className="w-full flex items-center justify-between p-5 hover:bg-white/5 active:scale-[0.98] transition-all rounded-[24px]"
+           >
               <div className="flex items-center gap-4">
-                 <div className="p-3 bg-emerald-50 dark:bg-emerald-800 rounded-2xl text-emerald-600"><Globe size={20}/></div>
-                 <h3 className="text-xs font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight">Visit Website</h3>
+                 <div className="text-blue-500"><Info size={20}/></div>
+                 <span className="text-xs font-black uppercase tracking-tight text-slate-800 dark:text-emerald-50 italic">About NaijaShop</span>
               </div>
-              <ChevronRight size={18} className="text-slate-300" />
+              <ChevronRight size={18} className="text-slate-400 dark:text-emerald-800" />
            </button>
         </div>
       </section>

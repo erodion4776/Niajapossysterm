@@ -20,6 +20,9 @@ import { SetupPIN } from './pages/SetupPIN.tsx';
 import { InstallApp } from './pages/InstallApp.tsx';
 import { JoinShop } from './pages/JoinShop.tsx';
 import { AIAssistant } from './pages/AIAssistant.tsx';
+import { PublicHelp } from './pages/PublicHelp.tsx';
+import { AboutUs } from './pages/AboutUs.tsx';
+import { Affiliates } from './pages/Affiliates.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
@@ -188,17 +191,22 @@ const AppContent: React.FC = () => {
     return <JoinShop />;
   }
 
-  // 2. Landing Page
+  // 2. Public Informational Routes (Bypass Security check)
+  if (path === '/help') return <PublicHelp onBack={() => window.history.back()} />;
+  if (path === '/about') return <AboutUs onBack={() => window.history.back()} />;
+  if (path === '/affiliates') return <Affiliates onBack={() => window.history.back()} />;
+
+  // 3. Landing Page
   if (path === '/' && !isActivated && (!isTrialing || !isTrialValid) && !isStaff) {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
   }
 
-  // 3. Lock Screen (License/Activation)
+  // 4. Lock Screen (License/Activation)
   if (!isStaff && ((!isActivated && !(isTrialing && isTrialValid)) || isExpired)) {
     return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
   }
 
-  // 4. Setup Hierarchy (Identity & PIN)
+  // 5. Setup Hierarchy (Identity & PIN)
   if (isSetupPending) {
     if (!shopName) {
       return <RegisterShop onComplete={() => { refreshOnboarding(); window.history.pushState({}, '', '/setup-pin'); setPath('/setup-pin'); }} />;
@@ -206,13 +214,13 @@ const AppContent: React.FC = () => {
     return <SetupPIN onBack={() => { window.history.pushState({}, '', '/register'); setPath('/register'); }} onComplete={() => { refreshOnboarding(); }} />;
   }
 
-  // 5. Final Install Gate
+  // 6. Final Install Gate
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
   if (!isStandalone && !installSkipped && !isStaff) {
     return <InstallApp ownerName={ownerName} deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_skipped', 'true'); syncState(); }} />;
   }
 
-  // 6. Login/Dashboard (Main App Logic)
+  // 7. Login/Dashboard (Main App Logic)
   if (!currentUser) {
     return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || (isStaff ? 'StaffDevice' : 'Owner')} />;
   }
