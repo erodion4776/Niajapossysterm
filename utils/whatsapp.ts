@@ -2,8 +2,6 @@
 import { Sale, db, User, Customer, Category, InventoryItem, clearAllData } from '../db.ts';
 import pako from 'pako';
 
-const MASTER_SALT = "NaijaPOS_2025_Sec" + "ret_Keep_Safe_99";
-
 export const formatNaira = (amount: number) => {
   return new Intl.NumberFormat('en-NG', {
     style: 'currency',
@@ -80,31 +78,38 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
   window.open(`https://api.whatsapp.com/send?text=${encodedMessage}`, '_blank');
 };
 
-export const backupToWhatsApp = async (data: any, excludePhotos = false): Promise<BackupResult> => {
-  const finalData = excludePhotos ? {
-    ...data,
-    inventory: data.inventory.map(({image, ...rest}: any) => rest),
-    categories: data.categories.map(({image, ...rest}: any) => rest)
-  } : data;
+/**
+ * FULL BUSINESS BACKUP
+ * Captures 100% of data, compresses with GZIP, and offers Lite mode if > 5MB.
+ */
+export const backupToWhatsApp = async (data: any, forceTextOnly = false): Promise<BackupResult> => {
+  let finalData = { ...data };
 
-  // Mark as Master Backup for restore identification
+  // Lite Mode logic: strip images if user requests or file is huge
+  if (forceTextOnly) {
+    if (finalData.inventory) finalData.inventory = finalData.inventory.map(({ image, ...rest }: any) => rest);
+    if (finalData.categories) finalData.categories = finalData.categories.map(({ image, ...rest }: any) => rest);
+  }
+
   finalData.type = 'MASTER_BACKUP';
+  finalData.version = '2.5.0';
 
   const jsonString = JSON.stringify(finalData);
   const sizeMB = jsonString.length / (1024 * 1024);
-  const isLarge = sizeMB > 20;
 
-  if (isLarge && !excludePhotos) {
-    if (confirm(`⚠️ LARGE BACKUP: Your data is ${Math.round(sizeMB)}MB because of photos. This might fail on slow WhatsApp networks. Backup text-only instead?`)) {
+  // Prompt for Lite Mode if over 5MB
+  if (sizeMB > 5 && !forceTextOnly) {
+    const confirmLite = confirm(`⚠️ LARGE BACKUP: Your data is ${sizeMB.toFixed(1)}MB due to product photos. This may fail on slow networks.\n\nClick OK for "Text Only" (Fast/Safe) or CANCEL to include photos (Slow).`);
+    if (confirmLite) {
       return backupToWhatsApp(data, true);
     }
   }
 
-  const shopName = data.shopName || 'NaijaShop';
   const timestamp = Date.now();
   const dateStr = new Date(timestamp).toISOString().split('T')[0];
-  const fileName = `NAIJASHOP_MASTER_${excludePhotos ? 'LITE_' : ''}${dateStr}.json.gz`;
+  const fileName = `NAIJASHOP_MASTER_${forceTextOnly ? 'LITE_' : ''}${dateStr}.json.gz`;
 
+  // Compression
   const uint8Data = new TextEncoder().encode(jsonString);
   const compressed = pako.gzip(uint8Data);
   
@@ -113,14 +118,14 @@ export const backupToWhatsApp = async (data: any, excludePhotos = false): Promis
       const blob = new Blob([compressed], { type: 'application/gzip' });
       const file = new File([blob], fileName, { type: 'application/gzip' });
       await navigator.share({ 
-        title: `Master Backup: ${shopName}`, 
-        text: `Secure encrypted shop backup. Keep this file safe. Date: ${dateStr}`, 
+        title: `Master Backup: ${data.shopName || 'Shop'}`, 
+        text: `Secure business backup generated on ${dateStr}.`, 
         files: [file] 
       });
       await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
       return { success: true, method: 'FILE_SHARE', fileName };
     } catch (e) {
-      console.warn("Share failed, falling back to download...");
+      console.warn("Share failed, using download...");
     }
   }
 
@@ -143,17 +148,17 @@ export const backupToWhatsApp = async (data: any, excludePhotos = false): Promis
 
 /**
  * FULL SYSTEM RESTORE
- * Wipes the database and injects 100% of the backed-up data.
+ * Atomically wipes the database and injects 100% of the backed-up records.
  */
 export const restoreFullBackup = async (data: any) => {
   if (data.type !== 'MASTER_BACKUP') {
-    throw new Error("Invalid file. This is not a NaijaShop Master Backup.");
+    throw new Error("Invalid File: This is not a NaijaShop Master Backup.");
   }
 
-  // 1. Wipe everything first to avoid ID collisions
+  // 1. Wipe local database completely
   await clearAllData();
 
-  // 2. Atomic Injection
+  // 2. Transactional injection for data integrity
   await db.transaction('rw', [
     db.inventory, db.categories, db.customers, db.sales, 
     db.settings, db.security, db.users, db.expenses, 
@@ -172,7 +177,7 @@ export const restoreFullBackup = async (data: any) => {
     if (data.parked_orders) await db.parked_orders.bulkPut(data.parked_orders);
   });
 
-  // 3. Update Activation States
+  // 3. Re-Sync LocalStorage for App States
   const licenseExp = data.security?.find((s: any) => s.key === 'license_expiry')?.value;
   const licenseSig = data.security?.find((s: any) => s.key === 'license_signature')?.value;
   const shopName = data.settings?.find((s: any) => s.key === 'shop_name')?.value;
