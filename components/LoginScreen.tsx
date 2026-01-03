@@ -6,7 +6,6 @@ import { decodeShopKey } from '../utils/whatsapp.ts';
 import { getRequestCode, verifyResetKey } from '../utils/security.ts';
 import { 
   User as UserIcon, Key, ArrowRight, Smartphone, 
-  // Added Loader2 to the lucide-react imports to fix the error on line 247
   ShieldCheck, X, RefreshCw, AlertCircle, MessageCircle, Copy, Check, ShieldAlert, UserCircle,
   Lock, HelpCircle, ChevronRight, Loader2
 } from 'lucide-react';
@@ -87,18 +86,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
     try {
       const isValid = await verifyResetKey(requestCode, resetKeyInput);
       if (isValid) {
-        // 1. Wipe Admin PIN from DB
+        // 1. Wipe Admin PIN from DB (set to empty string for re-setup)
         await db.users.where('role').equals('Admin').modify({ pin: '' });
         
-        // 2. Set Setup State to Pending
+        // 2. Set Setup State to Pending to force Setup Wizard
         localStorage.setItem('is_setup_pending', 'true');
         
-        // 3. Optional: Clear specific local flags
+        // 3. Clear existing session if any
+        localStorage.removeItem('isAuthenticated');
         localStorage.removeItem('temp_otp');
         
-        // 4. Force Reload
-        alert("✅ Security Reset Verified! You will now be taken to the PIN setup screen.");
-        window.location.reload();
+        // 4. Force Redirect to /app for a clean switchboard check
+        alert("✅ Security Reset Verified! You will now be taken to set your new private PIN.");
+        window.location.href = '/app';
       } else {
         setRecoveryError('Invalid Reset Key. Please contact support.');
       }
@@ -245,7 +245,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
                   disabled={resetKeyInput.length !== 8 || isVerifyingReset}
                   className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-30"
                 >
-                  {/* Fixed the 'Cannot find name Loader2' error by adding it to the imports above */}
                   {isVerifyingReset ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={18} />} Verify & Reset
                 </button>
 

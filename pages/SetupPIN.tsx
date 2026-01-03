@@ -76,17 +76,25 @@ export const SetupPIN: React.FC<SetupPINProps> = ({ onComplete, onBack }) => {
       const ownerNameSetting = await db.settings.get('owner_name');
       const ownerName = ownerNameSetting?.value || 'Shop Owner';
 
-      // 2. Clear any existing users (fail-safe)
-      await db.users.clear();
+      // 2. Check if Admin already exists (for reset scenario)
+      const existingAdmin = await db.users.where('role').equals('Admin').first();
 
-      // 3. Create Admin user
-      await db.users.add({
-        name: ownerName,
-        pin: pin,
-        role: 'Admin'
-      });
+      if (existingAdmin) {
+        // Update existing Admin (preserves staff accounts during PIN recovery)
+        await db.users.update(existingAdmin.id!, {
+          pin: pin,
+          name: ownerName // Ensure name is current
+        });
+      } else {
+        // Fresh setup: Create Admin user
+        await db.users.add({
+          name: ownerName,
+          pin: pin,
+          role: 'Admin'
+        });
+      }
 
-      // 4. Update setup state
+      // 3. Finalize setup state
       localStorage.setItem('is_setup_pending', 'false');
       setIsSuccess(true);
       

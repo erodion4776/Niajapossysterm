@@ -207,32 +207,33 @@ const AppContent: React.FC = () => {
     return <JoinShop />;
   }
 
-  // 2. Onboarding Switchboard
-  if (isTrialing || isActivated) {
-    if (path === '/register' || !shopName) {
-      return <RegisterShop onComplete={() => { refreshOnboarding(); window.history.pushState({}, '', '/setup-pin'); setPath('/setup-pin'); }} />;
-    }
-    if (path === '/setup-pin' || !adminUser) {
-      return <SetupPIN onBack={() => { window.history.pushState({}, '', '/register'); setPath('/register'); }} onComplete={() => { refreshOnboarding(); window.history.pushState({}, '', '/app'); setPath('/app'); }} />;
-    }
-  }
-
-  // 3. Landing Page Logic
+  // 2. Landing Page
   if (path === '/' && !isActivated && (!isTrialing || !isTrialValid) && !isStaff) {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
+  }
+
+  // 3. Lock Screen (License/Activation)
+  if (!isStaff && ((!isActivated && !(isTrialing && isTrialValid)) || isExpired)) {
+    return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
+  }
+
+  // 4. Setup Hierarchy (Must come before Login to handle recovery/new setup)
+  if (localStorage.getItem('is_setup_pending') === 'true') {
+    // If shop name is missing, go to registration
+    if (!shopName) {
+      return <RegisterShop onComplete={() => { refreshOnboarding(); window.history.pushState({}, '', '/setup-pin'); setPath('/setup-pin'); }} />;
+    }
+    // If shop exists but PIN needs setting (or resetting)
+    return <SetupPIN onBack={() => { window.history.pushState({}, '', '/register'); setPath('/register'); }} onComplete={() => { refreshOnboarding(); window.history.pushState({}, '', '/app'); setPath('/app'); }} />;
   }
 
   if (showInstallGate) {
     return <InstallApp deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_skipped', 'true'); window.history.pushState({}, '', '/register'); setPath('/register'); }} />;
   }
 
+  // 5. Main App Logic
   const isAppPath = path.startsWith('/app');
   if (isAppPath || isActivated || (isTrialing && isTrialValid) || isStaff) {
-    const trialActive = isTrialing && isTrialValid;
-    if (!isStaff && ((!isActivated && !trialActive) || isExpired)) {
-      return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
-    }
-
     if (!currentUser) {
       return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || (isStaff ? 'StaffDevice' : 'Owner')} />;
     }
