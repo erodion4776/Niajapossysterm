@@ -412,7 +412,8 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
         const name = await connectBluetoothPrinter();
         setPrinterName(name);
       }
-      const bytes = formatReceipt(lastSale);
+      // Fix: Await the asynchronous formatReceipt function call to correctly pass a Uint8Array to sendRawToPrinter.
+      const bytes = await formatReceipt(lastSale);
       await sendRawToPrinter(bytes);
     } catch (e: any) {
       alert("Printing failed: " + e.message);

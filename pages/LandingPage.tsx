@@ -21,7 +21,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
   const [isPreparing, setIsPreparing] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
     const userAgent = window.navigator.userAgent.toLowerCase();
@@ -66,37 +65,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
     playChime();
     setIsPreparing(true);
     
-    // 1. Set Trial State First
-    localStorage.setItem('is_trialing', 'true');
-    localStorage.setItem('trial_start_date', Date.now().toString());
-    localStorage.setItem('is_setup_pending', 'true');
-    localStorage.setItem('temp_otp', '123456'); // Default Trial OTP
-    localStorage.setItem('device_role', 'Owner'); // Defaults to owner for trial
-
-    // 2. Force Redirect after animation
+    // Redirect to parent app logic which handles the /register transition
     setTimeout(() => { 
-      window.location.href = '/app'; 
+      onStartTrial();
     }, 1800);
   };
-
-  const faqs = [
-    {
-      q: "Does this app really work without internet?",
-      a: "Yes! You only need internet once to activate the app. After that, you can sell in Airplane Mode. All data is saved directly on your phone's memory (IndexedDB)."
-    },
-    {
-      q: "Are there any monthly charges?",
-      a: "No. Once you pay the activation fee, the app is yours forever. You never have to pay another kobo. No subscriptions, no data tax."
-    },
-    {
-      q: "Can I print receipts from my iPhone?",
-      a: "NaijaShop supports WhatsApp Receipts on all devices including iPhone. However, physical Bluetooth Printing is currently only supported on Android devices due to Apple's system restrictions. For physical printing, we recommend using a secondary Android device in your shop."
-    },
-    {
-      q: "What happens if I lose my phone?",
-      a: "This is why daily backup is vital. You can install the app on a new phone, import your WhatsApp backup file, and all your records will be restored instantly."
-    }
-  ];
 
   return (
     <div className={`bg-white min-h-screen text-emerald-950 font-sans overflow-x-hidden selection:bg-emerald-100 transition-all duration-700 ${isPreparing ? 'blur-md scale-[0.98]' : ''}`}>
@@ -108,7 +81,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
                  <Store size={40} />
               </div>
               <h2 className="text-2xl font-black uppercase italic tracking-tighter">Welcome Boss!</h2>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Opening your secure terminal...</p>
+              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Starting Onboarding Flow...</p>
            </div>
         </div>
       )}
@@ -161,45 +134,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">No Card Required • Set up in 60 seconds</p>
         </div>
       </section>
-
-      {/* 2. The "iPhone Install" Section */}
-      {isIOS && !isStandalone && (
-        <section className="px-6 py-16 bg-emerald-50 rounded-[64px] mx-4 mb-24 animate-in slide-in-from-bottom duration-700">
-          <div className="max-w-4xl mx-auto space-y-12">
-            <div className="text-center space-y-4">
-               <div className="w-16 h-16 bg-white rounded-[24px] flex items-center justify-center mx-auto text-emerald-600 shadow-sm">
-                 <Compass size={32} />
-               </div>
-               <h2 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter">Install on iPhone <br/><span className="text-emerald-600 text-2xl md:text-3xl">in 3 Simple Steps</span></h2>
-               <p className="text-slate-500 font-bold text-xs uppercase tracking-widest leading-relaxed">Apple doesn't allow one-tap install. Follow this guide to work offline.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="bg-white p-8 rounded-[40px] border border-emerald-100 space-y-4 shadow-sm">
-                 <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center font-black italic">01</div>
-                 <h4 className="font-black uppercase italic text-sm text-emerald-900">Open Safari</h4>
-                 <p className="text-slate-500 text-xs leading-relaxed font-medium">Ensure you are viewing this page in the <span className="font-bold text-emerald-950">Safari browser</span>. Other browsers won't work.</p>
-              </div>
-
-              <div className="bg-white p-8 rounded-[40px] border border-emerald-100 space-y-4 shadow-sm">
-                 <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center font-black italic">02</div>
-                 <h4 className="font-black uppercase italic text-sm text-emerald-900">Tap Share</h4>
-                 <p className="text-slate-500 text-xs leading-relaxed font-medium flex items-center gap-1.5 flex-wrap">
-                   Tap the <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-emerald-950 font-bold"><Share size={12}/> Share</span> button at the bottom center of Safari.
-                 </p>
-              </div>
-
-              <div className="bg-white p-8 rounded-[40px] border border-emerald-100 space-y-4 shadow-sm">
-                 <div className="w-12 h-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center font-black italic">03</div>
-                 <h4 className="font-black uppercase italic text-sm text-emerald-900">Add to Home</h4>
-                 <p className="text-slate-500 text-xs leading-relaxed font-medium flex items-center gap-1.5 flex-wrap">
-                   Scroll down and tap <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-emerald-950 font-bold"><PlusSquare size={12}/> Add to Home Screen</span>.
-                 </p>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Airplane Mode Proof */}
       <section className="px-6 py-24 bg-emerald-950 text-white overflow-hidden relative">
@@ -323,19 +257,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
                 <span className="text-2xl font-black tracking-tight text-emerald-950 uppercase italic">NaijaShop<span className="text-emerald-600">App</span></span>
               </div>
               <p className="text-slate-400 font-medium leading-relaxed max-w-sm">Built specifically for the Nigerian market. Ending the Data Tax for local SMEs since 2025.</p>
-              <div className="space-y-2">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lead Developer Contact</p>
-                 <p className="text-lg font-black text-emerald-950">07062228026</p>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-               <h4 className="text-[10px] font-black text-emerald-950 uppercase tracking-[0.3em]">Quick Links</h4>
-               <ul className="space-y-4">
-                 <li><button onClick={() => onNavigate(Page.HELP_CENTER)} className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors">Help Center</button></li>
-                 <li><button onClick={() => onNavigate(Page.ABOUT_US)} className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors">About Us</button></li>
-                 <li><button onClick={() => onNavigate(Page.AFFILIATES)} className="text-sm font-bold text-slate-500 hover:text-emerald-600 transition-colors">Affiliate Program</button></li>
-               </ul>
             </div>
           </div>
 

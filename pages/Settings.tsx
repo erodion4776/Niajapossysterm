@@ -16,7 +16,7 @@ import {
   Moon, Sun, X, Send, Landmark, Save,
   History, FileText, Wallet, Receipt, LogOut, Tag,
   CreditCard, CheckCircle2, Download, Package, Users, Zap,
-  Smartphone, HelpCircle, MessageCircle, ChevronRight, Globe
+  Smartphone, HelpCircle, MessageCircle, ChevronRight, Globe, MapPin, Phone
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -35,8 +35,10 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const { theme, toggleTheme } = useTheme();
   
   // Section 1: Shop Profile
-  const [shopName, setShopName] = useState(() => localStorage.getItem('shop_name') || 'NaijaShop');
-  const [shopInfo, setShopInfo] = useState(() => localStorage.getItem('shop_info') || '');
+  const [ownerName, setOwnerName] = useState('');
+  const [shopName, setShopName] = useState('');
+  const [shopAddress, setShopAddress] = useState('');
+  const [shopPhone, setShopPhone] = useState('');
   const [receiptFooter, setReceiptFooter] = useState(() => localStorage.getItem('receipt_footer') || 'Thank you for your patronage!');
 
   // Section 2: Soft POS
@@ -59,9 +61,18 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
   useEffect(() => {
     const loadSettings = async () => {
+      const on = await db.settings.get('owner_name');
+      const sn = await db.settings.get('shop_name');
+      const sa = await db.settings.get('shop_address');
+      const sp = await db.settings.get('shop_phone');
       const bn = await db.settings.get('softPosBank');
       const an = await db.settings.get('softPosNumber');
       const anm = await db.settings.get('softPosAccount');
+
+      if (on) setOwnerName(on.value);
+      if (sn) setShopName(sn.value);
+      if (sa) setShopAddress(sa.value);
+      if (sp) setShopPhone(sp.value);
       if (bn) setBankName(bn.value);
       if (an) setAccountNumber(an.value);
       if (anm) setAccountName(anm.value);
@@ -69,11 +80,20 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     loadSettings();
   }, []);
 
-  const saveShopProfile = () => {
+  const saveShopProfile = async () => {
+    await db.settings.bulkPut([
+      { key: 'owner_name', value: ownerName },
+      { key: 'shop_name', value: shopName },
+      { key: 'shop_address', value: shopAddress },
+      { key: 'shop_phone', value: shopPhone }
+    ]);
+    
+    // Update legacy storage
     localStorage.setItem('shop_name', shopName);
-    localStorage.setItem('shop_info', shopInfo);
+    localStorage.setItem('shop_info', shopAddress);
     localStorage.setItem('receipt_footer', receiptFooter);
-    alert("Shop Branding Updated!");
+    
+    alert("Shop Branding & Identity Updated!");
   };
 
   const saveBankDetails = async () => {
@@ -97,7 +117,6 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       const registration = await navigator.serviceWorker.getRegistration();
       if (registration) {
         await registration.update();
-        // Delay to allow service worker to process the check
         await new Promise(r => setTimeout(r, 1500));
         
         if (registration.waiting) {
@@ -189,7 +208,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         categories: await db.categories.toArray(),
         settings: await db.settings.toArray(),
         security: await db.security.toArray(), 
-        shopName, shopInfo, timestamp: Date.now() 
+        shopName, ownerName, timestamp: Date.now() 
       };
       const result = await backupToWhatsApp(data);
       if (result.success && result.method === 'DOWNLOAD') {
@@ -239,12 +258,20 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           </div>
           <div className="space-y-4">
             <div className="space-y-1">
-              <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Business Name</label>
+              <label className="text-[8px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1"><UserIcon size={8}/> Owner Name</label>
+              <input type="text" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[8px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1"><Store size={8}/> Business Name</label>
               <input type="text" value={shopName} onChange={(e) => setShopName(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div className="space-y-1">
-              <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Physical Address / Info</label>
-              <input type="text" value={shopInfo} onChange={(e) => setShopInfo(e.target.value)} placeholder="e.g. Shop 24, Main Market" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
+              <label className="text-[8px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1"><MapPin size={8}/> Shop Address</label>
+              <input type="text" value={shopAddress} onChange={(e) => setShopAddress(e.target.value)} placeholder="e.g. Shop 24, Main Market" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[8px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1"><Phone size={8}/> Support Phone</label>
+              <input type="text" value={shopPhone} onChange={(e) => setShopPhone(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Receipt Footer</label>

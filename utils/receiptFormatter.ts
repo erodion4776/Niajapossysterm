@@ -1,5 +1,5 @@
 
-import { Sale } from '../db.ts';
+import { Sale, db } from '../db.ts';
 
 /**
  * ESC/POS Command Constants for 58mm Thermal Printers
@@ -22,9 +22,15 @@ const CMD = {
 /**
  * Formats a sale into a Uint8Array for a 58mm printer (32 chars wide)
  */
-export function formatReceipt(sale: Sale): Uint8Array {
-  const shopName = localStorage.getItem('shop_name') || 'NAIJASHOP';
-  const shopInfo = localStorage.getItem('shop_info') || '';
+export async function formatReceipt(sale: Sale): Promise<Uint8Array> {
+  const snSetting = await db.settings.get('shop_name');
+  const saSetting = await db.settings.get('shop_address');
+  const spSetting = await db.settings.get('shop_phone');
+  
+  const shopName = snSetting?.value || localStorage.getItem('shop_name') || 'NAIJASHOP';
+  const shopInfo = saSetting?.value || localStorage.getItem('shop_info') || '';
+  const shopPhone = spSetting?.value || '';
+  
   const dateStr = new Date(sale.timestamp).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' });
   const receiptNo = String(sale.id || '0').padStart(5, '0');
 
@@ -33,7 +39,6 @@ export function formatReceipt(sale: Sale): Uint8Array {
 
   const add = (data: number[] | string) => {
     if (typeof data === 'string') {
-      // Replace Naira with N for hardware compatibility
       const safeText = data.replace(/₦/g, 'N');
       bytes.push(...Array.from(encoder.encode(safeText)));
     } else {
@@ -54,6 +59,9 @@ export function formatReceipt(sale: Sale): Uint8Array {
   
   if (shopInfo) {
     add(`${shopInfo}\n`);
+  }
+  if (shopPhone) {
+    add(`Phone: ${shopPhone}\n`);
   }
   line();
   add(`RECEIPT #${receiptNo}\n`);
@@ -92,8 +100,6 @@ export function formatReceipt(sale: Sale): Uint8Array {
     add(CMD.BOLD_ON);
     add(`NEW DEBT: N${remainingDebt.toLocaleString()}\n`);
     add(CMD.BOLD_OFF);
-    add(CMD.ALIGN_CENTER);
-    add(`Your Wallet Balance: N0\n`);
   } else if (sale.paymentMethod === 'Wallet' && (sale.walletUsed || 0) + (sale.cashPaid || 0) >= sale.total) {
     add(CMD.BOLD_ON);
     add(`FULLY SETTLED\n`);

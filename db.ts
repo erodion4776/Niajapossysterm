@@ -166,18 +166,6 @@ export async function initTrialDate() {
     await navigator.storage.persist();
   }
 
-  const deviceRole = localStorage.getItem('device_role');
-  if (!deviceRole) return;
-
-  const userCount = await db.users.count();
-  if (userCount === 0 && deviceRole === 'Owner') {
-    await db.users.add({
-      name: 'Shop Owner',
-      pin: '0000',
-      role: 'Admin'
-    });
-  }
-
   const catCount = await db.categories.count();
   if (catCount === 0) {
     await db.categories.bulkAdd([

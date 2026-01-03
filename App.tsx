@@ -15,6 +15,8 @@ import { Customers } from './pages/Customers.tsx';
 import { StockLogs } from './pages/StockLogs.tsx';
 import { CategoryManager } from './pages/CategoryManager.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
+import { RegisterShop } from './pages/RegisterShop.tsx';
+import { SetupPIN } from './pages/SetupPIN.tsx';
 import { InstallApp } from './pages/InstallApp.tsx';
 import { JoinShop } from './pages/JoinShop.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
@@ -51,6 +53,10 @@ const AppContent: React.FC = () => {
   const [isSetupPending, setIsSetupPending] = useState(() => localStorage.getItem('is_setup_pending') === 'true');
   const [deviceRole, setDeviceRole] = useState<DeviceRole | null>(() => localStorage.getItem('device_role') as DeviceRole);
   
+  // New Onboarding States
+  const [shopName, setShopName] = useState<string | null>(null);
+  const [adminUser, setAdminUser] = useState<User | null>(null);
+
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallGate, setShowInstallGate] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
@@ -72,46 +78,53 @@ const AppContent: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    const startup = async () => {
-      const hostname = window.location.hostname;
-      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-      const isDevEnv = hostname.endsWith('.webcontainer.io');
-      const isAuthorized = ALLOWED_DOMAINS.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+  const startup = async () => {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isDevEnv = hostname.endsWith('.webcontainer.io');
+    const isAuthorized = ALLOWED_DOMAINS.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
 
-      if (!isLocal && !isDevEnv && !isAuthorized) setIsPirated(true);
+    if (!isLocal && !isDevEnv && !isAuthorized) setIsPirated(true);
 
-      // Standalone check
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
-      console.log(`✅ PWA: Running in ${isStandalone ? 'Standalone (Installed)' : 'Browser'} mode`);
+    // Standalone check
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    console.log(`✅ PWA: Running in ${isStandalone ? 'Standalone (Installed)' : 'Browser'} mode`);
 
-      await initTrialDate();
-      const requestCode = await getRequestCode();
-      const dbExp = await db.security.get('license_expiry');
-      const dbSig = await db.security.get('license_signature');
-      const lsExp = localStorage.getItem('license_expiry');
-      const lsSig = localStorage.getItem('license_signature');
-      
-      let validExp = '';
-      if (dbExp?.value && dbSig?.value && await validateLicenseIntegrity(requestCode, dbSig.value, dbExp.value)) {
-        validExp = dbExp.value;
-      } else if (lsExp && lsSig && await validateLicenseIntegrity(requestCode, lsSig, lsExp)) {
-        validExp = lsExp;
-      }
-
-      if (validExp) {
-        const year = parseInt(validExp.substring(0, 4));
-        const month = parseInt(validExp.substring(4, 6)) - 1;
-        const day = parseInt(validExp.substring(6, 8));
-        const expired = Date.now() > new Date(year, month, day, 23, 59, 59).getTime();
-        setIsExpired(expired);
-        setIsActivated(true);
-        localStorage.setItem('is_activated', 'true');
-      }
-
-      setIsInitialized(true);
-    };
+    await initTrialDate();
     
+    // Check onboarding status
+    const sn = await db.settings.get('shop_name');
+    const admin = await db.users.where('role').equals('Admin').first();
+    setShopName(sn?.value || null);
+    setAdminUser(admin || null);
+
+    const requestCode = await getRequestCode();
+    const dbExp = await db.security.get('license_expiry');
+    const dbSig = await db.security.get('license_signature');
+    const lsExp = localStorage.getItem('license_expiry');
+    const lsSig = localStorage.getItem('license_signature');
+    
+    let validExp = '';
+    if (dbExp?.value && dbSig?.value && await validateLicenseIntegrity(requestCode, dbSig.value, dbExp.value)) {
+      validExp = dbExp.value;
+    } else if (lsExp && lsSig && await validateLicenseIntegrity(requestCode, lsSig, lsExp)) {
+      validExp = lsExp;
+    }
+
+    if (validExp) {
+      const year = parseInt(validExp.substring(0, 4));
+      const month = parseInt(validExp.substring(4, 6)) - 1;
+      const day = parseInt(validExp.substring(6, 8));
+      const expired = Date.now() > new Date(year, month, day, 23, 59, 59).getTime();
+      setIsExpired(expired);
+      setIsActivated(true);
+      localStorage.setItem('is_activated', 'true');
+    }
+
+    setIsInitialized(true);
+  };
+
+  useEffect(() => {
     startup();
     window.addEventListener('popstate', syncState);
 
@@ -130,7 +143,6 @@ const AppContent: React.FC = () => {
   }, [syncState]);
 
   useEffect(() => {
-    // 1. Staff device redirection logic
     if (isStaff) {
       if (window.location.pathname === '/' || window.location.pathname === '') {
          window.history.pushState({}, '', '/app');
@@ -140,12 +152,12 @@ const AppContent: React.FC = () => {
     }
 
     if ((isTrialing && isTrialValid) || isActivated) {
-      if (window.location.pathname === '/') {
+      if (window.location.pathname === '/' && isInitialized && shopName && adminUser) {
         window.history.pushState({}, '', '/app');
         setPath('/app');
       }
     }
-  }, [isTrialing, isTrialValid, isActivated, isStaff]);
+  }, [isTrialing, isTrialValid, isActivated, isStaff, isInitialized, shopName, adminUser]);
 
   const navigateTo = useCallback((page: Page, filter?: string) => {
     setCurrentPage(page);
@@ -166,41 +178,59 @@ const AppContent: React.FC = () => {
   const handleStartTrial = () => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     const hasSkipped = localStorage.getItem('install_skipped') === 'true';
+    
+    // Set trial flag
+    localStorage.setItem('is_trialing', 'true');
+    localStorage.setItem('trial_start_date', Date.now().toString());
+    localStorage.setItem('device_role', 'Owner');
+
     if (!isStandalone && !hasSkipped) {
       setShowInstallGate(true);
     } else {
-      window.location.href = '/app';
+      window.history.pushState({}, '', '/register');
+      setPath('/register');
     }
+  };
+
+  const refreshOnboarding = async () => {
+    const sn = await db.settings.get('shop_name');
+    const admin = await db.users.where('role').equals('Admin').first();
+    setShopName(sn?.value || null);
+    setAdminUser(admin || null);
   };
 
   if (isPirated) return <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]"><ShieldAlert size={80} className="text-red-500 mb-6" /><h1 className="text-4xl font-black uppercase">Access Denied</h1></div>;
   if (!isInitialized) return <LoadingScreen />;
 
-  // 2. Add /join route check before landing page logic
+  // 1. Join Link Route
   if (path.startsWith('/join')) {
     return <JoinShop />;
   }
 
-  // 3. Ensure staff never see the Landing Page
+  // 2. Onboarding Switchboard
+  if (isTrialing || isActivated) {
+    if (path === '/register' || !shopName) {
+      return <RegisterShop onComplete={() => { refreshOnboarding(); window.history.pushState({}, '', '/setup-pin'); setPath('/setup-pin'); }} />;
+    }
+    if (path === '/setup-pin' || !adminUser) {
+      return <SetupPIN onBack={() => { window.history.pushState({}, '', '/register'); setPath('/register'); }} onComplete={() => { refreshOnboarding(); window.history.pushState({}, '', '/app'); setPath('/app'); }} />;
+    }
+  }
+
+  // 3. Landing Page Logic
   if (path === '/' && !isActivated && (!isTrialing || !isTrialValid) && !isStaff) {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
   }
 
   if (showInstallGate) {
-    return <InstallApp deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_skipped', 'true'); window.location.href = '/app'; }} />;
+    return <InstallApp deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_skipped', 'true'); window.history.pushState({}, '', '/register'); setPath('/register'); }} />;
   }
 
   const isAppPath = path.startsWith('/app');
   if (isAppPath || isActivated || (isTrialing && isTrialValid) || isStaff) {
     const trialActive = isTrialing && isTrialValid;
-    // 4. Staff bypass trial/activation lock as they depend on Admin state
     if (!isStaff && ((!isActivated && !trialActive) || isExpired)) {
       return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
-    }
-
-    // 5. Staff bypass setup wizard
-    if (isSetupPending && !isStaff) {
-      return <SetupWizard onComplete={() => { localStorage.setItem('is_setup_pending', 'false'); window.location.reload(); }} />;
     }
 
     if (!currentUser) {
@@ -224,14 +254,12 @@ const AppContent: React.FC = () => {
       }
     };
 
-    // Highlight Logic
     const isDashboardActive = currentPage === Page.DASHBOARD;
     const isPosActive = currentPage === Page.POS;
     const isInventoryActive = currentPage === Page.INVENTORY;
     const isDebtsActive = currentPage === Page.DEBTS;
     const isWalletActive = currentPage === Page.CUSTOMERS;
     const isLogsActive = currentPage === Page.STOCK_LOGS;
-    // Settings hub logic (includes all secondary ledger pages)
     const isAdminActive = [Page.SETTINGS, Page.SALES, Page.EXPENSES, Page.CATEGORY_MANAGER].includes(currentPage);
 
     return (
@@ -240,7 +268,6 @@ const AppContent: React.FC = () => {
         {!isStaffDevice && !isNavHidden && <BackupReminder />}
         {!isNavHidden && (
           <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/95 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] safe-bottom overflow-hidden">
-            {/* Scrollable Container */}
             <div className="flex overflow-x-auto no-scrollbar items-center px-2 py-2 scroll-smooth">
               <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${isDashboardActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
                 <LayoutGrid size={24} /><span className="text-[10px] font-black mt-1 uppercase whitespace-nowrap">Home</span>
@@ -264,8 +291,6 @@ const AppContent: React.FC = () => {
                 <Menu size={24} /><span className="text-[10px] font-black mt-1 uppercase whitespace-nowrap">Admin</span>
               </button>
             </div>
-            
-            {/* Fade Effect Cue */}
             <div className="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-white/90 dark:from-emerald-900/90 to-transparent pointer-events-none z-10" />
           </nav>
         )}
@@ -275,7 +300,6 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // 6. Final fallback ensures staff don't see landing page if some state check fails
   if (isStaff) {
     return <LoadingScreen />;
   }

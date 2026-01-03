@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
 import { 
@@ -11,7 +11,7 @@ import {
   ShoppingCart, Package, TrendingUp, History, Calendar as CalendarIcon, 
   ChevronRight, Landmark, Banknote, BookOpen, Gem, 
   Info, ShieldAlert, Award, ArrowUpRight, TrendingDown,
-  Download, Send, Loader2, CheckCircle2, RefreshCw
+  Download, Send, Loader2, CheckCircle2, RefreshCw, Hand
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -34,9 +34,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const [isSyncing, setIsSyncing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   
+  // Personalization States
+  const [ownerGreeting, setOwnerGreeting] = useState('');
+  const [displayShopName, setDisplayShopName] = useState('NaijaShop');
+
   const syncInputRef = useRef<HTMLInputElement>(null);
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const debts = useLiveQuery(() => db.debts.toArray());
+
+  useEffect(() => {
+    const loadIdentity = async () => {
+      const sn = await db.settings.get('shop_name');
+      const on = await db.settings.get('owner_name');
+      if (sn) setDisplayShopName(sn.value);
+      if (on) setOwnerGreeting(on.value.split(' ')[0]); // Use first name
+    };
+    loadIdentity();
+  }, []);
 
   const dateRange = useMemo(() => {
     const start = new Date();
@@ -108,7 +122,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         const data = JSON.parse(content);
         const result = await applyInventoryUpdate(data);
         alert(`✅ Shop Updated! ${result.added + result.updated} items received from Boss.`);
-        // Reload is not strictly necessary but ensures everything is clean
         window.location.reload();
       } catch (err) {
         alert("Sync failed: Invalid file from Boss.");
@@ -139,8 +152,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase">NaijaShop</h1>
-          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">{isAdmin ? 'Boss Overview' : 'Staff Terminal'}</p>
+          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase truncate max-w-[180px]">{displayShopName}</h1>
+          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+            {isAdmin ? (
+               <><span className="text-emerald-600">Welcome, {ownerGreeting}!</span> <Hand size={10}/></>
+            ) : 'Staff Terminal'}
+          </p>
         </div>
         <button onClick={() => setShowDateModal(true)} className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
           <CalendarIcon size={20} /><span className="text-[10px] font-black uppercase">{datePreset}</span>

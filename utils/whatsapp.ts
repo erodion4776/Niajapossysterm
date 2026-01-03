@@ -13,8 +13,13 @@ export const formatNaira = (amount: number) => {
 };
 
 export const shareReceiptToWhatsApp = async (sale: Sale) => {
-  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
-  const shopInfo = localStorage.getItem('shop_info') || '';
+  // Fetch latest business details from DB
+  const snSetting = await db.settings.get('shop_name');
+  const saSetting = await db.settings.get('shop_address');
+  
+  const shopName = snSetting?.value || localStorage.getItem('shop_name') || 'NaijaShop';
+  const shopInfo = saSetting?.value || localStorage.getItem('shop_info') || '';
+  
   const date = new Date(sale.timestamp).toLocaleString('en-NG', {
     dateStyle: 'medium',
     timeStyle: 'short'
@@ -87,8 +92,10 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
 export const generateShopKey = async () => {
   const inventory = await db.inventory.toArray();
   const users = await db.users.toArray();
-  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
-  const shopInfo = localStorage.getItem('shop_info') || '';
+  const sn = await db.settings.get('shop_name');
+  const sa = await db.settings.get('shop_address');
+  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
+  const shopInfo = sa?.value || localStorage.getItem('shop_info') || '';
   const license_expiry = localStorage.getItem('license_expiry');
   const license_signature = localStorage.getItem('license_signature');
 
@@ -129,7 +136,8 @@ export const generateShopKey = async () => {
  * Now creates a full onboarding URL for one-tap setup.
  */
 export const generateStaffInviteKey = async (user: User) => {
-  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+  const sn = await db.settings.get('shop_name');
+  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
   const expiry = localStorage.getItem('license_expiry') || '';
   const license_signature = localStorage.getItem('license_signature') || '';
 
@@ -212,7 +220,8 @@ export const processStaffInvite = async (base64Key: string) => {
 
 export const generateMasterStockKey = async () => {
   const inventory = await db.inventory.toArray();
-  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+  const sn = await db.settings.get('shop_name');
+  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
 
   const payload = {
     inventory,
@@ -439,17 +448,16 @@ export const reconcileStaffSales = async (staffData: any, adminName: string = 'A
  * Filters for today's data to keep sync files lightweight.
  */
 export const exportStaffSalesReport = async (sales: Sale[]) => {
-  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+  const sn = await db.settings.get('shop_name');
+  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
   const dateStr = new Date().toISOString().split('T')[0];
   const fileName = `SALES_REPORT_${shopName}_${dateStr}.json.gz`;
   
   const startOfDay = new Date().setHours(0,0,0,0);
 
   // Fetch today's debts and customers updated since start of day
-  // Fix: Gracefully handle missing index by ensuring it exists via db migration 23
   const debts = await db.debts.where('date').aboveOrEqual(startOfDay).toArray();
   
-  // Safe filtering: Handle null/undefined timestamps gracefully
   const customers = await db.customers
     .where('lastTransaction')
     .aboveOrEqual(startOfDay)
@@ -501,7 +509,8 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
 export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) => {
   const inventory = await db.inventory.toArray();
   const categories = await db.categories.toArray();
-  const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
+  const sn = await db.settings.get('shop_name');
+  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
   const dateStr = new Date().toISOString().split('T')[0];
   const fileName = `NAIJASHOP_UPDATE_${dateStr}.json`;
 
@@ -561,7 +570,6 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
     }
   }
 
-  // Fallback to download
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
