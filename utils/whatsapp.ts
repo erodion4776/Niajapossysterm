@@ -505,10 +505,13 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
 
 /**
  * Pushes the inventory update to staff via WhatsApp
+ * Includes staff users (excluding Admin) to sync credentials.
  */
 export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) => {
   const inventory = await db.inventory.toArray();
   const categories = await db.categories.toArray();
+  const staffUsers = await db.users.where('role').equals('Staff').toArray();
+  
   const sn = await db.settings.get('shop_name');
   const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
   const dateStr = new Date().toISOString().split('T')[0];
@@ -545,6 +548,7 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
     timestamp: Date.now(),
     inventory: inventoryData,
     categories: categoryData,
+    staffUsers, // Include updated staff list
     resetStock,
     softPosBank: bankSetting?.value || '',
     softPosNumber: numberSetting?.value || '',
@@ -555,12 +559,12 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
   const blob = new Blob([jsonString], { type: 'application/json' });
   const file = new File([blob], fileName, { type: 'application/json' });
 
-  const message = "Hello Team, I have updated the shop inventory. Please click the file below and select 'Sync Inventory from Boss' in your app to see the new products/prices/images.";
+  const message = "Hello Team, I have updated the shop inventory and staff profiles. Please click the file below and select 'Update Shop Inventory' in your app.";
 
   if (navigator.share) {
     try {
       await navigator.share({
-        title: `Inventory Update: ${shopName}`,
+        title: `Shop Update: ${shopName}`,
         text: message,
         files: [file]
       });
@@ -586,6 +590,7 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
 
 /**
  * Merges the inventory update on the staff device
+ * Enforces profile changes/deletions and forces logout if current user affected.
  */
 export const applyInventoryUpdate = async (data: any) => {
   if (data.type !== 'INVENTORY_UPDATE') {
@@ -596,11 +601,17 @@ export const applyInventoryUpdate = async (data: any) => {
   let updated = 0;
   const resetStock = data.resetStock === true;
 
-  await db.transaction('rw', [db.inventory, db.categories, db.settings], async () => {
+  // Track if current logged in staff is affected
+  let shouldLogout = false;
+  const currentStaffName = localStorage.getItem('logged_in_staff_name');
+
+  await db.transaction('rw', [db.inventory, db.categories, db.settings, db.users], async () => {
+    // 1. Sync Soft POS
     if (data.softPosBank !== undefined) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
     if (data.softPosNumber !== undefined) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
     if (data.softPosAccount !== undefined) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
 
+    // 2. Sync Categories
     if (data.categories) {
       for (const cat of data.categories) {
         const { id, ...catWithoutId } = cat;
@@ -613,6 +624,7 @@ export const applyInventoryUpdate = async (data: any) => {
       }
     }
 
+    // 3. Sync Inventory
     if (data.inventory) {
       for (const item of data.inventory) {
         const { id, stock, ...itemData } = item;
@@ -636,7 +648,40 @@ export const applyInventoryUpdate = async (data: any) => {
         }
       }
     }
+
+    // 4. Sync Staff Users & Enforce Access
+    if (data.staffUsers) {
+      // Find current user's local record before wipe
+      let currentLocalStaff = null;
+      if (currentStaffName) {
+        currentLocalStaff = await db.users.where('name').equals(currentStaffName).first();
+      }
+
+      // Clear local staff (preserve Admin)
+      await db.users.where('role').equals('Staff').delete();
+      
+      // Re-add incoming staff
+      for (const staff of data.staffUsers) {
+        const { id, ...staffData } = staff;
+        await db.users.add(staffData);
+      }
+
+      // Check if current user still exists and if credentials changed
+      if (currentStaffName) {
+        const updatedStaffRecord = data.staffUsers.find((u: any) => u.name === currentStaffName);
+        if (!updatedStaffRecord || (currentLocalStaff && currentLocalStaff.pin !== updatedStaffRecord.pin)) {
+          shouldLogout = true;
+        }
+      }
+    }
   });
+
+  if (shouldLogout) {
+    alert("Security Update: Your Boss has updated your profile or removed your access. Please log in again.");
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('logged_in_staff_name');
+    window.location.reload();
+  }
 
   localStorage.setItem('last_inventory_sync', Date.now().toString());
   return { added, updated };

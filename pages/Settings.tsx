@@ -16,7 +16,7 @@ import {
   Moon, Sun, X, Send, Landmark, Save,
   History, FileText, Wallet, Receipt, LogOut, Tag,
   CreditCard, CheckCircle2, Download, Package, Users, Zap,
-  Smartphone, HelpCircle, MessageCircle, ChevronRight, Globe, MapPin, Phone
+  Smartphone, HelpCircle, MessageCircle, ChevronRight, Globe, MapPin, Phone, Edit3
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
@@ -48,6 +48,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
 
   // UI States
   const [showAddUser, setShowAddUser] = useState(false);
+  const [editingUser, setEditingUser] = useState<DBUser | null>(null);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
@@ -188,7 +189,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       const resetStock = confirm("Do you want to force staff stock levels to match yours exactly?\n\nSelect NO to only update prices and item names.");
       await pushInventoryUpdateToStaff(resetStock);
       localStorage.setItem('last_inventory_sync', Date.now().toString());
-      alert("Inventory update shared successfully!");
+      alert("Inventory and Staff profiles shared successfully!");
     } catch (err) {
       alert("Push failed: " + (err as Error).message);
     } finally {
@@ -228,6 +229,22 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     await db.users.add({ ...newUser });
     setNewUser({ name: '', pin: '', role: 'Staff' });
     setShowAddUser(false);
+  };
+
+  const handleEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser || !editingUser.name || editingUser.pin.length !== 4) return;
+    await db.users.update(editingUser.id!, { 
+      name: editingUser.name,
+      pin: editingUser.pin
+    });
+    alert("Staff profile updated locally. Push to Staff to sync!");
+    setEditingUser(null);
+  };
+
+  const handleDeleteUser = async (id: string | number) => {
+    if (!confirm("Remove this staff member? They will lose access after your next Push update.")) return;
+    await db.users.delete(id);
   };
 
   return (
@@ -465,7 +482,15 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
                     </div>
                     <div><p className="text-sm font-black text-slate-800 dark:text-emerald-50">{u.name}</p><p className="text-[9px] font-bold text-slate-400 uppercase">{u.role}</p></div>
                   </div>
-                  {u.role === 'Staff' && <button onClick={() => generateStaffInviteKey(u)} className="p-2 text-emerald-500 active:scale-90 transition-all"><Share2 size={16}/></button>}
+                  <div className="flex gap-1">
+                    {u.role === 'Staff' && (
+                      <>
+                        <button onClick={() => setEditingUser(u)} className="p-2 text-slate-400 hover:text-emerald-500 active:scale-90 transition-all"><Edit3 size={16}/></button>
+                        <button onClick={() => generateStaffInviteKey(u)} className="p-2 text-emerald-500 active:scale-90 transition-all"><Share2 size={16}/></button>
+                        <button onClick={() => u.id && handleDeleteUser(u.id)} className="p-2 text-red-300 hover:text-red-500 active:scale-90 transition-all"><Trash2 size={16}/></button>
+                      </>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -482,9 +507,32 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
                 <button onClick={() => setShowAddUser(false)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400"><X size={20}/></button>
              </div>
              <form onSubmit={handleAddUser} className="space-y-4">
-                <input required type="text" placeholder="Full Name" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
-                <input required type="password" maxLength={4} pattern="\d{4}" placeholder="4-Digit PIN" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold text-center text-xl tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none" value={newUser.pin} onChange={e => setNewUser({...newUser, pin: e.target.value})} />
+                <input required type="text" placeholder="Full Name" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold focus:ring-2 focus:ring-emerald-500 outline-none dark:text-white" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
+                <input required type="password" maxLength={4} pattern="\d{4}" placeholder="4-Digit PIN" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold text-center text-xl tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none dark:text-white" value={newUser.pin} onChange={e => setNewUser({...newUser, pin: e.target.value})} />
                 <button type="submit" className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg">Save Staff Account</button>
+             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Edit Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[40px] p-8 shadow-2xl animate-in zoom-in duration-300">
+             <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-black uppercase italic tracking-tight">Edit Staff</h2>
+                <button onClick={() => setEditingUser(null)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400"><X size={20}/></button>
+             </div>
+             <form onSubmit={handleEditUser} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Name</label>
+                  <input required type="text" placeholder="Full Name" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold focus:ring-2 focus:ring-emerald-500 outline-none dark:text-white" value={editingUser.name} onChange={e => setEditingUser({...editingUser, name: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-black text-slate-400 uppercase ml-2">New 4-Digit PIN</label>
+                  <input required type="password" maxLength={4} pattern="\d{4}" placeholder="****" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold text-center text-xl tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none dark:text-white" value={editingUser.pin} onChange={e => setEditingUser({...editingUser, pin: e.target.value})} />
+                </div>
+                <button type="submit" className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg">Update Profile</button>
              </form>
           </div>
         </div>

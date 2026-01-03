@@ -50,6 +50,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
   const handleLogin = () => {
     const combinedPin = pinArr.join('');
     if (selectedUser && selectedUser.pin === combinedPin) {
+      if (selectedUser.role === 'Staff') {
+        localStorage.setItem('logged_in_staff_name', selectedUser.name);
+      } else {
+        localStorage.removeItem('logged_in_staff_name');
+      }
       onLogin(selectedUser);
     } else {
       setError('Incorrect PIN');
@@ -95,8 +100,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
         // 3. Clear existing session if any
         localStorage.removeItem('isAuthenticated');
         localStorage.removeItem('temp_otp');
+        localStorage.removeItem('logged_in_staff_name');
         
-        // 4. Force Redirect to /app for a clean switchboard check
+        // 4. Force Redirect to /app for a clean state reset
         alert("✅ Security Reset Verified! You will now be taken to set your new private PIN.");
         window.location.href = '/app';
       } else {
