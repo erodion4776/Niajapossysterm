@@ -2,23 +2,24 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, User as DBUser } from '../db.ts';
+import pako from 'pako';
 import { 
   backupToWhatsApp, 
   generateStaffInviteKey, 
   pushInventoryUpdateToStaff,
+  reconcileStaffSales,
   formatNaira
 } from '../utils/whatsapp.ts';
 import { 
-  CloudUpload, User as UserIcon, Store, Smartphone, Plus, Trash2, 
-  Database, ShieldCheck, Share2, RefreshCw, ChevronRight, Loader2,
-  Moon, Sun, Key, Users, X, Send, Printer, Bluetooth, ShieldAlert,
-  History, FileText, Wallet, Receipt, LogOut, Landmark, Tag, Save,
-  MapPin, Phone, Info, Globe, CreditCard
+  CloudUpload, User as UserIcon, Store, Plus, Trash2, 
+  Database, ShieldCheck, Share2, RefreshCw, Loader2,
+  Moon, Sun, X, Send, Landmark, Save,
+  History, FileText, Wallet, Receipt, LogOut, Tag,
+  CreditCard, CheckCircle2, Download, Package, Users
 } from 'lucide-react';
 import { Role, Page } from '../types.ts';
 import { BackupSuccessModal } from '../components/BackupSuccessModal.tsx';
 import { useTheme } from '../ThemeContext.tsx';
-import { connectBluetoothPrinter, isPrinterReady } from '../utils/bluetoothPrinter.ts';
 
 interface SettingsProps {
   user: DBUser;
@@ -31,12 +32,12 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const isAdmin = role === 'Admin';
   const { theme, toggleTheme } = useTheme();
   
-  // SECTION 1: Shop Profile State
+  // Section 1: Shop Profile
   const [shopName, setShopName] = useState(() => localStorage.getItem('shop_name') || 'NaijaShop');
   const [shopInfo, setShopInfo] = useState(() => localStorage.getItem('shop_info') || '');
   const [receiptFooter, setReceiptFooter] = useState(() => localStorage.getItem('receipt_footer') || 'Thank you for your patronage!');
 
-  // SECTION 2: Soft POS State
+  // Section 2: Soft POS
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
@@ -45,10 +46,12 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const [showAddUser, setShowAddUser] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const [showBackupSuccess, setShowBackupSuccess] = useState(false);
   const [backupFileName, setBackupFileName] = useState('');
   const [newUser, setNewUser] = useState({ name: '', pin: '', role: 'Staff' as Role });
 
+  const reconcileInputRef = useRef<HTMLInputElement>(null);
   const users = useLiveQuery(() => db.users.toArray());
 
   useEffect(() => {
@@ -81,6 +84,60 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     alert("Soft POS Configuration Saved!");
   };
 
+  const handleImportStaffSales = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsReconciling(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const result = event.target?.result;
+        if (!result) throw new Error("File empty");
+        
+        let jsonData;
+        if (file.name.endsWith('.gz')) {
+          const decompressed = pako.ungzip(new Uint8Array(result as ArrayBuffer), { to: 'string' });
+          jsonData = JSON.parse(decompressed);
+        } else {
+          jsonData = JSON.parse(new TextDecoder().decode(result as ArrayBuffer));
+        }
+
+        if (jsonData.type !== 'STAFF_REPORT') {
+          throw new Error("Invalid report file. Must be a staff sales report.");
+        }
+
+        const report = await reconcileStaffSales(jsonData, user.name || 'Boss');
+        alert(`Reconciliation Complete!\nMerged: ${report.merged} Sales\nAdded: ${report.debtsAdded} Debts\nSynced: ${report.walletsSynced} Wallets`);
+      } catch (err) {
+        alert("Import failed: " + (err as Error).message);
+      } finally {
+        setIsReconciling(false);
+        if (reconcileInputRef.current) reconcileInputRef.current.value = '';
+      }
+    };
+
+    if (file.name.endsWith('.gz')) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
+  };
+
+  const handlePushUpdateToStaff = async () => {
+    setIsUpdatingInventory(true);
+    try {
+      const resetStock = confirm("Do you want to force staff stock levels to match yours exactly?\n\nSelect NO to only update prices and item names.");
+      await pushInventoryUpdateToStaff(resetStock);
+      localStorage.setItem('last_inventory_sync', Date.now().toString());
+      alert("Inventory update shared successfully!");
+    } catch (err) {
+      alert("Push failed: " + (err as Error).message);
+    } finally {
+      setIsUpdatingInventory(false);
+    }
+  };
+
   const handleBackup = async () => {
     setIsBackingUp(true);
     try {
@@ -107,20 +164,6 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     }
   };
 
-  const handlePushUpdateToStaff = async () => {
-    setIsUpdatingInventory(true);
-    try {
-      const resetStock = confirm("Do you want to force staff stock levels to match yours exactly? (Select NO to only update prices and items).");
-      await pushInventoryUpdateToStaff(resetStock);
-      localStorage.setItem('last_inventory_sync', Date.now().toString());
-      alert("Inventory update shared successfully!");
-    } catch (err) {
-      alert("Push failed: " + (err as Error).message);
-    } finally {
-      setIsUpdatingInventory(false);
-    }
-  };
-
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUser.name || newUser.pin.length !== 4) return;
@@ -136,7 +179,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
       <header className="flex justify-between items-center sticky top-0 bg-slate-50 dark:bg-emerald-950 py-2 z-10 transition-colors">
         <div>
           <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Admin</h1>
-          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Shop Master Control</p>
+          <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Master Control Panel</p>
         </div>
         <div className="flex gap-2">
           <button onClick={toggleTheme} className="p-3 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl shadow-sm text-emerald-600 active:scale-90 transition-all">
@@ -158,15 +201,15 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Business Name</label>
-              <input type="text" value={shopName} onChange={(e) => setShopName(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
+              <input type="text" value={shopName} onChange={(e) => setShopName(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Physical Address / Info</label>
-              <input type="text" value={shopInfo} onChange={(e) => setShopInfo(e.target.value)} placeholder="e.g. Shop 24, Main Market" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
+              <input type="text" value={shopInfo} onChange={(e) => setShopInfo(e.target.value)} placeholder="e.g. Shop 24, Main Market" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Receipt Footer</label>
-              <input type="text" value={receiptFooter} onChange={(e) => setReceiptFooter(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-500" />
+              <input type="text" value={receiptFooter} onChange={(e) => setReceiptFooter(e.target.value)} className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
             </div>
             <button onClick={saveShopProfile} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-100">
               <Save size={16}/> Save Branding
@@ -185,15 +228,15 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Bank Name</label>
-              <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. OPay / GTBank" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. OPay / GTBank" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Account Number</label>
-              <input type="number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Enter 10 digits" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Enter 10 digits" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
             </div>
             <div className="space-y-1">
               <label className="text-[8px] font-black text-slate-400 uppercase ml-2">Account Name</label>
-              <input type="text" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="As seen in bank app" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="text" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="As seen in bank app" className="w-full p-3.5 bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl text-sm font-bold dark:text-emerald-50 outline-none" />
             </div>
             <button onClick={saveBankDetails} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-lg shadow-blue-100">
               <ShieldCheck size={16}/> Activate Soft POS
@@ -227,41 +270,47 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         </div>
       </section>
 
-      {/* SECTION 4: DATA & SYNC */}
+      {/* SECTION 4: DAILY RECONCILIATION */}
+      {isAdmin && (
+        <section className="bg-emerald-950 p-7 rounded-[40px] shadow-2xl relative overflow-hidden border-2 border-emerald-500/20 space-y-6">
+          <div className="relative z-10 flex flex-col gap-1">
+             <h2 className="text-xl font-black text-emerald-400 italic uppercase tracking-tighter">Daily Reconciliation</h2>
+             <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest">Link your staff devices to your ledger</p>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-3 relative z-10">
+             <label className="w-full bg-white text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all cursor-pointer shadow-lg">
+                <input type="file" ref={reconcileInputRef} className="hidden" accept=".json,.gz" onChange={handleImportStaffSales} />
+                {isReconciling ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 1. Import Staff Sales
+             </label>
+             
+             <button onClick={handlePushUpdateToStaff} disabled={isUpdatingInventory} className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-xl">
+                {isUpdatingInventory ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} 2. Send Master Stock to Staff
+             </button>
+          </div>
+          <div className="absolute top-0 right-0 p-8 opacity-5 text-white pointer-events-none"><RefreshCw size={120} /></div>
+        </section>
+      )}
+
+      {/* SECTION 5: DATA SAFETY & STAFF */}
       <section className="space-y-6">
         <div className="flex items-center gap-2 px-2">
-          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data & Sync</h2>
-        </div>
-
-        <div className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
-          <div className="flex items-center gap-3">
-            <RefreshCw size={16} className="text-emerald-600" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-800 dark:text-emerald-100">Inventory Sync</span>
-          </div>
-          {isAdmin ? (
-            <button onClick={handlePushUpdateToStaff} disabled={isUpdatingInventory} className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 shadow-lg shadow-emerald-100">
-              {isUpdatingInventory ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>} Push Update to Staff
-            </button>
-          ) : (
-            <div className="bg-slate-50 dark:bg-emerald-950 p-4 rounded-2xl text-center">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Only Shop Boss can push updates.</p>
-            </div>
-          )}
+          <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">System & Team</h2>
         </div>
 
         {isAdmin && (
           <div className="bg-white dark:bg-emerald-900/40 border border-slate-50 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
             <div className="flex items-center gap-3">
               <Database size={16} className="text-emerald-600" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800 dark:text-emerald-100">Business Backup</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800 dark:text-emerald-100">Backup & Recovery</span>
             </div>
             <div className="grid grid-cols-1 gap-3">
                <button onClick={handleBackup} disabled={isBackingUp} className="w-full bg-slate-900 dark:bg-emerald-800 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] active:scale-95 shadow-lg">
-                 {isBackingUp ? <Loader2 size={18} className="animate-spin"/> : <CloudUpload size={18}/>} Export To Phone
+                 {isBackingUp ? <Loader2 size={18} className="animate-spin"/> : <CloudUpload size={18}/>} Full Export to Phone
                </button>
                <label className="w-full bg-white dark:bg-emerald-950 border-2 border-emerald-100 dark:border-emerald-800 text-emerald-600 font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] cursor-pointer active:scale-95">
                   <input type="file" className="hidden" accept=".json,.gz" onChange={() => {}} />
-                  <Database size={18}/> Restore From File
+                  <Database size={18}/> Restore Master Backup
                </label>
             </div>
           </div>
@@ -302,8 +351,8 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
                 <button onClick={() => setShowAddUser(false)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400"><X size={20}/></button>
              </div>
              <form onSubmit={handleAddUser} className="space-y-4">
-                <input required type="text" placeholder="Full Name" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
-                <input required type="password" maxLength={4} pattern="\d{4}" placeholder="4-Digit PIN" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold text-center text-xl tracking-widest" value={newUser.pin} onChange={e => setNewUser({...newUser, pin: e.target.value})} />
+                <input required type="text" placeholder="Full Name" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold focus:ring-2 focus:ring-emerald-500 outline-none" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
+                <input required type="password" maxLength={4} pattern="\d{4}" placeholder="4-Digit PIN" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold text-center text-xl tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none" value={newUser.pin} onChange={e => setNewUser({...newUser, pin: e.target.value})} />
                 <button type="submit" className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg">Save Staff Account</button>
              </form>
           </div>
