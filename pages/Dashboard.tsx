@@ -1,12 +1,12 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
-import { formatNaira, applyInventoryUpdate } from '../utils/whatsapp.ts';
+import { formatNaira } from '../utils/whatsapp.ts';
 import { 
   ShoppingCart, Package, TrendingUp, History, Calendar as CalendarIcon, 
   ChevronRight, RefreshCw, Landmark, Banknote, BookOpen, Gem, Coins, 
-  Gem as GemIcon, Wallet, X, Check, Info, Loader2
+  Wallet, X, Check, Info, Loader2, AlertTriangle, ShieldAlert
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -45,25 +45,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const salesInRange = useLiveQuery(() => db.sales.where('timestamp').between(dateRange.start, dateRange.end).toArray(), [dateRange]);
   const expensesInRange = useLiveQuery(() => db.expenses.where('date').between(dateRange.start, dateRange.end).toArray(), [dateRange]);
 
-  // STRICT PROFIT FORMULA
   const financialStats = useMemo(() => {
     if (!salesInRange || !expensesInRange) return { revenue: 0, costOfGoods: 0, expenses: 0, netProfit: 0 };
-    
     const revenue = salesInRange.reduce((sum, s) => sum + Number(s.total || 0), 0);
     const expenses = expensesInRange.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-    
-    // COGS: sum of (historical_cost_at_sale_time * quantity)
     const costOfGoods = salesInRange.reduce((acc, sale) => {
       const saleCogs = sale.items.reduce((iSum, item) => iSum + (Number(item.costPrice || 0) * item.quantity), 0);
       return acc + saleCogs;
     }, 0);
-
     const netProfit = revenue - costOfGoods - expenses;
     return { revenue, costOfGoods, expenses, netProfit };
   }, [salesInRange, expensesInRange]);
 
   const totalMoneyOutside = useMemo(() => debts?.filter(d => d.status === 'Unpaid').reduce((sum, d) => sum + Number(d.remainingBalance || 0), 0) || 0, [debts]);
   const storeNetWorth = useMemo(() => inventory?.reduce((sum, item) => sum + (Number(item.costPrice || 0) * Number(item.stock || 0)), 0) || 0, [inventory]);
+
+  // Intelligence Alerts
+  const alerts = useMemo(() => {
+    if (!inventory) return { lowStock: 0, expiring: 0 };
+    const weekOut = new Date(); weekOut.setDate(weekOut.getDate() + 7);
+    return {
+      lowStock: inventory.filter(i => i.stock <= (i.minStock || 5)).length,
+      expiring: inventory.filter(i => i.expiryDate && new Date(i.expiryDate) <= weekOut).length
+    };
+  }, [inventory]);
 
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
@@ -76,6 +81,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
           <CalendarIcon size={20} /><span className="text-[10px] font-black uppercase">{datePreset}</span>
         </button>
       </header>
+
+      {/* CRITICAL ALERTS */}
+      {(alerts.lowStock > 0 || alerts.expiring > 0) && (
+        <section className="bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 p-4 rounded-[32px] flex items-center gap-4 animate-pulse">
+           <div className="bg-red-500 text-white p-3 rounded-2xl shadow-lg shadow-red-200 dark:shadow-none"><ShieldAlert size={24}/></div>
+           <div className="flex-1">
+              <p className="text-[10px] font-black text-red-500 uppercase tracking-widest leading-none mb-1">Attention Required</p>
+              <h4 className="text-xs font-black text-red-900 dark:text-red-100 leading-tight">
+                {alerts.lowStock > 0 && `${alerts.lowStock} Items Low`}
+                {alerts.lowStock > 0 && alerts.expiring > 0 && ' | '}
+                {alerts.expiring > 0 && `${alerts.expiring} Expiring Soon`}
+              </h4>
+           </div>
+           <button onClick={() => onInventoryFilter('low-stock')} className="p-2 bg-white dark:bg-red-900 rounded-xl text-red-500"><ChevronRight size={18}/></button>
+        </section>
+      )}
 
       {/* PROFIT SECTION */}
       <section className="bg-emerald-600 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
@@ -91,7 +112,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
           </h2>
           
           {showProfitInfo && isAdmin && (
-            <div className="mt-4 bg-emerald-900/50 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-[10px] font-bold uppercase space-y-2">
+            <div className="mt-4 bg-emerald-900/50 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-[10px] font-bold uppercase space-y-2 animate-in slide-in-from-top-2 duration-300">
               <div className="flex justify-between"><span>Revenue:</span><span>{formatNaira(financialStats.revenue)}</span></div>
               <div className="flex justify-between text-red-300"><span>- Stock Cost:</span><span>{formatNaira(financialStats.costOfGoods)}</span></div>
               <div className="flex justify-between text-red-300"><span>- Expenses:</span><span>{formatNaira(financialStats.expenses)}</span></div>
@@ -103,21 +124,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
       {/* Financial Overview Tiles */}
       {isAdmin && (
-        <div className="grid grid-cols-3 gap-2">
-           <div className="bg-white dark:bg-emerald-900/40 p-3 rounded-[24px] text-center shadow-sm">
-              <Banknote size={14} className="text-emerald-500 mx-auto mb-1" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
+              <Banknote size={16} className="text-emerald-500 mx-auto mb-1" />
               <p className="text-[7px] font-black text-slate-400 uppercase">Revenue</p>
-              <p className="text-[10px] font-black text-emerald-600">{formatNaira(financialStats.revenue)}</p>
+              <p className="text-[10px] font-black text-emerald-600 truncate">{formatNaira(financialStats.revenue)}</p>
            </div>
-           <div className="bg-white dark:bg-emerald-900/40 p-3 rounded-[24px] text-center shadow-sm">
-              <BookOpen size={14} className="text-red-500 mx-auto mb-1" />
+           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
+              <BookOpen size={16} className="text-red-500 mx-auto mb-1" />
               <p className="text-[7px] font-black text-slate-400 uppercase">Debts</p>
-              <p className="text-[10px] font-black text-red-500">{formatNaira(totalMoneyOutside)}</p>
+              <p className="text-[10px] font-black text-red-500 truncate">{formatNaira(totalMoneyOutside)}</p>
            </div>
-           <div className="bg-white dark:bg-emerald-900/40 p-3 rounded-[24px] text-center shadow-sm">
-              <Gem size={14} className="text-blue-500 mx-auto mb-1" />
+           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
+              <History size={16} className="text-amber-500 mx-auto mb-1" />
+              <p className="text-[7px] font-black text-slate-400 uppercase">Expenses</p>
+              <p className="text-[10px] font-black text-amber-500 truncate">{formatNaira(financialStats.expenses)}</p>
+           </div>
+           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
+              <Gem size={16} className="text-blue-500 mx-auto mb-1" />
               <p className="text-[7px] font-black text-slate-400 uppercase">Stock Val</p>
-              <p className="text-[10px] font-black text-blue-600">{formatNaira(storeNetWorth)}</p>
+              <p className="text-[10px] font-black text-blue-600 truncate">{formatNaira(storeNetWorth)}</p>
            </div>
         </div>
       )}
@@ -132,7 +158,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
           <button onClick={() => setPage(Page.SALES)} className="text-[9px] font-black text-emerald-600 uppercase">View All</button>
         </div>
         <div className="space-y-3">
-          {salesInRange?.slice(-3).reverse().map(sale => (
+          {salesInRange?.length === 0 ? (
+            <div className="py-6 text-center opacity-30 text-[10px] font-black uppercase tracking-widest">No sales yet for {datePreset}</div>
+          ) : salesInRange?.slice(-3).reverse().map(sale => (
             <div key={sale.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-800/20 rounded-2xl">
               <div>
                 <p className="text-xs font-black text-slate-800 dark:text-emerald-100">#{String(sale.id).slice(-4)}</p>
