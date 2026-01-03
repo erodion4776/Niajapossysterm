@@ -199,7 +199,7 @@ const AppContent: React.FC = () => {
       }
     };
 
-    // Tabs that are considered "Primary" and should highlight their icon
+    // Primary Active Indicators
     const isDashboardActive = currentPage === Page.DASHBOARD;
     const isPosActive = currentPage === Page.POS;
     const isInventoryActive = currentPage === Page.INVENTORY;
@@ -225,7 +225,7 @@ const AppContent: React.FC = () => {
               <BookOpen size={20} /><span className="text-[7px] font-black mt-1 uppercase">Debts</span>
             </button>
             <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-1 p-2 rounded-xl transition-all ${isAdminActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <Menu size={20} /><span className="text-[7px] font-black mt-1 uppercase">Admin</span>
+              <SettingsIcon size={20} /><span className="text-[7px] font-black mt-1 uppercase">Admin</span>
             </button>
           </nav>
         )}
