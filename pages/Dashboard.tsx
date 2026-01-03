@@ -74,7 +74,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Home</h1>
+          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase">NaijaShop</h1>
           <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">{isAdmin ? 'Shop Overview' : 'Staff Terminal'}</p>
         </div>
         <button onClick={() => setShowDateModal(true)} className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-2.5 rounded-2xl text-emerald-600 shadow-sm flex items-center gap-2">
@@ -82,12 +82,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </button>
       </header>
 
-      {/* CRITICAL ALERTS */}
+      {/* CRITICAL ALERTS - PULSING INTELLIGENCE */}
       {(alerts.lowStock > 0 || alerts.expiring > 0) && (
         <section className="bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 p-4 rounded-[32px] flex items-center gap-4 animate-pulse">
            <div className="bg-red-500 text-white p-3 rounded-2xl shadow-lg shadow-red-200 dark:shadow-none"><ShieldAlert size={24}/></div>
            <div className="flex-1">
-              <p className="text-[10px] font-black text-red-500 uppercase tracking-widest leading-none mb-1">Attention Required</p>
+              <p className="text-[10px] font-black text-red-500 uppercase tracking-widest leading-none mb-1">Critical Alerts</p>
               <h4 className="text-xs font-black text-red-900 dark:text-red-100 leading-tight">
                 {alerts.lowStock > 0 && `${alerts.lowStock} Items Low`}
                 {alerts.lowStock > 0 && alerts.expiring > 0 && ' | '}
@@ -113,34 +113,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
           
           {showProfitInfo && isAdmin && (
             <div className="mt-4 bg-emerald-900/50 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-[10px] font-bold uppercase space-y-2 animate-in slide-in-from-top-2 duration-300">
-              <div className="flex justify-between"><span>Revenue:</span><span>{formatNaira(financialStats.revenue)}</span></div>
+              <div className="flex justify-between"><span>Gross Revenue:</span><span>{formatNaira(financialStats.revenue)}</span></div>
               <div className="flex justify-between text-red-300"><span>- Stock Cost:</span><span>{formatNaira(financialStats.costOfGoods)}</span></div>
-              <div className="flex justify-between text-red-300"><span>- Expenses:</span><span>{formatNaira(financialStats.expenses)}</span></div>
+              <div className="flex justify-between text-red-300"><span>- Overheads:</span><span>{formatNaira(financialStats.expenses)}</span></div>
             </div>
           )}
         </div>
         <TrendingUp className="absolute -right-4 -bottom-4 opacity-10" size={140} />
       </section>
 
-      {/* Financial Overview Tiles */}
+      {/* INTELLIGENCE TILES (REVENUE, DEBTS, EXPENSES, STOCK) */}
       {isAdmin && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
+           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all">
               <Banknote size={16} className="text-emerald-500 mx-auto mb-1" />
               <p className="text-[7px] font-black text-slate-400 uppercase">Revenue</p>
               <p className="text-[10px] font-black text-emerald-600 truncate">{formatNaira(financialStats.revenue)}</p>
            </div>
-           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
+           <div onClick={() => setPage(Page.DEBTS)} className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all cursor-pointer">
               <BookOpen size={16} className="text-red-500 mx-auto mb-1" />
               <p className="text-[7px] font-black text-slate-400 uppercase">Debts</p>
               <p className="text-[10px] font-black text-red-500 truncate">{formatNaira(totalMoneyOutside)}</p>
            </div>
-           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
+           <div onClick={() => setPage(Page.EXPENSES)} className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all cursor-pointer">
               <History size={16} className="text-amber-500 mx-auto mb-1" />
               <p className="text-[7px] font-black text-slate-400 uppercase">Expenses</p>
               <p className="text-[10px] font-black text-amber-500 truncate">{formatNaira(financialStats.expenses)}</p>
            </div>
-           <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
+           <div onClick={() => setPage(Page.INVENTORY)} className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all cursor-pointer">
               <Gem size={16} className="text-blue-500 mx-auto mb-1" />
               <p className="text-[7px] font-black text-slate-400 uppercase">Stock Val</p>
               <p className="text-[10px] font-black text-blue-600 truncate">{formatNaira(storeNetWorth)}</p>
@@ -148,7 +148,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </div>
       )}
 
-      {/* Sales History */}
+      {/* RECENT SALES */}
       <section className="bg-white dark:bg-emerald-900/40 p-6 rounded-[32px] border border-slate-100 dark:border-emerald-800/40 shadow-sm space-y-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">

@@ -33,10 +33,12 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const [isCartExpanded, setIsCartExpanded] = useState(false);
   
   // Last Sync Status
-  const lastSyncTs = localStorage.getItem('last_inventory_sync');
-  const lastSyncText = lastSyncTs 
-    ? new Date(parseInt(lastSyncTs)).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })
-    : 'Never';
+  const [lastSyncTs, setLastSyncTs] = useState(() => localStorage.getItem('last_inventory_sync'));
+  
+  const lastSyncText = useMemo(() => {
+    if (!lastSyncTs) return 'Never';
+    return new Date(parseInt(lastSyncTs)).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' });
+  }, [lastSyncTs]);
 
   // Parked Orders States
   const [showParkedList, setShowParkedList] = useState(false);
@@ -65,6 +67,15 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const [isScanning, setIsScanning] = useState(false);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = "reader";
+
+  useEffect(() => {
+    const checkSync = () => {
+      const ts = localStorage.getItem('last_inventory_sync');
+      if (ts !== lastSyncTs) setLastSyncTs(ts);
+    };
+    const interval = setInterval(checkSync, 1000);
+    return () => clearInterval(interval);
+  }, [lastSyncTs]);
 
   const filteredItems = useMemo(() => {
     if (!inventory) return [];
@@ -357,10 +368,8 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
 
         const sale: Sale = {
           uuid: crypto.randomUUID(),
-          // Store items including their individual costPrice at this moment
           items: cart.map(({image, ...rest}) => rest), 
           total: saleTotal, 
-          // Capture total cost using current item cost prices
           totalCost: cart.reduce((sum, item) => sum + (Number(item.costPrice || 0) * item.quantity), 0),
           walletUsed: appliedFromWallet,
           walletSaved: (paymentMode === 'Debt' ? Math.max(0, Number(amountPaid || 0) - (saleTotal - appliedFromWallet)) : (saveChangeToWallet ? changeDue : 0)),
@@ -499,7 +508,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           </div>
           {/* Last Sync Visual Indicator */}
           <div className="flex items-center gap-1.5 pl-1">
-             <RefreshCw size={8} className="text-slate-400 dark:text-emerald-700" />
+             <RefreshCw size={8} className="text-slate-400 dark:text-emerald-700 animate-spin-slow" />
              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-emerald-700">
                Prices last updated: <span className="text-emerald-600 dark:text-emerald-50">{lastSyncText}</span>
              </p>
@@ -834,7 +843,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
       {/* Parked Orders Manager */}
       {showParkedList && (
         <div className="fixed inset-0 bg-black/60 z-[300] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-           <div className="bg-slate-50 dark:bg-emerald-950 w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 max-h-[85vh] flex flex-col">
+           <div className="bg-slate-50 dark:bg-emerald-950 w-full max-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300 max-h-[85vh] flex flex-col">
               <div className="flex justify-between items-center mb-8">
                  <div className="flex items-center gap-3">
                     <div className="p-2 bg-amber-100 dark:bg-amber-900 rounded-xl text-amber-600"><Pause size={20}/></div>
