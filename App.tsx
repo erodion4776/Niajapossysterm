@@ -38,7 +38,8 @@ import {
 } from 'lucide-react';
 
 const ALLOWED_DOMAINS = ['naijashop.com.ng', 'niajapos.netlify.app'];
-const TRIAL_DURATION = 3 * 24 * 60 * 60 * 1000; 
+// Updated to 14 Days
+const TRIAL_DURATION = 14 * 24 * 60 * 60 * 1000; 
 
 ReactGA.initialize("G-7Q4E8586BF");
 

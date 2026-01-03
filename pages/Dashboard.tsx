@@ -11,7 +11,8 @@ import {
   ShoppingCart, Package, TrendingUp, History, Calendar as CalendarIcon, 
   ChevronRight, Landmark, Banknote, BookOpen, Gem, 
   Info, ShieldAlert, Award, ArrowUpRight, TrendingDown,
-  Download, Send, Loader2, CheckCircle2, RefreshCw, Hand, CalendarDays, X, BarChart3
+  Download, Send, Loader2, CheckCircle2, RefreshCw, Hand, CalendarDays, X, BarChart3,
+  Gift, ExternalLink, MessageCircle
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -27,6 +28,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const isStaff = localStorage.getItem('user_role') === 'staff';
   const isStaffDevice = localStorage.getItem('device_role') === 'StaffDevice' || isStaff;
   const isAdmin = role === 'Admin' && !isStaffDevice;
+  const isActivated = localStorage.getItem('is_activated') === 'true';
   
   const [datePreset, setDatePreset] = useState<DatePreset>('today');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -36,6 +38,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const [isExporting, setIsExporting] = useState(false);
   const [selectedSaleForModal, setSelectedSaleForModal] = useState<Sale | null>(null);
   
+  // Trial Management States
+  const [showTrialPopup, setShowTrialPopup] = useState(false);
+  const [showGraceNotice, setShowGraceNotice] = useState(false);
+
   const [ownerGreeting, setOwnerGreeting] = useState('');
   const [displayShopName, setDisplayShopName] = useState('NaijaShop');
 
@@ -47,6 +53,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const allSales = useLiveQuery(() => db.sales.toArray());
   const allExpenses = useLiveQuery(() => db.expenses.toArray());
 
+  // Trial Logic
+  const trialDaysLeft = useMemo(() => {
+    if (isActivated) return 0;
+    const start = localStorage.getItem('trial_start_date');
+    if (!start) return 14;
+    const elapsed = Date.now() - parseInt(start);
+    const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+    return Math.max(0, Math.ceil((fourteenDays - elapsed) / (24 * 60 * 60 * 1000)));
+  }, [isActivated]);
+
   useEffect(() => {
     const loadIdentity = async () => {
       const sn = await db.settings.get('shop_name');
@@ -55,7 +71,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       if (on) setOwnerGreeting(on.value.split(' ')[0]); 
     };
     loadIdentity();
-  }, []);
+
+    // Proactive Grace Period Notice (2 days left)
+    if (!isActivated && trialDaysLeft <= 2) {
+      const lastShown = sessionStorage.getItem('last_grace_notice');
+      const todayStr = new Date().toDateString();
+      if (lastShown !== todayStr) {
+        setShowGraceNotice(true);
+        sessionStorage.setItem('last_grace_notice', todayStr);
+      }
+    }
+  }, [isActivated, trialDaysLeft]);
 
   const dateRange = useMemo(() => {
     const start = new Date();
@@ -167,11 +193,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     return Object.values(counts).sort((a, b) => b.qty - a.qty).slice(0, 3);
   }, [salesInRange]);
 
+  const getTrialBadgeColor = () => {
+    if (trialDaysLeft >= 7) return 'bg-emerald-50 text-emerald-600 border-emerald-200';
+    if (trialDaysLeft >= 3) return 'bg-orange-50 text-orange-600 border-orange-200';
+    return 'bg-red-50 text-red-600 border-red-200 animate-pulse';
+  };
+
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
       <header className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase truncate max-w-[180px]">{displayShopName}</h1>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase truncate max-w-[150px]">{displayShopName}</h1>
+            
+            {/* Trial Countdown Badge */}
+            {!isActivated && isAdmin && (
+              <button 
+                onClick={() => setShowTrialPopup(true)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-tighter transition-all active:scale-95 ${getTrialBadgeColor()}`}
+              >
+                <Gift size={10} /> {trialDaysLeft} Days Left
+              </button>
+            )}
+          </div>
           <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5">
             {isAdmin ? <><span className="text-emerald-600">Welcome, {ownerGreeting}!</span> <Hand size={10}/></> : 'Staff Terminal'}
           </p>
@@ -318,7 +362,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </div>
       </section>
 
-      {/* SHOP LIFETIME RECORDS (Always visible for comparison) */}
+      {/* SHOP LIFETIME RECORDS */}
       {isAdmin && (
         <section className="bg-slate-900 text-white p-7 rounded-[40px] shadow-2xl relative overflow-hidden">
            <div className="relative z-10 space-y-6">
@@ -340,6 +384,58 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
            </div>
            <BarChart3 size={160} className="absolute -right-8 -bottom-8 opacity-5 text-white" />
         </section>
+      )}
+
+      {/* TRIAL STATUS MODAL */}
+      {showTrialPopup && (
+        <div className="fixed inset-0 bg-black/60 z-[500] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[48px] p-10 text-center space-y-6 shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300">
+              <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-800 rounded-[32px] flex items-center justify-center mx-auto text-emerald-600 dark:text-emerald-400">
+                 <Gift size={40} />
+              </div>
+              <div className="space-y-2">
+                 <h2 className="text-2xl font-black uppercase italic tracking-tighter">Trial Status</h2>
+                 <p className="text-sm font-bold text-slate-500 dark:text-emerald-100/60 leading-relaxed uppercase">
+                    You have <span className="text-emerald-600 dark:text-emerald-400 font-black">{trialDaysLeft} Days</span> left to enjoy NaijaShop for free.
+                 </p>
+              </div>
+              <div className="space-y-3">
+                 <button 
+                  onClick={() => { setShowTrialPopup(false); setPage(Page.SETTINGS); }}
+                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] shadow-xl uppercase text-[10px] tracking-widest active:scale-95 flex items-center justify-center gap-2"
+                 >
+                   Activate Lifetime Access <ArrowUpRight size={14}/>
+                 </button>
+                 <button onClick={() => setShowTrialPopup(false)} className="w-full py-4 text-slate-400 font-bold uppercase text-[9px] tracking-[0.2em]">Maybe Later</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* GRACE PERIOD ONE-TIME POPUP */}
+      {showGraceNotice && (
+        <div className="fixed inset-0 bg-emerald-950 z-[600] flex flex-col items-center justify-center p-10 text-white text-center animate-in fade-in duration-500">
+           <div className="w-24 h-24 bg-red-500 rounded-[32px] flex items-center justify-center mb-8 shadow-[0_0_50px_rgba(239,68,68,0.4)] animate-bounce">
+              <ShieldAlert size={48} className="text-white" />
+           </div>
+           <h2 className="text-4xl font-black uppercase italic tracking-tighter leading-tight mb-4">Trial Ending <br/> Soon, Boss!</h2>
+           <p className="text-lg font-bold text-emerald-100/70 mb-10 leading-relaxed">
+             Your 14-day trial is almost over. Don't let your records get locked! Activate your lifetime license now to keep selling offline.
+           </p>
+           <div className="w-full space-y-4">
+              <button 
+                onClick={() => { setShowGraceNotice(false); setPage(Page.SETTINGS); }}
+                className="w-full bg-white text-emerald-950 font-black py-7 rounded-[32px] shadow-2xl uppercase tracking-widest text-sm flex items-center justify-center gap-3 active:scale-95"
+              >
+                Secure Shop Forever <ExternalLink size={18} />
+              </button>
+              <button onClick={() => setShowGraceNotice(false)} className="w-full py-4 text-emerald-500 font-black uppercase text-[10px] tracking-[0.4em]">I will pay later</button>
+           </div>
+           <div className="absolute bottom-10 opacity-30 flex items-center gap-2">
+              <MessageCircle size={14} />
+              <span className="text-[9px] font-black uppercase tracking-widest">Support: 07062228026</span>
+           </div>
+        </div>
       )}
 
       {/* DATE SELECTION MODAL */}

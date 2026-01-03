@@ -112,7 +112,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
 
         <div className="max-w-2xl mx-auto space-y-10">
           <p className="text-xl md:text-2xl font-bold text-slate-500 leading-relaxed">
-            Tired of staff stealing? Tired of slow network? Get the #1 POS made for Nigeria. 
+            Try NaijaShop for 2 full weeks. See your profit, track your staff, and grow your business before you pay a kobo. 
             <span className="text-emerald-950"> No Internet Needed. No Monthly Fees.</span>
           </p>
           
@@ -122,7 +122,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
               disabled={isPreparing}
               className="w-full sm:w-auto bg-emerald-600 text-white font-black px-12 py-7 rounded-[32px] text-xl shadow-[0_20px_50px_-10px_rgba(5,150,105,0.4)] active:scale-95 transition-all flex items-center justify-center gap-3 relative overflow-hidden group"
             >
-              Start 3-Day Free Trial <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+              Start 14-Day Risk-Free Trial <ArrowRight className="group-hover:translate-x-1 transition-transform" />
             </button>
             <button 
               onClick={() => window.open('https://wa.me/2347062228026?text=I%20want%20to%20watch%20the%20demo%20video', '_blank')}

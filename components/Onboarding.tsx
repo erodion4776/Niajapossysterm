@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../db.ts';
 import { 
@@ -112,7 +113,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const screens = [
     {
       title: "Welcome, Boss!",
-      desc: "Your shop is now digital. No more messy notebooks, no more missing cash, and zero data costs.",
+      desc: "Your shop is now digital. Enjoy 14 days of world-class management for free. No data costs, no hidden fees.",
       img: "https://i.ibb.co/m5y9NjqV/1766529834120-019b4d61-d179-7e3d-aad7-4ae5252e707b.png",
       icon: <Store className="text-emerald-400" size={32} />
     },
@@ -127,7 +128,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             <div className="flex gap-2 justify-center">
               {pinArr.map((d, i) => (
                 <input
-                  // Fix: Ensure ref callback returns void to avoid type mismatch with Ref<HTMLInputElement>
                   key={i} ref={el => { pinRefs.current[i] = el; }}
                   type="password" inputMode="numeric" maxLength={1}
                   className="w-12 h-14 bg-white/10 border border-white/20 rounded-2xl text-center text-2xl font-black text-white focus:outline-none focus:border-emerald-400 transition-all"
@@ -142,7 +142,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             <div className="flex gap-2 justify-center">
               {confirmPinArr.map((d, i) => (
                 <input
-                  // Fix: Ensure ref callback returns void to avoid type mismatch with Ref<HTMLInputElement>
                   key={i} ref={el => { confirmRefs.current[i] = el; }}
                   type="password" inputMode="numeric" maxLength={1}
                   className="w-12 h-14 bg-white/10 border border-white/20 rounded-2xl text-center text-2xl font-black text-white focus:outline-none focus:border-emerald-400 transition-all"
@@ -180,7 +179,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     },
     {
       title: "Start Selling",
-      desc: "Everything is set! Tap 'Open My Shop' to start stocking products. Remember: No data needed!",
+      desc: "Everything is set! Tap 'Open My Shop' to start your 14-day risk-free trial. Remember: No data needed!",
       img: "https://i.ibb.co/XxDDvb3k/gemini-3-pro-image-preview-nano-banana-pro-a-A-high-quality-3-D-is.png",
       icon: <Package className="text-emerald-400" size={32} />
     }
