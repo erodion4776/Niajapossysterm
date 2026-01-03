@@ -6,7 +6,9 @@ import { decodeShopKey } from '../utils/whatsapp.ts';
 import { getRequestCode, verifyResetKey } from '../utils/security.ts';
 import { 
   User as UserIcon, Key, ArrowRight, Smartphone, 
-  ShieldCheck, X, RefreshCw, AlertCircle, MessageCircle, Copy, Check, ShieldAlert, UserCircle
+  // Added Loader2 to the lucide-react imports to fix the error on line 247
+  ShieldCheck, X, RefreshCw, AlertCircle, MessageCircle, Copy, Check, ShieldAlert, UserCircle,
+  Lock, HelpCircle, ChevronRight, Loader2
 } from 'lucide-react';
 import { DeviceRole } from '../types.ts';
 
@@ -26,6 +28,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
   const [requestCode, setRequestCode] = useState('');
   const [isCopied, setIsCopied] = useState(false);
   const [recoveryError, setRecoveryError] = useState('');
+  const [isVerifyingReset, setIsVerifyingReset] = useState(false);
 
   const [showImport, setShowImport] = useState(false);
   const [importKey, setImportKey] = useState('');
@@ -68,6 +71,42 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key === 'Backspace' && !pinArr[index] && index > 0) pinRefs.current[index - 1]?.focus();
     if (e.key === 'Enter' && pinArr.join('').length === 4) handleLogin();
+  };
+
+  const copyRequestCode = () => {
+    navigator.clipboard.writeText(requestCode);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleResetVerification = async () => {
+    if (!resetKeyInput || isVerifyingReset) return;
+    setIsVerifyingReset(true);
+    setRecoveryError('');
+
+    try {
+      const isValid = await verifyResetKey(requestCode, resetKeyInput);
+      if (isValid) {
+        // 1. Wipe Admin PIN from DB
+        await db.users.where('role').equals('Admin').modify({ pin: '' });
+        
+        // 2. Set Setup State to Pending
+        localStorage.setItem('is_setup_pending', 'true');
+        
+        // 3. Optional: Clear specific local flags
+        localStorage.removeItem('temp_otp');
+        
+        // 4. Force Reload
+        alert("✅ Security Reset Verified! You will now be taken to the PIN setup screen.");
+        window.location.reload();
+      } else {
+        setRecoveryError('Invalid Reset Key. Please contact support.');
+      }
+    } catch (err) {
+      setRecoveryError('System error during verification.');
+    } finally {
+      setIsVerifyingReset(false);
+    }
   };
 
   if (showImport) {
@@ -125,17 +164,110 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, deviceRole })
                <p className="text-emerald-500/50 text-[10px] font-black uppercase mt-3 tracking-widest">Enter {selectedUser.role} PIN</p>
             </div>
             
-            <div className="flex gap-2 justify-center mb-8">
-              {pinArr.map((digit, idx) => (
-                <input key={idx} ref={el => { pinRefs.current[idx] = el; }} type="password" inputMode="numeric" maxLength={1} className="w-12 h-14 bg-emerald-900/30 border border-emerald-800/60 rounded-xl text-center text-xl font-black" value={digit} onChange={e => handleInputChange(e.target.value, idx)} onKeyDown={e => handleKeyDown(e, idx)} autoFocus={idx === 0} />
-              ))}
+            <div className="flex flex-col items-center gap-6">
+              <div className="flex gap-2 justify-center">
+                {pinArr.map((digit, idx) => (
+                  <input key={idx} ref={el => { pinRefs.current[idx] = el; }} type="password" inputMode="numeric" maxLength={1} className="w-12 h-14 bg-emerald-900/30 border border-emerald-800/60 rounded-xl text-center text-xl font-black" value={digit} onChange={e => handleInputChange(e.target.value, idx)} onKeyDown={e => handleKeyDown(e, idx)} autoFocus={idx === 0} />
+                ))}
+              </div>
+
+              <button onClick={handleLogin} className="w-full bg-white text-emerald-950 font-black py-6 px-12 rounded-[32px] shadow-2xl uppercase tracking-widest text-sm">Unlock Terminal</button>
+              
+              {selectedUser.role === 'Admin' && (
+                <button 
+                  onClick={() => setShowForgotPin(true)}
+                  className="text-[10px] font-bold text-emerald-500/60 uppercase tracking-widest hover:text-emerald-400 transition-colors"
+                >
+                  Forgot Admin PIN?
+                </button>
+              )}
             </div>
 
-            <button onClick={handleLogin} className="w-full bg-white text-emerald-950 font-black py-6 rounded-[32px] shadow-2xl uppercase tracking-widest text-sm">Unlock Terminal</button>
             {error && <p className="text-red-400 text-xs font-black uppercase mt-4 animate-bounce">{error}</p>}
           </div>
         )}
       </div>
+
+      {/* Forgot PIN Recovery Modal */}
+      {showForgotPin && (
+        <div className="fixed inset-0 z-[600] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[48px] p-10 text-emerald-950 dark:text-white shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
+            {/* Background Accent */}
+            <div className="absolute top-0 right-0 p-8 opacity-5 text-emerald-600 dark:text-emerald-400 pointer-events-none">
+              <Lock size={120} />
+            </div>
+
+            <button 
+              onClick={() => { setShowForgotPin(false); setResetKeyInput(''); setRecoveryError(''); }} 
+              className="absolute top-6 right-6 p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="text-center space-y-6">
+              <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-950/40 rounded-[32px] flex items-center justify-center mx-auto text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800 shadow-inner">
+                <HelpCircle size={40} />
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-2xl font-black uppercase tracking-tight italic">PIN Recovery</h2>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-emerald-500/60 uppercase tracking-widest">Master Identity Check</p>
+              </div>
+
+              <div className="bg-emerald-50 dark:bg-emerald-950 p-6 rounded-[32px] border border-emerald-100 dark:border-emerald-800 space-y-3">
+                <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em]">Your Request Code</p>
+                <div className="flex items-center justify-center gap-3">
+                   <span className="text-3xl font-mono font-black tracking-[0.1em] text-emerald-900 dark:text-emerald-300">{requestCode}</span>
+                   <button onClick={copyRequestCode} className="p-2.5 bg-white dark:bg-emerald-800 rounded-xl shadow-sm text-emerald-600">
+                     {isCopied ? <Check size={16} /> : <Copy size={16} />}
+                   </button>
+                </div>
+              </div>
+
+              <p className="text-[10px] font-bold text-slate-500 dark:text-emerald-100/60 leading-relaxed px-2">
+                To reset your PIN, send this Request Code to support on WhatsApp. A technical reset fee may apply.
+              </p>
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4 block text-left">8-Character Reset Key</label>
+                  <input 
+                    type="text" 
+                    placeholder="Enter Key" 
+                    className="w-full bg-slate-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl py-4 px-6 font-mono text-center font-black uppercase tracking-[0.3em] outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
+                    value={resetKeyInput}
+                    onChange={(e) => setResetKeyInput(e.target.value.substring(0, 8))}
+                  />
+                </div>
+
+                <button 
+                  onClick={handleResetVerification}
+                  disabled={resetKeyInput.length !== 8 || isVerifyingReset}
+                  className="w-full bg-emerald-600 text-white font-black py-5 rounded-2xl shadow-xl uppercase tracking-widest text-[10px] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-30"
+                >
+                  {/* Fixed the 'Cannot find name Loader2' error by adding it to the imports above */}
+                  {isVerifyingReset ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={18} />} Verify & Reset
+                </button>
+
+                <a 
+                  href={`https://wa.me/2347062228026?text=Hello,%20I%20forgot%20my%20NaijaShop%20Admin%20PIN.%20Request%20Code:%20${requestCode}`}
+                  target="_blank"
+                  className="w-full py-4 border border-emerald-100 dark:border-emerald-800 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 active:scale-95 transition-all"
+                >
+                  <MessageCircle size={14} /> Contact Support
+                </a>
+              </div>
+
+              {recoveryError && (
+                <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-900/40 flex items-center gap-2 justify-center">
+                  <AlertCircle size={14} className="text-red-500" />
+                  <p className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase tracking-widest">{recoveryError}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
