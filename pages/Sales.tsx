@@ -28,10 +28,6 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
     ) || [];
   }, [sales, searchTerm]);
 
-  /**
-   * VOID TRANSACTION SYSTEM
-   * Reverts stock, removes associated debts, and deletes the sale record.
-   */
   const handleVoidSale = async (sale: Sale) => {
     if (!isAdmin) {
       alert("Permission Denied: Only Admin can void transactions.");
@@ -42,13 +38,11 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
 
     try {
       await db.transaction('rw', [db.inventory, db.sales, db.debts, db.stock_logs], async () => {
-        // 1. Revert Stock
         for (const item of sale.items) {
           const invItem = await db.inventory.get(item.id);
           if (invItem) {
             const newStock = Number(invItem.stock) + Number(item.quantity);
             await db.inventory.update(invItem.id!, { stock: newStock });
-            
             await db.stock_logs.add({
               item_id: Number(invItem.id),
               itemName: invItem.name,
@@ -61,20 +55,13 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             });
           }
         }
-        
-        // 2. Delete associated debt if exists
-        if (sale.uuid) {
-          await db.debts.where('sale_uuid').equals(sale.uuid).delete();
-        }
-
-        // 3. Delete the sale
+        if (sale.uuid) await db.debts.where('sale_uuid').equals(sale.uuid).delete();
         await db.sales.delete(sale.id!);
       });
-
       setSelectedSale(null);
-      alert("Sale Voided Successfully!");
+      alert("Sale Voided!");
     } catch (err) {
-      alert("Error voiding sale: " + (err as Error).message);
+      alert("Error voiding sale.");
     }
   };
 
@@ -82,7 +69,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Sales History</h1>
+          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight">Sales history</h1>
           <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Master Ledger</p>
         </div>
       </header>
@@ -103,7 +90,7 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             <div className="flex-1">
               <div className="flex justify-between items-start">
                 <h3 className="font-black text-slate-800 dark:text-emerald-50 text-lg">#{String(sale.id).slice(-4)}</h3>
-                <span className="text-emerald-600 font-black text-lg">{formatNaira(sale.total)}</span>
+                {isAdmin && <span className="text-emerald-600 font-black text-lg">{formatNaira(sale.total)}</span>}
               </div>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                 {new Date(sale.timestamp).toLocaleString([], {dateStyle:'short', timeStyle:'short'})}
@@ -124,9 +111,9 @@ export const Sales: React.FC<SalesProps> = ({ role }) => {
             <div className="space-y-6">
               <div className="bg-slate-50 dark:bg-emerald-950/40 p-6 rounded-[32px] font-mono text-xs space-y-2">
                 {selectedSale.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between"><span>{item.name} x{item.quantity}</span><span>{formatNaira(item.price * item.quantity)}</span></div>
+                  <div key={idx} className="flex justify-between"><span>{item.name} x{item.quantity}</span><span>{isAdmin ? formatNaira(item.price * item.quantity) : '***'}</span></div>
                 ))}
-                <div className="border-t border-dashed border-slate-200 mt-2 pt-2 flex justify-between font-black text-sm"><span>TOTAL</span><span>{formatNaira(selectedSale.total)}</span></div>
+                {isAdmin && <div className="border-t border-dashed border-slate-200 mt-2 pt-2 flex justify-between font-black text-sm"><span>TOTAL</span><span>{formatNaira(selectedSale.total)}</span></div>}
               </div>
 
               <div className="grid grid-cols-1 gap-3">
