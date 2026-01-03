@@ -41,7 +41,6 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const [shopName, setShopName] = useState('');
   const [shopAddress, setShopAddress] = useState('');
   const [shopPhone, setShopPhone] = useState('');
-  const [receiptFooter, setReceiptFooter] = useState(() => localStorage.getItem('receipt_footer') || 'Thank you for your patronage!');
 
   // Section 2: Soft POS
   const [bankName, setBankName] = useState('');
@@ -63,6 +62,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const reconcileInputRef = useRef<HTMLInputElement>(null);
   const restoreInputRef = useRef<HTMLInputElement>(null);
   const users = useLiveQuery(() => db.users.toArray());
+  const lastSyncTs = localStorage.getItem('last_inventory_sync');
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -134,23 +134,9 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     }
   };
 
-  const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-    } else {
-      alert("Installer not ready. Look for 'Install App' in your browser menu (3 dots).");
-    }
-  };
-
-  const navigateToPublic = (path: string) => {
-    window.history.pushState({}, '', path);
-    window.dispatchEvent(new Event('popstate'));
-  };
-
   const handleBackup = async () => {
     setIsBackingUp(true);
     try {
-      // CAPTURING 100% OF DATA (All tables from db.ts)
       const data = {
         inventory: await db.inventory.toArray(),
         sales: await db.sales.toArray(),
@@ -160,8 +146,8 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         categories: await db.categories.toArray(),
         settings: await db.settings.toArray(),
         security: await db.security.toArray(),
-        customers: await db.customers.toArray(), // Wallets
-        stock_logs: await db.stock_logs.toArray(), // Audit trail
+        customers: await db.customers.toArray(),
+        stock_logs: await db.stock_logs.toArray(),
         parked_orders: await db.parked_orders.toArray(),
         shopName, ownerName, timestamp: Date.now() 
       };
@@ -181,7 +167,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!confirm("⚠️ WARNING: This will replace all current data with the data from your backup file. This cannot be undone. Proceed?")) {
+    if (!confirm("⚠️ WARNING: This will replace ALL current data with the backup file. This cannot be undone. Proceed?")) {
       if (restoreInputRef.current) restoreInputRef.current.value = '';
       return;
     }
@@ -190,16 +176,9 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const result = event.target?.result;
-        if (!result) throw new Error("File is empty.");
-        
-        let jsonData;
-        if (file.name.endsWith('.gz')) {
-          const decompressed = pako.ungzip(new Uint8Array(result as ArrayBuffer), { to: 'string' });
-          jsonData = JSON.parse(decompressed);
-        } else {
-          jsonData = JSON.parse(new TextDecoder().decode(result as ArrayBuffer));
-        }
+        const result = event.target?.result as ArrayBuffer;
+        const decompressed = pako.ungzip(new Uint8Array(result), { to: 'string' });
+        const jsonData = JSON.parse(decompressed);
 
         const restoreResult = await restoreFullBackup(jsonData);
         alert(`✅ Restore Successful! Welcome back to ${restoreResult.shopName}. The app will now reload.`);
@@ -222,19 +201,14 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const result = event.target?.result;
-        if (!result) throw new Error("File empty");
-        let jsonData;
-        if (file.name.endsWith('.gz')) {
-          const decompressed = pako.ungzip(new Uint8Array(result as ArrayBuffer), { to: 'string' });
-          jsonData = JSON.parse(decompressed);
-        } else {
-          jsonData = JSON.parse(new TextDecoder().decode(result as ArrayBuffer));
-        }
+        const result = event.target?.result as ArrayBuffer;
+        const decompressed = pako.ungzip(new Uint8Array(result), { to: 'string' });
+        const jsonData = JSON.parse(decompressed);
+        
         const report = await reconcileStaffSales(jsonData, user.name || 'Boss');
-        alert(`Merged: ${report.merged} Sales, ${report.debtsAdded} Debts.`);
+        alert(`✅ Sync Complete!\n- Merged ${report.mergedSales} new sales\n- Subtracted stock from Master Inventory\n- Added ${report.debtsMerged} debt records.`);
       } catch (err) {
-        alert("Import failed.");
+        alert("Import failed: Use the .json.gz file sent by Staff.");
       } finally {
         setIsReconciling(false);
         if (reconcileInputRef.current) reconcileInputRef.current.value = '';
@@ -246,10 +220,9 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const handlePushUpdateToStaff = async () => {
     setIsUpdatingInventory(true);
     try {
-      const resetStock = confirm("Do you want to force staff stock levels to match yours exactly?");
+      const resetStock = confirm("Force staff stock levels to match yours exactly? (Recommended: CANCEL unless fixing errors)");
       await pushInventoryUpdateToStaff(resetStock);
-      localStorage.setItem('last_inventory_sync', Date.now().toString());
-      alert("Shop data pushed to staff!");
+      alert("Shop data pushed! Send the file to staff via WhatsApp.");
     } catch (err) {
       alert("Push failed.");
     } finally {
@@ -284,7 +257,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
     <div className="p-4 space-y-8 pb-32 animate-in fade-in duration-500 overflow-y-auto max-h-screen custom-scrollbar">
       <BackupSuccessModal isOpen={showBackupSuccess} onClose={() => setShowBackupSuccess(false)} fileName={backupFileName} />
 
-      <header className="flex justify-between items-center sticky top-0 bg-slate-50 dark:bg-emerald-950 py-2 z-10 transition-colors">
+      <header className="flex justify-between items-center sticky top-0 bg-slate-50 dark:bg-emerald-950 py-2 z-10">
         <div>
           <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic">Admin</h1>
           <p className="text-slate-400 dark:text-emerald-500/60 text-[10px] font-bold uppercase tracking-widest">Shop Master Control</p>
@@ -332,81 +305,32 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
         </section>
       )}
 
-      {/* QUICK TOOLS */}
-      <section className="grid grid-cols-2 gap-3">
-           <button onClick={() => setPage(Page.SALES)} className="bg-white dark:bg-emerald-900/40 p-5 rounded-[28px] border border-slate-100 dark:border-emerald-800/40 flex flex-col items-center gap-3 shadow-sm active:scale-95 transition-all">
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-800 rounded-2xl text-emerald-600"><History size={24}/></div>
-              <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">History</span>
-           </button>
-           <button onClick={() => setPage(Page.CUSTOMERS)} className="bg-white dark:bg-emerald-900/40 p-5 rounded-[28px] border border-slate-100 dark:border-emerald-800/40 flex flex-col items-center gap-3 shadow-sm active:scale-95 transition-all">
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/40 rounded-2xl text-blue-600"><Wallet size={24}/></div>
-              <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Wallets</span>
-           </button>
-      </section>
-
       {/* RECONCILIATION */}
       {isAdmin && (
         <section className="bg-emerald-950 p-7 rounded-[40px] shadow-2xl relative overflow-hidden border-2 border-emerald-500/20 space-y-6">
-             <h2 className="text-xl font-black text-emerald-400 italic uppercase">RECONCILIATION</h2>
+             <div className="flex justify-between items-center">
+                <h2 className="text-xl font-black text-emerald-400 italic uppercase tracking-tight">RECONCILIATION</h2>
+                {lastSyncTs && <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Merged: {new Date(parseInt(lastSyncTs)).toLocaleDateString()}</span>}
+             </div>
              <div className="grid grid-cols-1 gap-3">
                 <label className="w-full bg-white text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all cursor-pointer shadow-lg">
-                   <input type="file" ref={reconcileInputRef} className="hidden" accept=".json,.gz" onChange={handleImportStaffSales} />
-                   {isReconciling ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 1. IMPORT STAFF SALES
+                   <input type="file" ref={reconcileInputRef} className="hidden" accept=".json.gz,.gz" onChange={handleImportStaffSales} />
+                   {isReconciling ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 1. MERGE STAFF SALES
                 </label>
                 <button onClick={handlePushUpdateToStaff} disabled={isUpdatingInventory} className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 shadow-xl">
-                   {isUpdatingInventory ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} 2. SEND MASTER TO STAFF
+                   {isUpdatingInventory ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} 2. PUSH MASTER TO STAFF
                 </button>
              </div>
+             <p className="text-[9px] font-bold text-emerald-600/60 uppercase leading-relaxed text-center px-4 italic">
+                Step 1 imports staff records and subtracts sold items from master stock. Step 2 pushes new prices to staff.
+             </p>
              <div className="absolute top-0 right-0 p-8 opacity-5 text-white pointer-events-none"><RefreshCw size={120} /></div>
         </section>
       )}
 
-      {/* CATEGORY LAB */}
+      {/* DATA VAULT */}
       {isAdmin && (
-        <section 
-          onClick={() => setPage(Page.CATEGORY_MANAGER)}
-          className="bg-emerald-950 p-7 rounded-[40px] shadow-2xl relative overflow-hidden border-2 border-emerald-400/30 space-y-2 cursor-pointer active:scale-[0.98] transition-all group"
-        >
-          <div className="relative z-10 flex items-center justify-between">
-             <div className="space-y-1">
-                <h2 className="text-2xl font-black text-emerald-400 italic uppercase">CATEGORY LAB</h2>
-                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">MANAGE SHOP FOLDERS</p>
-             </div>
-             <div className="p-4 bg-emerald-400/10 rounded-3xl text-emerald-400 border border-emerald-400/20"><LayoutGrid size={32} /></div>
-          </div>
-          <div className="absolute -bottom-8 -left-8 opacity-[0.03] text-white pointer-events-none group-hover:rotate-12 transition-transform duration-700">
-             <FolderTree size={160} />
-          </div>
-        </section>
-      )}
-
-      {/* UPDATE CARD */}
-      <section className="bg-emerald-950 p-6 rounded-[32px] border border-emerald-800/40 space-y-4 shadow-xl relative overflow-hidden">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400"><Zap size={18} /></div>
-          <div>
-            <h2 className="text-xs font-black text-white uppercase italic">Software Update</h2>
-            <p className="text-[9px] font-bold text-emerald-500 uppercase mt-0.5">Current Version: V1.1.4</p>
-          </div>
-        </div>
-        <button onClick={handleManualUpdate} disabled={isCheckingUpdates} className="w-full bg-transparent border-2 border-emerald-500/30 text-emerald-400 font-black py-4 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest active:scale-95 transition-all">
-          {isCheckingUpdates ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />} Check for New Features
-        </button>
-      </section>
-
-      {/* SUPPORT & RESOURCES */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2 px-2"><h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Support & Resources</h2></div>
-        <div className="bg-emerald-900/20 rounded-[32px] border border-emerald-800/20 p-2 space-y-1">
-           <button onClick={() => navigateToPublic('/help')} className="w-full flex items-center justify-between p-5 hover:bg-white/5 rounded-2xl transition-all"><div className="flex items-center gap-4"><Globe size={20} className="text-emerald-500"/><span className="text-xs font-black uppercase text-slate-800 dark:text-emerald-50 italic">Online Help Center</span></div><ChevronRight size={18} className="text-slate-400"/></button>
-           <button onClick={() => navigateToPublic('/affiliates')} className="w-full flex items-center justify-between p-5 hover:bg-white/5 rounded-2xl transition-all"><div className="flex items-center gap-4"><Gift size={20} className="text-amber-500"/><span className="text-xs font-black uppercase text-slate-800 dark:text-emerald-50 italic">Join Affiliate Program</span></div><ChevronRight size={18} className="text-slate-400"/></button>
-           <button onClick={() => navigateToPublic('/about')} className="w-full flex items-center justify-between p-5 hover:bg-white/5 rounded-2xl transition-all"><div className="flex items-center gap-4"><Info size={20} className="text-blue-500"/><span className="text-xs font-black uppercase text-slate-800 dark:text-emerald-50 italic">About NaijaShop</span></div><ChevronRight size={18} className="text-slate-400"/></button>
-        </div>
-      </section>
-
-      {/* DATA VAULT - BACKUP & RESTORE */}
-      {isAdmin && (
-        <section className="space-y-4 pb-8">
+        <section className="space-y-4">
           <div className="flex items-center gap-2 px-2"><h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Business Data Vault</h2></div>
           <div className="bg-white dark:bg-emerald-900/40 border border-slate-100 dark:border-emerald-800/40 p-6 rounded-[32px] shadow-sm space-y-4">
             <div className="grid grid-cols-1 gap-3">
@@ -415,13 +339,10 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
                </button>
                
                <label className="w-full bg-white dark:bg-emerald-950 border-2 border-red-100 dark:border-red-900/40 text-red-500 font-black py-5 rounded-2xl flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest cursor-pointer active:scale-95 transition-all">
-                  <input type="file" ref={restoreInputRef} className="hidden" accept=".json,.gz" onChange={handleRestoreFile} />
+                  <input type="file" ref={restoreInputRef} className="hidden" accept=".json.gz,.gz" onChange={handleRestoreFile} />
                   {isRestoring ? <Loader2 size={18} className="animate-spin"/> : <Database size={18}/>} {isRestoring ? 'RESTORING...' : 'FULL SYSTEM RESTORE'}
                </label>
             </div>
-            <p className="text-[9px] font-bold text-slate-400 uppercase text-center px-4 leading-relaxed italic">
-              Restore wipes local data and replaces it with the backup file. Use only during phone change or emergencies.
-            </p>
           </div>
         </section>
       )}

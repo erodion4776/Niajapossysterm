@@ -4,6 +4,7 @@ import ReactGA from 'react-ga4';
 import { Page, Role, DeviceRole } from './types.ts';
 import { initTrialDate, User, db } from './db.ts';
 import { Dashboard } from './pages/Dashboard.tsx';
+import { StaffDashboard } from './pages/StaffDashboard.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { POS } from './pages/POS.tsx';
 import { Sales } from './pages/Sales.tsx';
@@ -205,7 +206,8 @@ const AppContent: React.FC = () => {
   const renderPage = () => {
     const role = isStaffDevice ? 'Staff' : currentUser.role;
     switch (currentPage) {
-      case Page.DASHBOARD: return <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
+      case Page.DASHBOARD: 
+        return isStaffDevice ? <StaffDashboard setPage={navigateTo} /> : <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
       case Page.INVENTORY: return <Inventory user={currentUser} role={role} initialFilter={inventoryFilter} clearInitialFilter={() => navigateTo(Page.INVENTORY, 'all')} setPage={navigateTo} />;
       case Page.POS: return <POS user={currentUser} setNavHidden={setIsNavHidden} />;
       case Page.SALES: return <Sales role={role} />;
@@ -213,10 +215,10 @@ const AppContent: React.FC = () => {
       case Page.CUSTOMERS: return <Customers setPage={navigateTo} role={role} />;
       case Page.STOCK_LOGS: return <StockLogs setPage={navigateTo} />;
       case Page.EXPENSES: return <Expenses setPage={navigateTo} role={role} />;
-      case Page.SETTINGS: return isStaffDevice ? <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} /> : <Settings user={currentUser} role={role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} deferredPrompt={deferredPrompt} />;
+      case Page.SETTINGS: return isStaffDevice ? <StaffDashboard setPage={navigateTo} /> : <Settings user={currentUser} role={role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} deferredPrompt={deferredPrompt} />;
       case Page.CATEGORY_MANAGER: return <CategoryLab setPage={navigateTo} />;
       case Page.AI_ASSISTANT: return <AIAssistant setPage={navigateTo} />;
-      default: return <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
+      default: return isStaffDevice ? <StaffDashboard setPage={navigateTo} /> : <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
     }
   };
 
@@ -225,7 +227,6 @@ const AppContent: React.FC = () => {
   const isInventoryActive = currentPage === Page.INVENTORY;
   const isDebtsActive = currentPage === Page.DEBTS;
   const isWalletActive = currentPage === Page.CUSTOMERS;
-  const isLogsActive = currentPage === Page.STOCK_LOGS;
   const isAdminActive = [Page.SETTINGS, Page.SALES, Page.EXPENSES, Page.CATEGORY_MANAGER].includes(currentPage);
 
   return (
@@ -251,7 +252,6 @@ const AppContent: React.FC = () => {
               <Wallet size={24} /><span className="text-[10px] font-black mt-1 uppercase">Wallet</span>
             </button>
             
-            {/* HIDE ADMIN FOR STAFF */}
             {!isStaffDevice && (
               <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${isAdminActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
                 <Menu size={24} /><span className="text-[10px] font-black mt-1 uppercase">Admin</span>

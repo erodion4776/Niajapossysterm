@@ -79,28 +79,22 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
 };
 
 /**
- * FULL BUSINESS BACKUP
- * Captures 100% of data, compresses with GZIP, and offers Lite mode if > 5MB.
+ * CORE BACKUP ENGINE (GZIP)
  */
 export const backupToWhatsApp = async (data: any, forceTextOnly = false): Promise<BackupResult> => {
   let finalData = { ...data };
 
-  // Lite Mode logic: strip images if user requests or file is huge
   if (forceTextOnly) {
     if (finalData.inventory) finalData.inventory = finalData.inventory.map(({ image, ...rest }: any) => rest);
     if (finalData.categories) finalData.categories = finalData.categories.map(({ image, ...rest }: any) => rest);
   }
 
   finalData.type = 'MASTER_BACKUP';
-  finalData.version = '2.5.0';
-
   const jsonString = JSON.stringify(finalData);
   const sizeMB = jsonString.length / (1024 * 1024);
 
-  // Prompt for Lite Mode if over 5MB
   if (sizeMB > 5 && !forceTextOnly) {
-    const confirmLite = confirm(`⚠️ LARGE BACKUP: Your data is ${sizeMB.toFixed(1)}MB due to product photos. This may fail on slow networks.\n\nClick OK for "Text Only" (Fast/Safe) or CANCEL to include photos (Slow).`);
-    if (confirmLite) {
+    if (confirm(`⚠️ LARGE BACKUP: Your shop file is ${sizeMB.toFixed(1)}MB. Use Text-Only (Fast) instead of Photos?`)) {
       return backupToWhatsApp(data, true);
     }
   }
@@ -109,56 +103,268 @@ export const backupToWhatsApp = async (data: any, forceTextOnly = false): Promis
   const dateStr = new Date(timestamp).toISOString().split('T')[0];
   const fileName = `NAIJASHOP_MASTER_${forceTextOnly ? 'LITE_' : ''}${dateStr}.json.gz`;
 
-  // Compression
-  const uint8Data = new TextEncoder().encode(jsonString);
-  const compressed = pako.gzip(uint8Data);
+  const compressed = pako.gzip(new TextEncoder().encode(jsonString));
+  const blob = new Blob([compressed], { type: 'application/gzip' });
   
   if (navigator.share) {
     try {
-      const blob = new Blob([compressed], { type: 'application/gzip' });
       const file = new File([blob], fileName, { type: 'application/gzip' });
-      await navigator.share({ 
-        title: `Master Backup: ${data.shopName || 'Shop'}`, 
-        text: `Secure business backup generated on ${dateStr}.`, 
-        files: [file] 
-      });
+      await navigator.share({ title: `Master Backup: ${data.shopName || 'Shop'}`, files: [file] });
       await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
       return { success: true, method: 'FILE_SHARE', fileName };
-    } catch (e) {
-      console.warn("Share failed, using download...");
-    }
+    } catch (e) { console.warn("Share failed, downloading..."); }
   }
 
-  try {
-    const blob = new Blob([compressed], { type: 'application/gzip' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-    await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
-    return { success: true, method: 'DOWNLOAD', fileName };
-  } catch (e) {
-    return { success: false, method: 'DOWNLOAD' };
-  }
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+  await db.settings.put({ key: 'last_backup_timestamp', value: Date.now() });
+  return { success: true, method: 'DOWNLOAD', fileName };
 };
 
 /**
- * FULL SYSTEM RESTORE
- * Atomically wipes the database and injects 100% of the backed-up records.
+ * 1. BOSS -> STAFF (Push Products & Prices)
  */
-export const restoreFullBackup = async (data: any) => {
-  if (data.type !== 'MASTER_BACKUP') {
-    throw new Error("Invalid File: This is not a NaijaShop Master Backup.");
+export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) => {
+  const inventory = await db.inventory.toArray();
+  const categories = await db.categories.toArray();
+  const staffUsers = await db.users.where('role').equals('Staff').toArray();
+  
+  const sn = await db.settings.get('shop_name');
+  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
+  
+  const softPosBank = (await db.settings.get('softPosBank'))?.value || '';
+  const softPosNumber = (await db.settings.get('softPosNumber'))?.value || '';
+  const softPosAccount = (await db.settings.get('softPosAccount'))?.value || '';
+
+  const payload = {
+    type: 'INVENTORY_UPDATE',
+    shopName,
+    timestamp: Date.now(),
+    inventory,
+    categories,
+    staffUsers,
+    resetStock,
+    settings: { softPosBank, softPosNumber, softPosAccount }
+  };
+
+  const jsonString = JSON.stringify(payload);
+  const compressed = pako.gzip(new TextEncoder().encode(jsonString));
+  const fileName = `NAIJASHOP_UPDATE_${new Date().toISOString().split('T')[0]}.json.gz`;
+  const blob = new Blob([compressed], { type: 'application/gzip' });
+  
+  if (navigator.share) {
+    try {
+      const file = new File([blob], fileName, { type: 'application/gzip' });
+      await navigator.share({
+        title: `Shop Update: ${shopName}`,
+        text: "Oga has updated prices. Import this file to sync.",
+        files: [file]
+      });
+      return true;
+    } catch (err) { console.warn("Share failed"); }
   }
 
-  // 1. Wipe local database completely
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+  return true;
+};
+
+/**
+ * 2. STAFF -> SYSTEM (Import Products & Prices)
+ * Note: Staff's stock count is NOT overwritten.
+ */
+export const applyInventoryUpdate = async (data: any) => {
+  if (data.type !== 'INVENTORY_UPDATE') throw new Error('Invalid Sync File');
+
+  let added = 0;
+  let updated = 0;
+  const resetStock = data.resetStock === true;
+
+  await db.transaction('rw', [db.inventory, db.categories, db.settings, db.users], async () => {
+    // 1. Sync Soft POS Settings
+    if (data.settings) {
+      await db.settings.put({ key: 'softPosBank', value: data.settings.softPosBank });
+      await db.settings.put({ key: 'softPosNumber', value: data.settings.softPosNumber });
+      await db.settings.put({ key: 'softPosAccount', value: data.settings.softPosAccount });
+    }
+
+    // 2. Sync Categories
+    if (data.categories) {
+      for (const cat of data.categories) {
+        const { id, ...catData } = cat;
+        const exists = await db.categories.where('name').equals(cat.name).first();
+        if (!exists) await db.categories.add(catData);
+      }
+    }
+
+    // 3. Sync Inventory (Rules: Update details, KEEP local stock)
+    if (data.inventory) {
+      for (const item of data.inventory) {
+        const { id, stock, ...itemData } = item;
+        const local = await db.inventory.where('name').equals(item.name).first();
+
+        if (local) {
+          // If resetStock is false (default), we only update prices/images
+          const finalUpdate = resetStock ? { ...itemData, stock } : itemData;
+          await db.inventory.update(local.id!, finalUpdate);
+          updated++;
+        } else {
+          // New item from Boss
+          await db.inventory.add({ ...itemData, stock });
+          added++;
+        }
+      }
+    }
+  });
+
+  localStorage.setItem('last_inventory_sync', Date.now().toString());
+  return { added, updated };
+};
+
+/**
+ * 3. STAFF -> BOSS (Export Sales Report)
+ */
+export const exportStaffSalesReport = async (sales: Sale[]) => {
+  const sn = await db.settings.get('shop_name');
+  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
+  
+  // Get relevant debts and wallet updates
+  const startOfDay = new Date().setHours(0,0,0,0);
+  const debts = await db.debts.where('date').aboveOrEqual(startOfDay).toArray();
+  const customers = await db.customers.where('lastTransaction').aboveOrEqual(startOfDay).toArray();
+
+  const payload = { 
+    type: 'STAFF_REPORT',
+    sales, 
+    debts,
+    customers,
+    shopName, 
+    staffName: localStorage.getItem('logged_in_staff_name') || 'Staff',
+    timestamp: Date.now() 
+  };
+
+  const compressed = pako.gzip(new TextEncoder().encode(JSON.stringify(payload)));
+  const fileName = `SALES_REPORT_${shopName}_${new Date().toISOString().split('T')[0]}.json.gz`;
+  const blob = new Blob([compressed], { type: 'application/gzip' });
+
+  if (navigator.share) {
+    try {
+      const file = new File([blob], fileName, { type: 'application/gzip' });
+      await navigator.share({
+        title: `Daily Report: ${shopName}`,
+        text: `Oga, here is the report for today. Merge to update master inventory.`,
+        files: [file]
+      });
+      return true;
+    } catch (e) { console.error('Share failed'); }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+  return true;
+};
+
+/**
+ * 4. BOSS -> SYSTEM (Merge Staff Report)
+ * Logic: Dedut quantity sold from Boss inventory.
+ */
+export const reconcileStaffSales = async (report: any, adminName: string = 'Boss') => {
+  if (report.type !== 'STAFF_REPORT') throw new Error('Invalid Report File');
+
+  let mergedSales = 0;
+  let skippedSales = 0;
+  let debtsMerged = 0;
+
+  await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
+    // A. Merge Sales & DEDUCT Stock from Master
+    for (const sale of (report.sales || [])) {
+      const exists = await db.sales.where('uuid').equals(sale.uuid).first();
+      if (exists) {
+        skippedSales++;
+        continue;
+      }
+
+      // Deduct stock from Master Boss Inventory
+      for (const item of sale.items) {
+        const invItem = await db.inventory.where('name').equals(item.name).first();
+        if (invItem) {
+          const newStock = Math.max(0, (invItem.stock || 0) - item.quantity);
+          await db.inventory.update(invItem.id!, { stock: newStock });
+          
+          await db.stock_logs.add({
+            item_id: invItem.id!,
+            itemName: invItem.name,
+            quantityChanged: -item.quantity,
+            previousStock: invItem.stock,
+            newStock: newStock,
+            type: 'Sales Deduction',
+            date: Date.now(),
+            staff_name: `Report Merge (${report.staffName})`
+          });
+        }
+      }
+
+      const { id, ...newSale } = sale;
+      await db.sales.add(newSale);
+      mergedSales++;
+    }
+
+    // B. Merge Debts
+    for (const debt of (report.debts || [])) {
+      const exists = debt.sale_uuid ? await db.debts.where('sale_uuid').equals(debt.sale_uuid).first() : null;
+      if (!exists) {
+        const { id, ...newDebt } = debt;
+        await db.debts.add(newDebt);
+        debtsMerged++;
+      }
+    }
+
+    // C. Sync Wallet Balances
+    for (const sCust of (report.customers || [])) {
+      const exists = await db.customers.where('phone').equals(sCust.phone).first();
+      if (exists) {
+        if (sCust.lastTransaction > exists.lastTransaction) {
+          await db.customers.update(exists.id!, { 
+            walletBalance: sCust.walletBalance, 
+            lastTransaction: sCust.lastTransaction 
+          });
+        }
+      } else {
+        const { id, ...newCust } = sCust;
+        await db.customers.add(newCust);
+      }
+    }
+  });
+
+  return { mergedSales, skippedSales, debtsMerged };
+};
+
+/**
+ * FULL SYSTEM RESTORE (GZIP)
+ */
+export const restoreFullBackup = async (data: any) => {
+  if (data.type !== 'MASTER_BACKUP') throw new Error("Invalid Master Backup file.");
+
   await clearAllData();
 
-  // 2. Transactional injection for data integrity
   await db.transaction('rw', [
     db.inventory, db.categories, db.customers, db.sales, 
     db.settings, db.security, db.users, db.expenses, 
@@ -177,54 +383,54 @@ export const restoreFullBackup = async (data: any) => {
     if (data.parked_orders) await db.parked_orders.bulkPut(data.parked_orders);
   });
 
-  // 3. Re-Sync LocalStorage for App States
-  const licenseExp = data.security?.find((s: any) => s.key === 'license_expiry')?.value;
-  const licenseSig = data.security?.find((s: any) => s.key === 'license_signature')?.value;
+  // Re-link core states
   const shopName = data.settings?.find((s: any) => s.key === 'shop_name')?.value;
-
-  if (licenseExp) localStorage.setItem('license_expiry', licenseExp);
-  if (licenseSig) localStorage.setItem('license_signature', licenseSig);
-  if (licenseExp && licenseSig) localStorage.setItem('is_activated', 'true');
+  const licenseExp = data.security?.find((s: any) => s.key === 'license_expiry')?.value;
   if (shopName) localStorage.setItem('shop_name', shopName);
-  
+  if (licenseExp) {
+    localStorage.setItem('license_expiry', licenseExp);
+    localStorage.setItem('is_activated', 'true');
+  }
   localStorage.setItem('is_setup_pending', 'false');
-  localStorage.setItem('install_skipped', 'true');
   
   return { success: true, shopName: shopName || 'Shop' };
 };
 
-export const generateStaffInviteKey = async (user: User) => {
+/**
+ * FIX: Added generateStaffInviteKey to resolve export error in Settings.tsx
+ */
+export const generateStaffInviteKey = async (staff: User) => {
   const sn = await db.settings.get('shop_name');
-  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
-  const expiry = localStorage.getItem('license_expiry') || '';
-  const license_signature = localStorage.getItem('license_signature') || '';
+  const exp = await db.security.get('license_expiry');
+  const sig = await db.security.get('license_signature');
+  const bank = await db.settings.get('softPosBank');
+  const accNum = await db.settings.get('softPosNumber');
+  const accName = await db.settings.get('softPosAccount');
 
-  const bankSetting = await db.settings.get('softPosBank');
-  const numberSetting = await db.settings.get('softPosNumber');
-  const accountSetting = await db.settings.get('softPosAccount');
-
-  const data = { 
-    shopName, 
-    staffName: user.name, 
-    staffPin: user.pin, 
-    expiry, 
-    license_signature,
-    softPosBank: bankSetting?.value || '',
-    softPosNumber: numberSetting?.value || '',
-    softPosAccount: accountSetting?.value || '',
-    role: 'staff', 
-    secret: 'NAIJA_VERIFIED' 
+  const payload = {
+    secret: 'NAIJA_VERIFIED',
+    shopName: sn?.value || 'NaijaShop',
+    expiry: exp?.value || '',
+    license_signature: sig?.value || '',
+    staffName: staff.name,
+    staffPin: staff.pin,
+    softPosBank: bank?.value || '',
+    softPosNumber: accNum?.value || '',
+    softPosAccount: accName?.value || ''
   };
 
-  const base64String = btoa(JSON.stringify(data));
-  const inviteLink = window.location.origin + '/join?key=' + base64String;
-  
-  const message = `👋 *Hello ${user.name},*\n\nBoss has added you to *${shopName}* on NaijaShop. Click the private link below to set up your terminal automatically:\n\n🔗 ${inviteLink}\n\n_Keep this link secret._`;
+  const key = btoa(JSON.stringify(payload));
+  const url = `${window.location.origin}/join?key=${key}`;
+  const message = `Hello ${staff.name}, Oga has invited you to manage ${payload.shopName}. \n\nClick this link on your phone to setup your terminal: ${url}`;
 
   if (navigator.share) {
     try {
-      await navigator.share({ title: 'NaijaShop Staff Invite', text: message });
+      await navigator.share({
+        title: `Invite for ${staff.name}`,
+        text: message,
+      });
     } catch (e) {
+      console.warn("Share failed");
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
     }
   } else {
@@ -234,10 +440,8 @@ export const generateStaffInviteKey = async (user: User) => {
 
 export const processStaffInvite = async (base64Key: string) => {
   try {
-    const jsonStr = atob(base64Key);
-    const data = JSON.parse(jsonStr);
-
-    if (data.secret !== 'NAIJA_VERIFIED') throw new Error("Invalid invite key");
+    const data = JSON.parse(atob(base64Key));
+    if (data.secret !== 'NAIJA_VERIFIED') throw new Error("Invalid Invite Key");
 
     await clearAllData();
 
@@ -249,12 +453,7 @@ export const processStaffInvite = async (base64Key: string) => {
     localStorage.setItem('license_signature', data.license_signature);
     localStorage.setItem('is_setup_pending', 'false');
 
-    await db.users.add({
-      name: data.staffName,
-      pin: data.staffPin,
-      role: 'Staff'
-    });
-
+    await db.users.add({ name: data.staffName, pin: data.staffPin, role: 'Staff' });
     if (data.softPosBank) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
     if (data.softPosNumber) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
     if (data.softPosAccount) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
@@ -264,299 +463,12 @@ export const processStaffInvite = async (base64Key: string) => {
 
     return { success: true, shopName: data.shopName };
   } catch (e) {
-    console.error("Invite processing failed", e);
     return { success: false, error: (e as Error).message };
   }
-};
-
-export const reconcileStaffSales = async (staffData: any, adminName: string = 'Admin') => {
-  const staffSales = staffData.sales || [];
-  const staffDebts = staffData.debts || [];
-  const staffCustomers = staffData.customers || [];
-  
-  let mergedCount = 0;
-  let skippedCount = 0;
-  let debtsAdded = 0;
-  let walletsSynced = 0;
-
-  await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
-    for (const sale of staffSales) {
-      const existing = await db.sales.where('uuid').equals(sale.uuid).first();
-      if (existing) {
-        skippedCount++;
-        continue;
-      }
-
-      for (const item of sale.items) {
-        let invItem = await db.inventory.get(item.id);
-        if (!invItem) invItem = await db.inventory.where('name').equals(item.name).first();
-
-        if (invItem) {
-          const newStock = Math.max(0, (invItem.stock || 0) - item.quantity);
-          await db.inventory.update(invItem.id!, { stock: newStock });
-          
-          await db.stock_logs.add({
-            item_id: invItem.id!,
-            itemName: invItem.name,
-            quantityChanged: -item.quantity,
-            previousStock: invItem.stock,
-            newStock: newStock,
-            type: 'Sales Deduction',
-            date: Date.now(),
-            staff_name: sale.staff_name || adminName
-          });
-        }
-      }
-
-      const { id, ...saleWithoutOldId } = sale;
-      await db.sales.add(saleWithoutOldId);
-      mergedCount++;
-    }
-
-    for (const debt of staffDebts) {
-      let isDuplicate = false;
-      if (debt.sale_uuid) {
-        const existing = await db.debts.where('sale_uuid').equals(debt.sale_uuid).first();
-        if (existing) isDuplicate = true;
-      }
-
-      if (!isDuplicate) {
-        const { id, ...debtWithoutOldId } = debt;
-        await db.debts.add(debtWithoutOldId);
-        debtsAdded++;
-      }
-    }
-
-    for (const sCustomer of staffCustomers) {
-      const existing = await db.customers.where('phone').equals(sCustomer.phone).first();
-      if (existing) {
-        const staffTs = Number(sCustomer.lastTransaction || 0);
-        const adminTs = Number(existing.lastTransaction || 0);
-
-        if (staffTs > adminTs) {
-          await db.customers.update(existing.id!, {
-            walletBalance: sCustomer.walletBalance,
-            lastTransaction: staffTs,
-            name: sCustomer.name 
-          });
-          walletsSynced++;
-        }
-      } else {
-        const { id, ...custWithoutOldId } = sCustomer;
-        await db.customers.add({
-          ...custWithoutOldId,
-          lastTransaction: Number(custWithoutOldId.lastTransaction || Date.now())
-        });
-        walletsSynced++;
-      }
-    }
-  });
-
-  return { 
-    success: true, 
-    merged: mergedCount, 
-    skipped: skippedCount, 
-    debtsAdded, 
-    walletsSynced 
-  };
-};
-
-export const exportStaffSalesReport = async (sales: Sale[]) => {
-  const sn = await db.settings.get('shop_name');
-  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
-  const dateStr = new Date().toISOString().split('T')[0];
-  const fileName = `SALES_REPORT_${shopName}_${dateStr}.json.gz`;
-  
-  const startOfDay = new Date().setHours(0,0,0,0);
-  const debts = await db.debts.where('date').aboveOrEqual(startOfDay).toArray();
-  const customers = await db.customers.where('lastTransaction').aboveOrEqual(startOfDay).toArray();
-
-  const payload = { 
-    sales, 
-    debts,
-    customers,
-    shopName, 
-    type: 'STAFF_REPORT', 
-    timestamp: Date.now() 
-  };
-
-  const jsonString = JSON.stringify(payload);
-  const uint8Data = new TextEncoder().encode(jsonString);
-  const compressed = pako.gzip(uint8Data);
-
-  if (navigator.share) {
-    try {
-      const blob = new Blob([compressed], { type: 'application/gzip' });
-      const file = new File([blob], fileName, { type: 'application/gzip' });
-      await navigator.share({
-        title: `Sales Report: ${shopName}`,
-        text: `Boss, here is my report for ${dateStr}.`,
-        files: [file]
-      });
-      return { success: true };
-    } catch (e) {
-      console.error('Share failed', e);
-    }
-  }
-
-  const blob = new Blob([compressed], { type: 'application/gzip' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-  return { success: true };
-};
-
-export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) => {
-  const inventory = await db.inventory.toArray();
-  const categories = await db.categories.toArray();
-  const staffUsers = await db.users.where('role').equals('Staff').toArray();
-  
-  const sn = await db.settings.get('shop_name');
-  const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
-  const dateStr = new Date().toISOString().split('T')[0];
-  const fileName = `NAIJASHOP_UPDATE_${dateStr}.json`;
-
-  const bankSetting = await db.settings.get('softPosBank');
-  const numberSetting = await db.settings.get('softPosNumber');
-  const accountSetting = await db.settings.get('softPosAccount');
-
-  const payload = {
-    type: 'INVENTORY_UPDATE',
-    shopName,
-    timestamp: Date.now(),
-    inventory,
-    categories,
-    staffUsers,
-    resetStock,
-    softPosBank: bankSetting?.value || '',
-    softPosNumber: numberSetting?.value || '',
-    softPosAccount: accountSetting?.value || ''
-  };
-
-  const jsonString = JSON.stringify(payload);
-  const blob = new Blob([jsonString], { type: 'application/json' });
-  const file = new File([blob], fileName, { type: 'application/json' });
-
-  const message = "Hello Team, I have updated the shop inventory and staff profiles. Please click the file below and select 'Update Shop Inventory' in your app.";
-
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: `Shop Update: ${shopName}`,
-        text: message,
-        files: [file]
-      });
-      return true;
-    } catch (err) {
-      console.warn("Navigator share failed, falling back to download");
-    }
-  }
-
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-  
-  const encodedMessage = encodeURIComponent(message);
-  window.open(`https://api.whatsapp.com/send?text=${encodedMessage}`, '_blank');
-  return true;
-};
-
-export const applyInventoryUpdate = async (data: any) => {
-  if (data.type !== 'INVENTORY_UPDATE') {
-    throw new Error('Invalid update file type');
-  }
-
-  let added = 0;
-  let updated = 0;
-  const resetStock = data.resetStock === true;
-  let shouldLogout = false;
-  const currentStaffName = localStorage.getItem('logged_in_staff_name');
-
-  await db.transaction('rw', [db.inventory, db.categories, db.settings, db.users], async () => {
-    if (data.softPosBank !== undefined) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
-    if (data.softPosNumber !== undefined) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
-    if (data.softPosAccount !== undefined) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
-
-    if (data.categories) {
-      for (const cat of data.categories) {
-        const { id, ...catWithoutId } = cat;
-        const existing = await db.categories.where('name').equals(cat.name).first();
-        if (existing) {
-          await db.categories.update(existing.id!, catWithoutId);
-        } else {
-          await db.categories.add(catWithoutId);
-        }
-      }
-    }
-
-    if (data.inventory) {
-      for (const item of data.inventory) {
-        const { id, stock, ...itemData } = item;
-        const existing = await db.inventory.get(id);
-
-        if (existing) {
-          const updatePayload = resetStock ? { ...itemData, stock } : itemData;
-          await db.inventory.update(id, updatePayload);
-          updated++;
-        } else {
-          const byName = await db.inventory.where('name').equals(item.name).first();
-          if (byName) {
-            const updatePayload = resetStock ? { ...itemData, stock } : itemData;
-            await db.inventory.update(byName.id!, updatePayload);
-            updated++;
-          } else {
-            const { id: bossId, ...newProduct } = item; 
-            await db.inventory.add(newProduct);
-            added++;
-          }
-        }
-      }
-    }
-
-    if (data.staffUsers) {
-      let currentLocalStaff = null;
-      if (currentStaffName) {
-        currentLocalStaff = await db.users.where('name').equals(currentStaffName).first();
-      }
-      await db.users.where('role').equals('Staff').delete();
-      for (const staff of data.staffUsers) {
-        const { id, ...staffData } = staff;
-        await db.users.add(staffData);
-      }
-      if (currentStaffName) {
-        const updatedStaffRecord = data.staffUsers.find((u: any) => u.name === currentStaffName);
-        if (!updatedStaffRecord || (currentLocalStaff && currentLocalStaff.pin !== updatedStaffRecord.pin)) {
-          shouldLogout = true;
-        }
-      }
-    }
-  });
-
-  if (shouldLogout) {
-    alert("Security Update: Boss has updated your profile. Log in again.");
-    localStorage.removeItem('user_role');
-    localStorage.removeItem('logged_in_staff_name');
-    window.location.reload();
-  }
-
-  localStorage.setItem('last_inventory_sync', Date.now().toString());
-  return { added, updated };
 };
 
 export type BackupResult = {
   success: boolean;
   method: 'FILE_SHARE' | 'TEXT_SHARE' | 'DOWNLOAD';
   fileName?: string;
-  totalRecords?: number;
-  isLarge?: boolean;
 };
