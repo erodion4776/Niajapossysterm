@@ -1,23 +1,31 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
-// @ts-ignore
-import { registerSW } from 'virtual:pwa-register';
 
-// Register the Update Listener for immediate version detection and takeover
-const updateSW = registerSW({
-  onNeedRefresh() {
-    // Immediate Takeover: Trigger update and reload without manual confirmation
-    updateSW(true);
-  },
-  onOfflineReady() {
-    console.log("App is ready for offline use.");
-  },
-});
-
-// Force Reload Logic: Detects when a new Service Worker has taken over and reloads the page once
+// Standard Service Worker Registration (Independent of Vite virtual modules)
 if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then(registration => {
+      console.log('SW: Registered successfully:', registration.scope);
+      
+      // Immediate update logic
+      registration.onupdatefound = () => {
+        const installingWorker = registration.installing;
+        if (installingWorker) {
+          installingWorker.onstatechange = () => {
+            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('SW: New content available, reloading...');
+              window.location.reload();
+            }
+          };
+        }
+      };
+    }).catch(error => {
+      console.error('SW: Registration failed:', error);
+    });
+  });
+
+  // Force Reload Logic: Detects when a new Service Worker has taken over
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!refreshing) {
