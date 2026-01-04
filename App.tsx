@@ -23,6 +23,7 @@ import { AIAssistant } from './pages/AIAssistant.tsx';
 import { PublicHelp } from './pages/PublicHelp.tsx';
 import { AboutUs } from './pages/AboutUs.tsx';
 import { Affiliates } from './pages/Affiliates.tsx';
+import { Notifications } from './pages/Notifications.tsx';
 import { LockScreen } from './components/LockScreen.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { BackupReminder } from './components/BackupReminder.tsx';
@@ -232,6 +233,7 @@ const AppContent: React.FC = () => {
       case Page.AFFILIATES: return <Affiliates onBack={() => navigateTo(Page.DASHBOARD)} />;
       case Page.HELP_CENTER: return <PublicHelp onBack={() => navigateTo(Page.DASHBOARD)} />;
       case Page.ABOUT_US: return <AboutUs onBack={() => navigateTo(Page.DASHBOARD)} />;
+      case Page.NOTIFICATIONS: return <Notifications onBack={() => navigateTo(Page.DASHBOARD)} />;
       default: return isStaffDevice ? <StaffDashboard setPage={navigateTo} user={currentUser} /> : <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} user={currentUser} />;
     }
   };

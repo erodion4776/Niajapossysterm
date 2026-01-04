@@ -195,6 +195,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
   const alerts = useMemo(() => {
     if (!inventory) return { lowStock: 0, expiring: 0 };
+    const now = new Date();
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     return {
       lowStock: inventory.filter(i => i.stock <= (i.minStock || 5)).length,
@@ -266,11 +267,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <button onClick={() => setPage(Page.HELP_CENTER)} className="p-2 text-white/60 hover:text-white transition-colors">
+          <button 
+            onClick={() => setPage(Page.HELP_CENTER)} 
+            className="p-2 text-white/60 hover:text-white transition-colors flex items-center gap-1"
+            title="Help & Support"
+          >
             <HelpCircle size={22} />
           </button>
           <div className="relative">
-            <button className="p-2 text-white/60 hover:text-white transition-colors">
+            <button 
+              onClick={() => {
+                setPage(Page.NOTIFICATIONS);
+                // Badge logic managed within the bell click to clear immediately if desired
+              }} 
+              className="p-2 text-white/60 hover:text-white transition-colors"
+            >
               <Bell size={22} />
             </button>
             {(alerts.lowStock > 0 || alerts.expiring > 0) && (
@@ -512,7 +523,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
       {/* PROFILE SETTINGS MODAL */}
       {showProfileModal && (
         <div className="fixed inset-0 bg-black/60 z-[1000] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in duration-300">
-           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[3rem] p-8 text-center shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300 relative overflow-hidden text-slate-900 dark:text-white">
+           <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[3rem] p-8 text-center shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300 relative overflow-hidden text-slate-900 dark:text-white">
              <button onClick={() => setShowProfileModal(false)} className="absolute top-6 right-6 p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90 transition-all"><X size={20} /></button>
              
              <div className="space-y-8 flex flex-col items-center">

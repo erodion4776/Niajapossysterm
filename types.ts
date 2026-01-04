@@ -15,7 +15,8 @@ export enum Page {
   HELP_CENTER = 'HELP_CENTER',
   ABOUT_US = 'ABOUT_US',
   AFFILIATES = 'AFFILIATES',
-  AI_ASSISTANT = 'AI_ASSISTANT'
+  AI_ASSISTANT = 'AI_ASSISTANT',
+  NOTIFICATIONS = 'NOTIFICATIONS'
 }
 
 export type Role = 'Admin' | 'Staff';
