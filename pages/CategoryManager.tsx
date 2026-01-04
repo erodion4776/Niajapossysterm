@@ -43,10 +43,14 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({ setPage }) => 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
+    // Fix: Added required 'uuid', 'last_updated', and 'synced' properties to the new category object
     await db.categories.add({
+      uuid: crypto.randomUUID(),
       name: formData.name,
       image: formData.image,
-      dateCreated: Date.now()
+      dateCreated: Date.now(),
+      last_updated: Date.now(),
+      synced: 0
     });
     setFormData({ name: '', image: '' });
     setShowAddModal(false);

@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, InventoryItem, Category, User as DBUser } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
+import { syncEngine } from '../utils/syncEngine.ts';
 import { 
   Plus, Search, Package, Edit3, X, Trash2, 
   Camera, LayoutGrid, List, Image as ImageIcon, Loader2,
@@ -63,7 +64,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     value: 0
   });
 
-  const [formData, setFormData] = useState<Omit<InventoryItem, 'id'>>({
+  const [formData, setFormData] = useState<Omit<InventoryItem, 'id' | 'uuid'>>({
     name: '',
     costPrice: 0,
     sellingPrice: 0,
@@ -77,7 +78,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     image: ''
   });
 
-  const [catFormData, setCatFormData] = useState<Omit<Category, 'id'>>({
+  const [catFormData, setCatFormData] = useState<Omit<Category, 'id' | 'uuid'>>({
     name: '',
     image: ''
   });
@@ -151,7 +152,14 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     if (!isAdmin) return;
     
     await db.transaction('rw', [db.inventory, db.stock_logs], async () => {
-      const id = await db.inventory.add({ ...formData, dateAdded: new Date().toISOString() });
+      const newItem: InventoryItem = { 
+        ...formData, 
+        uuid: crypto.randomUUID(),
+        dateAdded: new Date().toISOString(),
+        last_updated: Date.now(),
+        synced: 0
+      };
+      const id = await db.inventory.add(newItem);
       await db.stock_logs.add({
         item_id: id as number,
         itemName: formData.name,
@@ -163,6 +171,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
         staff_name: user.name || user.role,
         supplierName: formData.supplierName
       });
+      syncEngine.sync(); // Trigger cloud push
     });
 
     setFormData({ name: '', costPrice: 0, sellingPrice: 0, stock: 0, unit: 'Pcs', supplierName: '', minStock: 5, expiryDate: '', category: 'Uncategorized', barcode: '', image: '' });
@@ -179,7 +188,12 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
     const diff = editingItem.stock - original.stock;
 
     await db.transaction('rw', [db.inventory, db.stock_logs], async () => {
-      await db.inventory.update(editingItem.id!, { ...editingItem });
+      const updatedItem = {
+        ...editingItem,
+        last_updated: Date.now(),
+        synced: 0
+      };
+      await db.inventory.update(editingItem.id!, updatedItem);
       
       if (diff !== 0) {
         await db.stock_logs.add({
@@ -194,6 +208,7 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
           supplierName: editingItem.supplierName
         });
       }
+      syncEngine.sync(); // Trigger cloud push
     });
 
     setEditingItem(null);
@@ -210,7 +225,14 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
   const handleAddCat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
-    await db.categories.add({ ...catFormData, dateCreated: Date.now() });
+    await db.categories.add({ 
+      ...catFormData, 
+      uuid: crypto.randomUUID(), 
+      dateCreated: Date.now(), 
+      last_updated: Date.now(), 
+      synced: 0 
+    });
+    syncEngine.sync();
     setCatFormData({ name: '', image: '' });
     setShowCatModal(false);
   };
@@ -218,7 +240,12 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
   const handleUpdateCat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCat || !isAdmin) return;
-    await db.categories.update(editingCat.id!, { ...editingCat });
+    await db.categories.update(editingCat.id!, { 
+      ...editingCat, 
+      last_updated: Date.now(), 
+      synced: 0 
+    });
+    syncEngine.sync();
     setEditingCat(null);
   };
 
@@ -264,11 +291,14 @@ export const Inventory: React.FC<InventoryProps> = ({ user, role, initialFilter 
 
         return {
           ...item,
-          [bulkData.targetField === 'Selling Price' ? 'sellingPrice' : 'costPrice']: newPrice
+          [bulkData.targetField === 'Selling Price' ? 'sellingPrice' : 'costPrice']: newPrice,
+          last_updated: Date.now(),
+          synced: 0
         };
       });
 
       await db.inventory.bulkPut(updatedItems);
+      syncEngine.sync();
       alert(`₦-Inflation Protection Applied! ${updatedItems.length} prices updated and rounded to nearest ₦50.`);
       setShowBulkModal(false);
     } catch (err) {

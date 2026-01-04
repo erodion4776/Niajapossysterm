@@ -509,7 +509,16 @@ export const processStaffInvite = async (base64Key: string) => {
     localStorage.setItem('trial_start_date', data.trial_start?.toString() || '');
     localStorage.setItem('is_setup_pending', 'false');
 
-    await db.users.add({ name: data.staffName, pin: data.staffPin, role: 'Staff' });
+    // Fix: Added required 'uuid', 'last_updated', and 'synced' properties to the user creation object
+    await db.users.add({ 
+      uuid: crypto.randomUUID(), 
+      name: data.staffName, 
+      pin: data.staffPin, 
+      role: 'Staff', 
+      last_updated: Date.now(), 
+      synced: 0 
+    });
+
     if (data.softPosBank) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
     if (data.softPosNumber) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
     if (data.softPosAccount) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });

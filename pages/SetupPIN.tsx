@@ -87,10 +87,14 @@ export const SetupPIN: React.FC<SetupPINProps> = ({ onComplete, onBack }) => {
         });
       } else {
         // Fresh setup: Create Admin user
+        // Fix: Added required 'uuid', 'last_updated', and 'synced' properties to the initial admin user creation object
         await db.users.add({
+          uuid: crypto.randomUUID(),
           name: ownerName,
           pin: pin,
-          role: 'Admin'
+          role: 'Admin',
+          last_updated: Date.now(),
+          synced: 0
         });
       }
 

@@ -45,13 +45,19 @@ export const Debts: React.FC<DebtsProps> = ({ role }) => {
   const handleAddDebt = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Fix: Added required 'uuid', 'last_updated', and 'synced' properties to the manually recorded debt object
       await db.debts.add({
-        ...formData,
+        uuid: crypto.randomUUID(),
+        customerName: formData.customerName,
+        customerPhone: formData.customerPhone,
         totalAmount: formData.amount,
         remainingBalance: formData.amount,
         items: formData.note || 'Direct entry',
+        note: formData.note,
         date: Date.now(),
-        status: 'Unpaid'
+        status: 'Unpaid',
+        last_updated: Date.now(),
+        synced: 0
       });
       setFormData({ customerName: '', customerPhone: '', amount: 0, note: '' });
       setShowAddModal(false);
@@ -205,7 +211,7 @@ export const Debts: React.FC<DebtsProps> = ({ role }) => {
       {/* Payment Entry Modal */}
       {paymentModal.isOpen && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 border dark:border-emerald-800">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 border dark:border-emerald-800">
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 uppercase tracking-tight italic">Record Payment</h2>
                 <button onClick={() => setPaymentModal({ ...paymentModal, isOpen: false })} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400"><X size={20} /></button>

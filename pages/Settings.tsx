@@ -233,7 +233,13 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUser.name || newUser.pin.length !== 4) return;
-    await db.users.add({ ...newUser });
+    // Fix: Added required 'uuid', 'last_updated', and 'synced' properties to the staff account creation object
+    await db.users.add({ 
+      ...newUser, 
+      uuid: crypto.randomUUID(), 
+      last_updated: Date.now(), 
+      synced: 0 
+    });
     setNewUser({ name: '', pin: '', role: 'Staff' });
     setShowAddUser(false);
   };
@@ -387,7 +393,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, role, setRole, setPage
           <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[40px] p-8 shadow-2xl animate-in zoom-in duration-300 border dark:border-emerald-800">
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-black uppercase italic tracking-tight">New Staff Account</h2>
-                <button onClick={() => setShowAddUser(false)} className="p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90 transition-all"><X size={20}/></button>
+                <button onClick={() => setShowAddUser(false)} className="p-2 bg-slate-100 dark:bg-emerald-900 rounded-full text-slate-400 active:scale-90 transition-all"><X size={20}/></button>
              </div>
              <form onSubmit={handleAddUser} className="space-y-4">
                 <input required type="text" placeholder="Full Name" className="w-full p-4 bg-slate-50 dark:bg-emerald-950 rounded-2xl border font-bold dark:text-white outline-none focus:ring-2 focus:ring-emerald-500" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />

@@ -3,13 +3,17 @@ import Dexie, { Table } from 'dexie';
 
 export interface Category {
   id?: string | number;
+  uuid: string; // Cloud unique ID
   name: string;
   image?: string; 
   dateCreated?: number;
+  last_updated?: number;
+  synced?: number; // 0 for false, 1 for true
 }
 
 export interface InventoryItem {
   id?: string | number;
+  uuid: string; // Cloud unique ID
   name: string;
   costPrice: number;
   sellingPrice: number;
@@ -18,27 +22,35 @@ export interface InventoryItem {
   supplierName?: string; 
   minStock?: number;
   expiryDate?: string;
-  category: string; // Linked by name for simplicity in offline sync
+  category: string;
   barcode?: string;
   dateAdded?: string;
   image?: string; 
+  last_updated?: number;
+  synced?: number;
 }
 
 export interface Customer {
   id?: number;
+  uuid: string; // Cloud unique ID
   name: string;
   phone: string;
   walletBalance: number;
   lastTransaction: number;
+  last_updated?: number;
+  synced?: number;
 }
 
 export interface User {
   id?: string | number;
+  uuid: string; // Cloud unique ID
   name: string;
   pin: string;
   role: 'Admin' | 'Staff';
   email?: string;
   avatar?: string;
+  last_updated?: number;
+  synced?: number;
 }
 
 export interface SaleItem {
@@ -51,7 +63,7 @@ export interface SaleItem {
 
 export interface Sale {
   id?: string | number;
-  uuid: string;
+  uuid: string; // Primary key for cloud sync
   items: SaleItem[];
   total: number;
   totalCost: number;
@@ -63,6 +75,8 @@ export interface Sale {
   staff_id: string;
   staff_name: string;
   customer_phone?: string;
+  last_updated?: number;
+  synced?: number;
 }
 
 export interface ParkedOrder {
@@ -76,13 +90,17 @@ export interface ParkedOrder {
 
 export interface Expense {
   id?: string | number;
+  uuid: string; // Cloud unique ID
   description: string;
   amount: number;
   date: string | number;
+  last_updated?: number;
+  synced?: number;
 }
 
 export interface Debt {
   id?: string | number;
+  uuid: string; // Cloud unique ID
   sale_uuid?: string; 
   customerName: string;
   customerPhone: string;
@@ -93,6 +111,8 @@ export interface Debt {
   lastReminderSent?: number;
   status: 'Unpaid' | 'Paid';
   note?: string;
+  last_updated?: number;
+  synced?: number;
 }
 
 export interface StockLog {
@@ -134,16 +154,16 @@ export type NaijaShopDatabase = Dexie & {
 
 const dexieDb = new Dexie('NaijaShopDB') as NaijaShopDatabase;
 
-dexieDb.version(25).stores({
-  inventory: '++id, name, sellingPrice, stock, category, barcode, expiryDate, minStock, unit, supplierName',
-  categories: '++id, &name',
-  customers: '++id, &phone, name, walletBalance, lastTransaction',
-  sales: '++id, uuid, timestamp, total, staff_id, staff_name, customer_phone',
+dexieDb.version(27).stores({
+  inventory: '++id, &uuid, name, sellingPrice, stock, category, barcode, expiryDate, minStock, unit, supplierName, synced, last_updated',
+  categories: '++id, &uuid, &name, synced, last_updated',
+  customers: '++id, &uuid, &phone, name, walletBalance, lastTransaction, synced, last_updated',
+  sales: '++id, &uuid, timestamp, total, staff_id, staff_name, customer_phone, synced, last_updated',
   settings: 'key',
   security: 'key',
-  users: '++id, name, pin, role',
-  expenses: '++id, date, amount',
-  debts: '++id, customerName, customerPhone, status, date, remainingBalance, sale_uuid',
+  users: '++id, &uuid, name, pin, role, synced, last_updated',
+  expenses: '++id, &uuid, date, amount, synced, last_updated',
+  debts: '++id, &uuid, customerName, customerPhone, status, date, remainingBalance, sale_uuid, synced, last_updated',
   stock_logs: '++id, item_id, itemName, type, date, staff_name',
   parked_orders: '++id, timestamp, staff_id'
 });
@@ -163,6 +183,13 @@ export async function initTrialDate() {
     await db.settings.put({ key: 'trial_start', value: trialStartValue });
   }
 
+  // Shop UUID for Cloud Sync
+  let shopUuid = localStorage.getItem('shop_cloud_uuid');
+  if (!shopUuid) {
+    shopUuid = crypto.randomUUID();
+    localStorage.setItem('shop_cloud_uuid', shopUuid);
+  }
+
   if (navigator.storage && navigator.storage.persist) {
     await navigator.storage.persist();
   }
@@ -170,10 +197,10 @@ export async function initTrialDate() {
   const catCount = await db.categories.count();
   if (catCount === 0) {
     await db.categories.bulkAdd([
-      { name: 'Uncategorized', dateCreated: Date.now() },
-      { name: 'Drinks', dateCreated: Date.now() },
-      { name: 'Food', dateCreated: Date.now() },
-      { name: 'General', dateCreated: Date.now() }
+      { uuid: crypto.randomUUID(), name: 'Uncategorized', dateCreated: Date.now(), last_updated: Date.now(), synced: 0 },
+      { uuid: crypto.randomUUID(), name: 'Drinks', dateCreated: Date.now(), last_updated: Date.now(), synced: 0 },
+      { uuid: crypto.randomUUID(), name: 'Food', dateCreated: Date.now(), last_updated: Date.now(), synced: 0 },
+      { uuid: crypto.randomUUID(), name: 'General', dateCreated: Date.now(), last_updated: Date.now(), synced: 0 }
     ]);
   }
 }

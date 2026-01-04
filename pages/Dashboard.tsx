@@ -11,6 +11,7 @@ import {
   generateStaffInviteKey,
   restoreFullBackup
 } from '../utils/whatsapp.ts';
+import { syncEngine, SyncStatus } from '../utils/syncEngine.ts';
 import { getRequestCode } from '../utils/security.ts';
 import { processImage } from '../utils/images.ts';
 import { 
@@ -20,7 +21,7 @@ import {
   LayoutGrid, BarChart3, AlertTriangle, ChevronRight,
   TrendingUp, Wallet2, Clock, Camera, X, CheckCircle2, Loader2,
   Download, Send, Smartphone, RefreshCw, CloudUpload, Database, Info, Search,
-  Banknote, Sparkles
+  Banknote, Sparkles, Cloud, CloudOff, CloudLightning, Activity
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -38,6 +39,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
   const [showAllServices, setShowAllServices] = useState(false);
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [serviceSearch, setServiceSearch] = useState('');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
   
   // Action Loading States
   const [isSyncing, setIsSyncing] = useState(false);
@@ -57,6 +59,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
   useEffect(() => {
     getRequestCode().then(setRequestCode);
+    syncEngine.subscribeStatus(setSyncStatus);
   }, []);
 
   const toggleProfit = () => {
@@ -266,7 +269,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <h2 className="text-white text-sm font-bold opacity-90 leading-none mt-1">Hello, {userName.split(' ')[0]}!</h2>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          {/* Cloud Sync Status Indicator */}
+          <div className="flex items-center gap-2 mr-2">
+            {syncStatus === 'synced' && <Cloud className="text-emerald-500" size={18} />}
+            {syncStatus === 'pending' && <RefreshCw className="text-amber-500 animate-spin" size={18} />}
+            {syncStatus === 'offline' && <CloudOff className="text-slate-500" size={18} />}
+            {syncStatus === 'error' && <CloudLightning className="text-red-500" size={18} />}
+          </div>
+          
           <button 
             onClick={() => setPage(Page.HELP_CENTER)} 
             className="p-2 text-white/60 hover:text-white transition-colors flex items-center gap-1"
@@ -278,7 +289,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
             <button 
               onClick={() => {
                 setPage(Page.NOTIFICATIONS);
-                // Badge logic managed within the bell click to clear immediately if desired
               }} 
               className="p-2 text-white/60 hover:text-white transition-colors"
             >
@@ -388,28 +398,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         {/* 5. RECENT TRANSACTIONS FEED */}
         <div className="mt-14 px-1">
           <div className="flex justify-between items-center mb-8">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Recent Sales</h3>
+            <div className="flex items-center gap-2">
+               <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Live Sales Feed</h3>
+               {syncStatus === 'synced' && <div className="flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                  <Activity size={10} className="text-emerald-500 animate-pulse" />
+                  <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Remote Active</span>
+               </div>}
+            </div>
             <button onClick={() => setPage(Page.SALES)} className="text-[11px] font-black text-emerald-600 uppercase flex items-center gap-1.5 tracking-widest hover:gap-2 transition-all">View All <ChevronRight size={14}/></button>
           </div>
 
           <div className="space-y-2">
             {recentSales.length > 0 ? (
-              recentSales.map(sale => (
-                <div key={sale.id} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-3xl border border-slate-100/50 hover:bg-slate-50 transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center border border-slate-100 shadow-sm">
-                      {sale.paymentMethod === 'Transfer' ? <Landmark size={20} className="text-blue-500" /> : <Banknote size={20} className="text-emerald-500" />}
+              recentSales.map(sale => {
+                const isRemote = (sale as any).is_remote || sale.staff_id !== localStorage.getItem('device_fingerprint');
+                return (
+                  <div key={sale.id} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-3xl border border-slate-100/50 hover:bg-slate-50 transition-colors relative overflow-hidden">
+                    {isRemote && <div className="absolute top-0 right-0 p-1.5 bg-blue-500 rounded-bl-xl"><Cloud size={8} className="text-white" /></div>}
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-2xl bg-white flex items-center justify-center border border-slate-100 shadow-sm ${isRemote ? 'ring-2 ring-blue-100' : ''}`}>
+                        {sale.paymentMethod === 'Transfer' ? <Landmark size={20} className="text-blue-500" /> : <Banknote size={20} className="text-emerald-500" />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none">Receipt #{String(sale.id).slice(-4)}</h4>
+                          {isRemote && <span className="text-[7px] font-black bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded border border-blue-100 uppercase italic">Remote</span>}
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                          {new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {isRemote ? sale.staff_name : 'Local Terminal'}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-none mb-1">Receipt #{String(sale.id).slice(-4)}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{new Date(sale.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Today</p>
-                    </div>
+                    <p className="text-base font-black text-emerald-600 tracking-tighter">
+                      +{formatNaira(sale.total)}
+                    </p>
                   </div>
-                  <p className="text-base font-black text-emerald-600 tracking-tighter">
-                    +{formatNaira(sale.total)}
-                  </p>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="py-24 text-center opacity-20">
                 <Receipt size={40} className="mx-auto mb-4" />
@@ -419,7 +444,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
           </div>
         </div>
 
-        {/* Lifetime Summary */}
+        {/* Lifetime Summary (UNCHANGED) */}
         <div className="mt-12 bg-slate-900 rounded-[2rem] p-8 text-white relative overflow-hidden">
            <div className="relative z-10 space-y-6">
               <div className="flex items-center gap-2">
@@ -443,7 +468,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </div>
       </section>
 
-      {/* ALL SERVICES MODAL */}
+      {/* ALL SERVICES MODAL (UNCHANGED) */}
       {showAllServices && (
         <div className="fixed inset-0 bg-white dark:bg-emerald-950 z-[1000] flex flex-col animate-in fade-in duration-300">
            <header className="p-6 flex items-center justify-between sticky top-0 bg-white dark:bg-emerald-950 z-10 border-b border-slate-50 dark:border-white/5">
@@ -520,7 +545,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
         </div>
       )}
 
-      {/* PROFILE SETTINGS MODAL */}
+      {/* PROFILE SETTINGS MODAL (UNCHANGED) */}
       {showProfileModal && (
         <div className="fixed inset-0 bg-black/60 z-[1000] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in duration-300">
            <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[3rem] p-8 text-center shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300 relative overflow-hidden text-slate-900 dark:text-white">

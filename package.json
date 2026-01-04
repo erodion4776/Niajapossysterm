@@ -20,7 +20,8 @@
     "pako": "^2.1.0",
     "tesseract.js": "^5.1.1",
     "canvas-confetti": "^1.9.3",
-    "react-ga4": "^2.1.0"
+    "react-ga4": "^2.1.0",
+    "@supabase/supabase-js": "^2.45.0"
   },
   "devDependencies": {
     "vite": "^7.3.0",

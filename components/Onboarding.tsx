@@ -121,10 +121,14 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       if (admin && admin.id) {
         await db.users.update(admin.id, { pin: newPin, name: formData.ownerName });
       } else {
+        // Fix: Added required 'uuid', 'last_updated', and 'synced' properties to the admin user creation object
         await db.users.add({
+          uuid: crypto.randomUUID(),
           name: formData.ownerName,
           pin: newPin,
-          role: 'Admin'
+          role: 'Admin',
+          last_updated: Date.now(),
+          synced: 0
         });
       }
       

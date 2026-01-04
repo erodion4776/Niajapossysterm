@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db.ts';
@@ -38,9 +39,14 @@ export const Expenses: React.FC<ExpensesProps> = ({ setPage, role }) => {
     e.preventDefault();
     if (!isAdmin) return;
     try {
+      // Fix: Added required 'uuid', 'last_updated', and 'synced' properties to the expense object
       await db.expenses.add({
-        ...formData,
-        date: new Date(formData.date).getTime()
+        uuid: crypto.randomUUID(),
+        description: formData.description,
+        amount: formData.amount,
+        date: new Date(formData.date).getTime(),
+        last_updated: Date.now(),
+        synced: 0
       });
       setFormData({ description: '', amount: 0, date: new Date().toISOString().split('T')[0] });
       setShowAddModal(false);
@@ -141,7 +147,7 @@ export const Expenses: React.FC<ExpensesProps> = ({ setPage, role }) => {
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white w-full max-md rounded-t-[48px] sm:rounded-[48px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-2xl font-black text-gray-800">Add Expense</h2>
               <button onClick={() => setShowAddModal(false)} className="bg-gray-100 p-3 rounded-full text-gray-400"><X size={20} /></button>

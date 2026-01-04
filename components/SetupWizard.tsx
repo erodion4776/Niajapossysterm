@@ -114,10 +114,14 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         await db.users.update(admin.id, { pin: newPin });
       } else {
         // Fail-safe: Create the admin account if it doesn't exist
+        // Fix: Added required 'uuid', 'last_updated', and 'synced' properties to the initial admin user creation object
         await db.users.add({
+          uuid: crypto.randomUUID(),
           name: 'Shop Owner',
           pin: newPin,
-          role: 'Admin'
+          role: 'Admin',
+          last_updated: Date.now(),
+          synced: 0
         });
       }
       

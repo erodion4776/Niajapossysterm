@@ -2,22 +2,34 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <!-- PERFORMANCE: Preconnect hints for critical external resources -->
+    <link rel="preconnect" href="https://esm.sh">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    
+    <!-- PERFORMANCE: Preload Inter font to prevent FOIT (Flash of Invisible Text) -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" as="style">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+
     <script type="text/javascript">
         (function(c,l,a,r,i,t,y){
             c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
             t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-            y=l.createElement(a);y.parentNode.insertBefore(t,y);
+            // CRITICAL FIX: Reference existing script tag instead of creating dummy clarity element
+            y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
         })(window, document, "clarity", "script", "uuxpdr20vb");
     </script>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- ACCESSIBILITY: Removed 'user-scalable=no' to allow users to zoom for better readability -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#059669" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>NaijaShop POS</title>
     <link rel="manifest" href="/manifest.json">
+    <!-- NOTE: Tailwind CDN is for prototyping; replace with a build-time tool like Vite/PostCSS for production performance -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         darkMode: 'class',
@@ -30,6 +42,7 @@
             },
             animation: {
               'shimmer': 'shimmer 2s linear infinite',
+              'spin-slow': 'spin 3s linear infinite',
             },
             keyframes: {
               shimmer: {
@@ -48,7 +61,8 @@
         -webkit-tap-highlight-color: transparent;
         transition: background-color 0.3s ease, color 0.3s ease;
       }
-      .dark body {
+      /* CSS FIX: Improved dark mode specificity for body background */
+      html.dark body {
         background-color: #022c22;
       }
       .safe-bottom {
@@ -81,7 +95,6 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
       }
-      /* Custom Shimmer Class */
       .btn-shimmer {
         background: linear-gradient(90deg, #059669 0%, #10b981 50%, #059669 100%);
         background-size: 200% 100%;
@@ -104,12 +117,19 @@
     "pako": "https://esm.sh/pako@^2.1.0",
     "tesseract.js": "https://esm.sh/tesseract.js@^5.1.1",
     "canvas-confetti": "https://esm.sh/canvas-confetti@^1.9.3",
-    "react-ga4": "https://esm.sh/react-ga4@^2.1.0"
+    "react-ga4": "https://esm.sh/react-ga4@^2.1.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.45.0"
   }
 }
 </script>
   </head>
   <body>
+    <noscript>
+      <div style="background-color: #064e3b; color: white; padding: 20px; text-align: center; font-family: sans-serif;">
+        <h2>Please enable JavaScript to use NaijaShop POS</h2>
+        <p>This application requires JavaScript to function 100% offline.</p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

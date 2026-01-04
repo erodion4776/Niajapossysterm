@@ -8,11 +8,13 @@ import {
   exportStaffSalesReport,
   formatNaira 
 } from '../utils/whatsapp.ts';
+import { syncEngine, SyncStatus } from '../utils/syncEngine.ts';
 import { 
   ShoppingCart, Package, History, Calendar as CalendarIcon, 
   ChevronRight, RefreshCw, Send, Download, Loader2,
   CheckCircle2, AlertCircle, Sparkles, BookOpen, Wallet,
-  Info, LogOut, Clock, Smartphone, Zap, Banknote, Landmark, TrendingUp
+  Info, LogOut, Clock, Smartphone, Zap, Banknote, Landmark, TrendingUp,
+  Cloud, CloudOff, CloudLightning
 } from 'lucide-react';
 import { Page } from '../types.ts';
 
@@ -28,7 +30,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
   const syncInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync Engine integration
+  useEffect(() => {
+    syncEngine.subscribeStatus(setSyncStatus);
+  }, []);
 
   // Today's Date Range
   const todayRange = useMemo(() => {
@@ -47,27 +55,22 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
     [todayRange, user]
   );
 
-  // RECONCILIATION LOGIC (Top-line only, strictly following "Boss Rule")
+  // RECONCILIATION LOGIC
   const stats = useMemo(() => {
     if (!todaySales) return { count: 0, items: 0, revenue: 0, cash: 0, transfer: 0, debt: 0 };
     
     const count = todaySales.length;
     const items = todaySales.reduce((sum, s) => sum + s.items.reduce((iS, i) => iS + i.quantity, 0), 0);
-    
-    // Financial Breakdown for physical cash counting/reconciliation
     const revenue = todaySales.reduce((sum, s) => sum + (s.total || 0), 0);
     const cash = todaySales.reduce((sum, s) => sum + (s.cashPaid || 0), 0);
     
-    // Bank/Transfer includes Card and Soft POS/Direct Transfer
     const transfer = todaySales.reduce((sum, s) => {
       if (['Transfer', 'Card'].includes(s.paymentMethod)) {
-        // Real bank alerts expected (Total sale minus wallet/cash parts)
         return sum + (s.total - (s.walletUsed || 0));
       }
       return sum;
     }, 0);
 
-    // Actual credit issued on this terminal today
     const debt = todaySales.reduce((sum, s) => {
       return sum + Math.max(0, s.total - (s.cashPaid || 0) - (s.walletUsed || 0));
     }, 0);
@@ -118,9 +121,18 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
   return (
     <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500 max-h-screen overflow-y-auto custom-scrollbar">
       <header className="flex justify-between items-start">
-        <div>
+        <div className="flex-1">
           <p className="text-emerald-500 text-[9px] font-black uppercase tracking-[0.3em] mb-1">Staff Workspace</p>
-          <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase truncate max-w-[200px]">{shopName}</h1>
+          <div className="flex items-center gap-3">
+             <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase truncate max-w-[150px]">{shopName}</h1>
+             {/* Cloud Status Icon for Staff */}
+             <div className="flex items-center gap-1">
+                {syncStatus === 'synced' && <Cloud className="text-emerald-500" size={14} />}
+                {syncStatus === 'pending' && <RefreshCw className="text-amber-500 animate-spin" size={14} />}
+                {syncStatus === 'offline' && <CloudOff className="text-slate-300" size={14} />}
+                {syncStatus === 'error' && <CloudLightning className="text-red-500" size={14} />}
+             </div>
+          </div>
           <p className="text-slate-400 text-[10px] font-bold mt-1 uppercase flex items-center gap-1.5">
             Logged in: {staffName} <CheckCircle2 size={10} className="text-emerald-500"/>
           </p>
@@ -154,9 +166,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
                   <History size={10}/> {stats.count} Receipts Issued
                </div>
             </div>
-         </div>
-         <div className="absolute -right-8 -bottom-8 opacity-5 dark:opacity-10 group-hover:rotate-12 transition-transform duration-700">
-            <Sparkles size={180} />
          </div>
       </section>
 
