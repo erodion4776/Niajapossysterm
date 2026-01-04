@@ -271,7 +271,7 @@ export const Debts: React.FC<DebtsProps> = ({ role }) => {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Total Amount (₦)</label>
-                <input required type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950 border dark:border-emerald-800 rounded-2xl focus:ring-2 focus:ring-emerald-500 font-bold text-lg text-emerald-600" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} />
+                <input required type="number" className="w-full p-4 bg-gray-50 dark:bg-emerald-950 border border-slate-100 dark:border-emerald-800 rounded-2xl font-bold text-lg text-emerald-600" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} />
               </div>
 
               <div className="space-y-1">

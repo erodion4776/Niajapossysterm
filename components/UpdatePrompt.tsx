@@ -1,23 +1,33 @@
 import React from 'react';
+// @ts-ignore - handled by vite-plugin-pwa
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { RefreshCw, Zap, X } from 'lucide-react';
 
-/**
- * UpdatePrompt Component
- * Stubbed out Vite-specific PWA logic to prevent "Module not found" crashes 
- * in environments without the Vite PWA plugin.
- */
 export const UpdatePrompt: React.FC = () => {
-  // In a browser-only context without Vite's virtual modules, we stub these states.
-  // In a real production build with Vite, the builder would handle the virtual module.
-  const needRefresh = false; 
-  const updateServiceWorker = (val: boolean) => { console.log('Update triggered', val); };
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(r) {
+      console.log('PWA: Service Worker Registered');
+      // Background check for updates every 60 minutes
+      if (r) {
+        setInterval(() => {
+          r.update();
+        }, 60 * 60 * 1000);
+      }
+    },
+    onRegisterError(error) {
+      console.error('PWA: Registration failed', error);
+    },
+  });
 
   const close = () => {
-    // Mocking setter behavior
-    console.log('Update prompt closed');
+    setNeedRefresh(false);
   };
 
   const handleUpdate = () => {
+    // Triggers the skipWaiting and reload logic
     updateServiceWorker(true);
   };
 

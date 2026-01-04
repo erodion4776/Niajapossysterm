@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -44,6 +45,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ setPage }) => {
   const generateSystemInstruction = () => {
     const lowStock = inventory?.filter(i => i.stock < 5).map(i => i.name).join(', ') || 'None';
     const totalSales = sales?.length || 0;
+    // Fix: Access remainingBalance property correctly on Debt objects
     const totalDebt = debts?.filter(d => d.status === 'Unpaid').reduce((sum, d) => sum + d.remainingBalance, 0) || 0;
     const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
 
@@ -68,10 +70,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ setPage }) => {
     setIsLoading(true);
 
     try {
-      // Safe access to process.env.API_KEY to prevent hard crash if process is undefined
-      const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : '';
-      const ai = new GoogleGenAI({ apiKey: apiKey as string });
-      
+      // Fix: Follow initialization guidelines for GoogleGenAI
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Fix: Use generateContent directly as per latest Gemini API guidelines
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: [...messages, userMessage].map(m => ({
@@ -84,6 +85,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ setPage }) => {
         }
       });
 
+      // Fix: Access text directly as a property of GenerateContentResponse
       const modelText = response.text || "Oga, I'm having trouble connecting right now. Please check your network.";
       setMessages(prev => [...prev, { role: 'model', text: modelText }]);
     } catch (err) {

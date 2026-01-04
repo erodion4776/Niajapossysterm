@@ -147,7 +147,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({ setPage }) => 
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 italic">New Category</h2>
               <button onClick={() => setShowAddModal(false)} className="p-2 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400"><X size={20}/></button>
@@ -176,7 +176,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({ setPage }) => 
       {/* Edit Modal */}
       {editingCat && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
+          <div className="bg-white dark:bg-emerald-900 w-full max-sm rounded-[48px] p-8 shadow-2xl border dark:border-emerald-800 animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-xl font-black text-slate-800 dark:text-emerald-50 italic">Edit Category</h2>
               <button onClick={() => setEditingCat(null)} className="p-2 bg-slate-50 dark:bg-emerald-800 rounded-full text-slate-400"><X size={20}/></button>

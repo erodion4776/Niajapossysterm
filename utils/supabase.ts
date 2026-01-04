@@ -1,25 +1,10 @@
+
 import { createClient } from '@supabase/supabase-js';
 
-// Safe environment variable retrieval to prevent ReferenceErrors in pure browser environments
-const getEnv = (key: string): string => {
-  try {
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env) {
-      // @ts-ignore
-      return process.env[key] || '';
-    }
-    return '';
-  } catch (e) {
-    return '';
-  }
-};
+// Supabase credentials provided by the user
+const supabaseUrl = 'https://rvgqcnwjsrsbwxsgncfw.supabase.co';
+const supabaseAnonKey = 'sb_publishable_bOS9YW-wIImt1qOH8DtxyQ_6wn2QrEE';
 
-const supabaseUrl = getEnv('SUPABASE_URL');
-const supabaseAnonKey = getEnv('SUPABASE_KEY');
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Only instantiate if credentials exist to prevent createClient from throwing "URL is required"
-export const supabase = (supabaseUrl && supabaseAnonKey) 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null;
-
-export const isSupabaseConfigured = !!supabase;
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
