@@ -210,12 +210,14 @@ export const applyInventoryUpdate = async (data: any) => {
     }
   }
 
-  // MONOTONIC CLOCK SYNC: Detect "Time Travel"
-  if (data.timestamp && Date.now() < data.timestamp - (60 * 60 * 1000)) {
-     // If the incoming "Boss Update" is more than 1 hour in the FUTURE compared to local phone time,
-     // it means the staff phone has been set backwards.
+  // MONOTONIC CLOCK SYNC: Detect "Time Travel" bypasses
+  if (data.timestamp && Date.now() < (data.timestamp - (60 * 60 * 1000))) {
+     // If the incoming "Boss Update" is significantly in the FUTURE compared to local phone time,
+     // it means the staff phone has been set backwards to cheat the license expiry.
      alert("⚠️ CLOCK ERROR: Your phone date is incorrect. Please set your phone to the correct time to continue.");
      localStorage.setItem('license_tampered', 'true');
+     window.location.reload();
+     return { added: 0, updated: 0 };
   }
 
   let added = 0;
@@ -489,6 +491,12 @@ export const processStaffInvite = async (base64Key: string) => {
   try {
     const data = JSON.parse(atob(base64Key));
     if (data.secret !== 'NAIJA_VERIFIED') throw new Error("Invalid Invite Key");
+
+    // Monotonic Check for Join process
+    if (data.boss_time && Date.now() < (data.boss_time - (60 * 60 * 1000))) {
+      alert("⚠️ CLOCK ERROR: Your phone date is incorrect. Please fix your phone time before joining.");
+      return { success: false, error: "Incorrect Phone Date" };
+    }
 
     await clearAllData();
 

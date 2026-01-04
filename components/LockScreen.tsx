@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Lock, ShieldCheck, Key, Copy, Check, AlertCircle, ArrowRight, ShieldAlert, User } from 'lucide-react';
+import { MessageCircle, Lock, ShieldCheck, Key, Copy, Check, AlertCircle, ArrowRight, ShieldAlert, User, Clock } from 'lucide-react';
 import { getRequestCode, verifyActivationKey } from '../utils/security.ts';
 import { db } from '../db.ts';
 import { DeviceRole } from '../types.ts';
@@ -8,10 +8,11 @@ import { DeviceRole } from '../types.ts';
 interface LockScreenProps {
   onUnlock: () => void;
   isExpired?: boolean;
+  isTampered?: boolean;
   deviceRole?: DeviceRole;
 }
 
-export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired, deviceRole }) => {
+export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired, isTampered, deviceRole }) => {
   const [requestCode, setRequestCode] = useState<string>('LOADING...');
   const [activationKey, setActivationKey] = useState('');
   const [error, setError] = useState(false);
@@ -95,21 +96,28 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired, dev
 
   return (
     <div className="fixed inset-0 z-[500] bg-emerald-950 flex flex-col items-center justify-center p-6 text-white text-center overflow-y-auto">
-      <div className="w-20 h-20 bg-emerald-500/20 rounded-[24px] flex items-center justify-center mb-6 border border-emerald-500/30 shadow-2xl">
-        {isExpired ? <ShieldAlert size={40} className="text-amber-400" /> : <Lock size={40} className="text-emerald-400" />}
+      <div className={`w-20 h-20 rounded-[24px] flex items-center justify-center mb-6 border shadow-2xl ${isTampered ? 'bg-red-500/20 border-red-500/30' : 'bg-emerald-500/20 border-emerald-500/30'}`}>
+        {isTampered ? <Clock size={40} className="text-red-400" /> : (isExpired ? <ShieldAlert size={40} className="text-amber-400" /> : <Lock size={40} className="text-emerald-400" />)}
       </div>
-      <h1 className="text-3xl font-black mb-2 tracking-tighter uppercase">
-        {isExpired ? 'License Expired' : (isTrialExpired ? 'Trial Expired' : 'System Activation')}
+      
+      <h1 className="text-3xl font-black mb-2 tracking-tighter uppercase leading-[0.9]">
+        {isTampered ? 'Security Check' : (isExpired ? 'License Expired' : (isTrialExpired ? 'Trial Expired' : 'System Activation'))}
       </h1>
-      <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm font-medium">
-        {isStaff ? (
-          'Shop Access Expired. Please contact your Admin/Boss to renew the shop license and sync your phone.'
-        ) : (
-          isExpired 
-            ? 'Your annual license has ended. Pay ₦10,000 for another year of offline access.' 
-            : 'Offline license required. Send your Request Code to get an activation key.'
-        )}
-      </p>
+
+      <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 mb-8 max-w-xs w-full">
+        <p className="text-emerald-100/70 text-sm font-medium leading-relaxed">
+          {isTampered ? (
+            'CLOCK ERROR: Your phone date is incorrect. Please set your phone to the automatic network time to unlock the system.'
+          ) : isStaff ? (
+            'Shop Access Expired. Please contact your Admin/Boss to renew the shop license and sync your phone.'
+          ) : (
+            isExpired 
+              ? 'Your annual license has ended. Pay ₦10,000 for another year of offline access.' 
+              : 'Offline license required. Send your Request Code to get an activation key.'
+          )}
+        </p>
+      </div>
+
       <div className="w-full max-w-sm space-y-6">
         <div className="bg-emerald-900/40 border border-emerald-800/60 p-6 rounded-[32px] space-y-3 shadow-inner">
           <p className="text-emerald-500/60 text-[10px] font-black uppercase tracking-[0.2em]">Your Device ID</p>
@@ -128,6 +136,13 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired, dev
            >
              <User size={20} /> MESSAGE SHOP BOSS
            </button>
+        ) : isTampered ? (
+            <button 
+              onClick={() => window.location.reload()} 
+              className="w-full bg-red-600 text-white font-black py-6 rounded-[28px] flex items-center justify-center gap-3 active:scale-95 shadow-xl uppercase tracking-widest text-xs"
+            >
+              <Clock size={20} /> RE-CHECK DEVICE TIME
+            </button>
         ) : (
           <>
             <a 
@@ -157,6 +172,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired, dev
           </>
         )}
       </div>
+
+      <footer className="mt-12 opacity-30">
+        <p className="text-[9px] font-black uppercase tracking-[0.4em]">NaijaShop Secure Protocol 🇳🇬</p>
+      </footer>
     </div>
   );
 };

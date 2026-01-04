@@ -64,6 +64,7 @@ const AppContent: React.FC = () => {
 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isExpired, setIsExpired] = useState(false);
+  const [isTampered, setIsTampered] = useState(() => localStorage.getItem('license_tampered') === 'true');
 
   const isStaff = localStorage.getItem('user_role') === 'staff';
   const trialStartDate = localStorage.getItem('trial_start_date');
@@ -75,6 +76,7 @@ const AppContent: React.FC = () => {
     setIsTrialing(localStorage.getItem('is_trialing') === 'true');
     setIsSetupPending(localStorage.getItem('is_setup_pending') === 'true');
     setInstallSkipped(localStorage.getItem('install_skipped') === 'true');
+    setIsTampered(localStorage.getItem('license_tampered') === 'true');
     
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page')?.toUpperCase();
@@ -140,7 +142,6 @@ const AppContent: React.FC = () => {
     setCurrentPage(page);
     const url = new URL(window.location.href);
     
-    // Check if it's a "Top Level" public page that should have its own clean URL
     if (page === Page.AFFILIATES) {
       url.pathname = '/affiliates';
       url.searchParams.delete('page');
@@ -200,10 +201,10 @@ const AppContent: React.FC = () => {
     return <Onboarding onComplete={() => { refreshOnboarding(); }} />;
   }
 
-  // UNIVERSAL LICENSE ENFORCEMENT: Staff and Admin devices are both locked if license expires or trial ends
-  const isCurrentlyLocked = ((!isActivated && !(isTrialing && isTrialValid)) || isExpired);
+  // UNIVERSAL LICENSE ENFORCEMENT: Staff and Admin devices are both locked if license expires, trial ends, or tampering detected
+  const isCurrentlyLocked = ((!isActivated && !(isTrialing && isTrialValid)) || isExpired || isTampered);
   if (isCurrentlyLocked) {
-    return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} deviceRole={deviceRole || 'Owner'} />;
+    return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} isTampered={isTampered} deviceRole={deviceRole || 'Owner'} />;
   }
 
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
