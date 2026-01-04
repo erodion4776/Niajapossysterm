@@ -32,8 +32,8 @@ import { LoadingScreen } from './components/LoadingScreen.tsx';
 import { ThemeProvider } from './ThemeContext.tsx';
 import { getRequestCode, validateLicenseIntegrity } from './utils/security.ts';
 import { 
-  LayoutGrid, ShoppingBag, Package, Settings as SettingsIcon, 
-  ShieldAlert, BookOpen, Menu, Wallet, History
+  Home, Smartphone, Package, UserCircle, Menu, 
+  Wallet, ShieldAlert, CreditCard, LayoutGrid, Zap
 } from 'lucide-react';
 
 const ALLOWED_DOMAINS = ['naijashop.com.ng', 'niajapos.netlify.app'];
@@ -119,7 +119,6 @@ const AppContent: React.FC = () => {
       localStorage.setItem('is_activated', 'true');
     }
 
-    // Loading Guard: Wait 500ms for state to settle to prevent flashing LockScreen
     setTimeout(() => {
       setIsInitialized(true);
     }, 500);
@@ -169,27 +168,21 @@ const AppContent: React.FC = () => {
   };
 
   if (isPirated) return <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]"><ShieldAlert size={80} className="text-red-500 mb-6" /><h1 className="text-4xl font-black uppercase">Access Denied</h1></div>;
-  
-  // 1. Initializing State (Prevents flash)
   if (!isInitialized) return <LoadingScreen />;
 
-  // 2. Public Static Pages
   if (path.startsWith('/join')) return <JoinShop />;
   if (path === '/help') return <PublicHelp onBack={() => window.history.back()} />;
   if (path === '/about') return <AboutUs onBack={() => window.history.back()} />;
   if (path === '/affiliates') return <Affiliates onBack={() => window.history.back()} />;
 
-  // 3. Landing Page Logic
   if (path === '/' && !isActivated && (!isTrialing || !isTrialValid) && !isStaff) {
     return <LandingPage onStartTrial={handleStartTrial} onNavigate={navigateTo} />;
   }
 
-  // 4. Onboarding: Captures Identity and PIN in a "new" way
   if (isSetupPending) {
     return <Onboarding onComplete={() => { refreshOnboarding(); }} />;
   }
 
-  // 5. Expiry Check (Only show AFTER setup is completed or for existing users)
   if (!isStaff && ((!isActivated && !(isTrialing && isTrialValid)) || isExpired)) {
     return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
   }
@@ -199,7 +192,6 @@ const AppContent: React.FC = () => {
     return <InstallApp ownerName={ownerName} deferredPrompt={deferredPrompt} onNext={() => { localStorage.setItem('install_skipped', 'true'); syncState(); }} />;
   }
 
-  // 6. Auth Check
   if (!currentUser) {
     return <LoginScreen onLogin={(u) => setCurrentUser(u)} deviceRole={deviceRole || (isStaff ? 'StaffDevice' : 'Owner')} />;
   }
@@ -225,36 +217,17 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const isAdminActive = [Page.SETTINGS, Page.SALES, Page.EXPENSES, Page.CATEGORY_MANAGER].includes(currentPage);
-
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 transition-colors duration-300">
+    <div className="min-h-screen bg-emerald-950 flex flex-col max-w-lg mx-auto shadow-xl relative pb-24 transition-colors duration-300">
       <main className="flex-1 overflow-auto">{renderPage()}</main>
       {!isStaffDevice && !isNavHidden && <BackupReminder />}
       {!isNavHidden && (
-        <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/95 dark:bg-emerald-900/95 backdrop-blur-md border-t border-slate-100 dark:border-emerald-800 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] safe-bottom overflow-hidden">
-          <div className="flex overflow-x-auto no-scrollbar items-center px-2 py-2 scroll-smooth">
-            <button onClick={() => navigateTo(Page.DASHBOARD)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.DASHBOARD ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <LayoutGrid size={24} /><span className="text-[10px] font-black mt-1 uppercase">Home</span>
-            </button>
-            <button onClick={() => navigateTo(Page.POS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.POS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <ShoppingBag size={24} /><span className="text-[10px] font-black mt-1 uppercase">POS</span>
-            </button>
-            <button onClick={() => navigateTo(Page.INVENTORY, 'all')} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.INVENTORY ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <Package size={24} /><span className="text-[10px] font-black mt-1 uppercase">Stock</span>
-            </button>
-            <button onClick={() => navigateTo(Page.DEBTS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.DEBTS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <BookOpen size={24} /><span className="text-[10px] font-black mt-1 uppercase">Debts</span>
-            </button>
-            <button onClick={() => navigateTo(Page.CUSTOMERS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${currentPage === Page.CUSTOMERS ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-              <Wallet size={24} /><span className="text-[10px] font-black mt-1 uppercase">Wallet</span>
-            </button>
-            
-            {!isStaffDevice && (
-              <button onClick={() => navigateTo(Page.SETTINGS)} className={`flex flex-col items-center flex-none min-w-[72px] p-2 rounded-xl transition-all ${isAdminActive ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-800/30' : 'text-slate-400 dark:text-emerald-700'}`}>
-                <Menu size={24} /><span className="text-[10px] font-black mt-1 uppercase">Admin</span>
-              </button>
-            )}
+        <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.1)] safe-bottom overflow-hidden">
+          <div className="flex items-center justify-around px-2 py-4">
+            <NavBtn onClick={() => navigateTo(Page.DASHBOARD)} active={currentPage === Page.DASHBOARD} icon={<Home size={26}/>} label="Home" />
+            <NavBtn onClick={() => navigateTo(Page.POS)} active={currentPage === Page.POS} icon={<CreditCard size={26}/>} label="POS" />
+            <NavBtn onClick={() => navigateTo(Page.INVENTORY, 'all')} active={currentPage === Page.INVENTORY} icon={<LayoutGrid size={26}/>} label="Stock" />
+            {!isStaffDevice && <NavBtn onClick={() => navigateTo(Page.SETTINGS)} active={currentPage === Page.SETTINGS} icon={<UserCircle size={26}/>} label="Me" />}
           </div>
         </nav>
       )}
@@ -263,6 +236,14 @@ const AppContent: React.FC = () => {
     </div>
   );
 };
+
+const NavBtn = ({ onClick, active, icon, label }: { onClick: () => void, active: boolean, icon: React.ReactNode, label: string }) => (
+  <button onClick={onClick} className={`flex flex-col items-center transition-all duration-300 ${active ? 'text-emerald-600 scale-110 drop-shadow-sm' : 'text-slate-400'}`}>
+    <div className={`transition-all duration-300 ${active ? 'text-emerald-500' : 'text-slate-300'}`}>{icon}</div>
+    <span className={`text-[10px] font-black mt-1.5 uppercase tracking-tighter transition-all duration-300 ${active ? 'text-emerald-600 opacity-100' : 'text-slate-400 opacity-70'}`}>{label}</span>
+    {active && <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full mt-1 animate-pulse"></div>}
+  </button>
+);
 
 const App: React.FC = () => (<ThemeProvider><AppContent /></ThemeProvider>);
 export default App;
