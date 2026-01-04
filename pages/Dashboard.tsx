@@ -229,7 +229,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
 
             <div 
               onClick={() => setPage(Page.AFFILIATES)}
-              className="bg-emerald-50 rounded-[2rem] p-6 flex flex-col gap-4 relative overflow-hidden active:scale-95 transition-all cursor-pointer border border-emerald-100/50"
+              className="bg-emerald-50 rounded-[2rem] p-6 flex flex-col gap-4 relative overflow-hidden active:scale-95 transition-transform cursor-pointer border border-emerald-100/50"
             >
               <div className="bg-white p-2.5 rounded-2xl w-fit shadow-sm text-emerald-600">
                 <Coins size={20} className="fill-emerald-500/10" />
@@ -310,7 +310,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
              <div className="space-y-8 flex flex-col items-center">
                 <div className="space-y-2">
                    <h2 className="text-2xl font-black uppercase tracking-tight italic">My Profile</h2>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Terminal: {role}</p>
+                   <p className="text-[10px] font-bold text-slate-400 dark:text-emerald-500/60 uppercase tracking-widest">Active Terminal: {role}</p>
                 </div>
 
                 <div className="relative group">

@@ -138,8 +138,22 @@ const AppContent: React.FC = () => {
   const navigateTo = useCallback((page: Page, filter?: string) => {
     setCurrentPage(page);
     const url = new URL(window.location.href);
-    url.pathname = '/app';
-    url.searchParams.set('page', page.toLowerCase());
+    
+    // Check if it's a "Top Level" public page that should have its own clean URL
+    if (page === Page.AFFILIATES) {
+      url.pathname = '/affiliates';
+      url.searchParams.delete('page');
+    } else if (page === Page.HELP_CENTER) {
+      url.pathname = '/help';
+      url.searchParams.delete('page');
+    } else if (page === Page.ABOUT_US) {
+      url.pathname = '/about';
+      url.searchParams.delete('page');
+    } else {
+      url.pathname = '/app';
+      url.searchParams.set('page', page.toLowerCase());
+    }
+
     if (filter && filter !== 'all') {
       url.searchParams.set('filter', filter);
       setInventoryFilter(filter as any);
@@ -147,8 +161,9 @@ const AppContent: React.FC = () => {
       url.searchParams.delete('filter');
       setInventoryFilter('all');
     }
+    
     window.history.pushState({}, '', url.toString());
-    setPath('/app');
+    setPath(url.pathname);
   }, []);
 
   const handleStartTrial = () => {
@@ -170,6 +185,7 @@ const AppContent: React.FC = () => {
   if (isPirated) return <div className="fixed inset-0 bg-red-950 flex flex-col items-center justify-center p-8 text-white text-center z-[1000]"><ShieldAlert size={80} className="text-red-500 mb-6" /><h1 className="text-4xl font-black uppercase">Access Denied</h1></div>;
   if (!isInitialized) return <LoadingScreen />;
 
+  // PUBLIC ROUTES
   if (path.startsWith('/join')) return <JoinShop />;
   if (path === '/help') return <PublicHelp onBack={() => window.history.back()} />;
   if (path === '/about') return <AboutUs onBack={() => window.history.back()} />;
@@ -213,6 +229,9 @@ const AppContent: React.FC = () => {
       case Page.SETTINGS: return isStaffDevice ? <StaffDashboard setPage={navigateTo} user={currentUser} /> : <Settings user={currentUser} role={role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} deferredPrompt={deferredPrompt} />;
       case Page.CATEGORY_MANAGER: return <CategoryLab setPage={navigateTo} />;
       case Page.AI_ASSISTANT: return <AIAssistant setPage={navigateTo} />;
+      case Page.AFFILIATES: return <Affiliates onBack={() => navigateTo(Page.DASHBOARD)} />;
+      case Page.HELP_CENTER: return <PublicHelp onBack={() => navigateTo(Page.DASHBOARD)} />;
+      case Page.ABOUT_US: return <AboutUs onBack={() => navigateTo(Page.DASHBOARD)} />;
       default: return isStaffDevice ? <StaffDashboard setPage={navigateTo} user={currentUser} /> : <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} user={currentUser} />;
     }
   };
