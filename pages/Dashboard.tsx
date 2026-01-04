@@ -1,15 +1,16 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db.ts';
+import { db, User as DBUser } from '../db.ts';
 import { formatNaira } from '../utils/whatsapp.ts';
 import { getRequestCode } from '../utils/security.ts';
+import { processImage } from '../utils/images.ts';
 import { 
   Package, History, Landmark, BookOpen, 
-  ArrowUpRight, Eye, EyeOff, Bell, HelpCircle, User, Plus, 
+  ArrowUpRight, Eye, EyeOff, Bell, HelpCircle, User as UserIcon, Plus, 
   Wallet, Scan, ArrowDownLeft, Share2, Coins, Receipt,
   LayoutGrid, BarChart3, AlertTriangle, ChevronRight,
-  TrendingUp, Wallet2, Clock
+  TrendingUp, Wallet2, Clock, Camera, X, CheckCircle2, Loader2
 } from 'lucide-react';
 import { Page, Role } from '../types.ts';
 
@@ -17,18 +18,22 @@ interface DashboardProps {
   setPage: (page: Page) => void;
   role: Role;
   onInventoryFilter: (filter: 'all' | 'low-stock' | 'expiring') => void;
+  user: DBUser;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventoryFilter }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventoryFilter, user: initialUser }) => {
   const [showProfit, setShowProfit] = useState(() => localStorage.getItem('show_dashboard_profit') !== 'false');
   const [requestCode, setRequestCode] = useState('...');
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   
   // Real-time Data Queries
   const inventory = useLiveQuery(() => db.inventory.toArray());
   const allSales = useLiveQuery(() => db.sales.toArray());
   const allExpenses = useLiveQuery(() => db.expenses.toArray());
   const shopNameSetting = useLiveQuery(() => db.settings.get('shop_name'));
-  const ownerUser = useLiveQuery(() => db.users.where('role').equals('Admin').first());
+  // Use live query for user to reflect avatar changes instantly
+  const activeUser = useLiveQuery(() => db.users.get(initialUser.id!), [initialUser]);
 
   useEffect(() => {
     getRequestCode().then(setRequestCode);
@@ -38,6 +43,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     const newVal = !showProfit;
     setShowProfit(newVal);
     localStorage.setItem('show_dashboard_profit', String(newVal));
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeUser) return;
+
+    setIsUpdatingAvatar(true);
+    try {
+      // User requested 150x150, processImage handles width, aspect is usually preserved
+      const base64 = await processImage(file, 150);
+      await db.users.update(activeUser.id!, { avatar: base64 });
+      if (navigator.vibrate) navigator.vibrate(50);
+    } catch (err) {
+      alert("Failed to update profile photo");
+    } finally {
+      setIsUpdatingAvatar(false);
+    }
   };
 
   // Today's Profit Calculation
@@ -70,21 +92,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
     return [...allSales].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
   }, [allSales]);
 
+  const userName = activeUser?.name || initialUser.name || 'Boss';
+
   return (
     <div className="bg-emerald-950 min-h-screen pb-32 font-sans selection:bg-emerald-500/20 text-white">
       
       {/* 1. THE "BOSS" HEADER */}
       <header className="px-6 pt-12 pb-6 flex justify-between items-center bg-emerald-950 sticky top-0 z-[100]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-emerald-800 rounded-full flex items-center justify-center border border-emerald-700/50 overflow-hidden">
-             <img src="https://i.ibb.co/TD1JLFvQ/Generated-Image-September-24-2025-3-37-AM.png" className="w-full h-full object-cover" alt="Profile" />
-          </div>
+          <button 
+            onClick={() => setShowProfileModal(true)}
+            className="w-10 h-10 bg-emerald-800 rounded-full flex items-center justify-center border border-emerald-700/50 overflow-hidden active:scale-90 transition-all"
+          >
+             {activeUser?.avatar ? (
+                <img src={activeUser.avatar} className="w-full h-full object-cover" alt="Profile" />
+             ) : (
+                <span className="font-black text-emerald-400 text-lg uppercase">{userName.charAt(0)}</span>
+             )}
+          </button>
           <div>
             <div className="flex items-center gap-1.5">
                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest leading-none">{role}</span>
                <div className="w-1 h-1 rounded-full bg-emerald-500"></div>
             </div>
-            <h2 className="text-white text-sm font-bold opacity-90 leading-none mt-1">Hello, {ownerUser?.name?.split(' ')[0] || 'Boss'}!</h2>
+            <h2 className="text-white text-sm font-bold opacity-90 leading-none mt-1">Hello, {userName.split(' ')[0]}!</h2>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -131,7 +162,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
               {showProfit ? formatNaira(todayStats.profit) : '₦' + '•'.repeat(8)}
             </h3>
             <div className="flex items-center gap-1.5 mt-2">
-               {/* Added Clock to imports to fix error on line 134 */}
                <Clock size={10} className="text-emerald-500/40" />
                <p className="text-[9px] font-bold text-emerald-500/60 uppercase tracking-widest">
                  Updated {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -270,6 +300,69 @@ export const Dashboard: React.FC<DashboardProps> = ({ setPage, role, onInventory
            <BarChart3 className="absolute -right-8 -bottom-8 opacity-[0.03] text-white scale-150 pointer-events-none" />
         </div>
       </section>
+
+      {/* PROFILE SETTINGS MODAL */}
+      {showProfileModal && (
+        <div className="fixed inset-0 bg-black/60 z-[1000] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-emerald-900 w-full max-w-sm rounded-[3rem] p-8 text-center shadow-2xl border dark:border-emerald-800 animate-in zoom-in duration-300 relative overflow-hidden text-slate-900 dark:text-white">
+             <button onClick={() => setShowProfileModal(false)} className="absolute top-6 right-6 p-2 bg-slate-100 dark:bg-emerald-800 rounded-full text-slate-400 active:scale-90 transition-all"><X size={20} /></button>
+             
+             <div className="space-y-8 flex flex-col items-center">
+                <div className="space-y-2">
+                   <h2 className="text-2xl font-black uppercase tracking-tight italic">My Profile</h2>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Terminal: {role}</p>
+                </div>
+
+                <div className="relative group">
+                   <div className="w-32 h-32 rounded-full bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center overflow-hidden border-4 border-white dark:border-emerald-800 shadow-xl relative">
+                      {activeUser?.avatar ? (
+                         <img src={activeUser.avatar} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                         <span className="text-5xl font-black text-emerald-600 dark:text-emerald-400 uppercase">{userName.charAt(0)}</span>
+                      )}
+                      {isUpdatingAvatar && (
+                        <div className="absolute inset-0 bg-emerald-900/60 flex items-center justify-center backdrop-blur-sm">
+                           <Loader2 size={32} className="animate-spin text-emerald-400" />
+                        </div>
+                      )}
+                   </div>
+                   <label htmlFor="profile-upload" className="absolute -bottom-1 -right-1 bg-emerald-600 text-white p-3 rounded-2xl shadow-lg border-4 border-white dark:border-emerald-900 active:scale-90 transition-all cursor-pointer">
+                      <Camera size={18} />
+                   </label>
+                   <input 
+                      id="profile-upload"
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleAvatarUpload}
+                      disabled={isUpdatingAvatar}
+                   />
+                </div>
+
+                <div className="space-y-1">
+                   <h3 className="text-xl font-black tracking-tight">{userName}</h3>
+                   <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{requestCode}</p>
+                </div>
+
+                <div className="w-full space-y-3 pt-4">
+                   <button 
+                      onClick={() => document.getElementById('profile-upload')?.click()}
+                      disabled={isUpdatingAvatar}
+                      className="w-full bg-emerald-600 text-white font-black py-4 rounded-[2rem] flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest shadow-xl shadow-emerald-100 dark:shadow-none active:scale-95 transition-all"
+                   >
+                      <Camera size={16} /> Change Profile Photo
+                   </button>
+                   <button 
+                      onClick={() => setShowProfileModal(false)}
+                      className="w-full bg-slate-50 dark:bg-emerald-800/40 text-slate-400 dark:text-emerald-300 font-black py-4 rounded-[2rem] uppercase text-[10px] tracking-widest active:scale-95 transition-all"
+                   >
+                      Done
+                   </button>
+                </div>
+             </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

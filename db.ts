@@ -38,6 +38,7 @@ export interface User {
   pin: string;
   role: 'Admin' | 'Staff';
   email?: string;
+  avatar?: string;
 }
 
 export interface SaleItem {

@@ -1,10 +1,10 @@
 
 /**
- * Processes a File or Blob, resizes it to 400px width, 
+ * Processes a File or Blob, resizes it to a specific width, 
  * and compresses it to a lightweight Base64 string.
  * This keeps the offline Dexie database fast and backups small.
  */
-export async function processImage(file: File | Blob): Promise<string> {
+export async function processImage(file: File | Blob, maxWidth: number = 400): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -13,7 +13,7 @@ export async function processImage(file: File | Blob): Promise<string> {
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 400; // Shrink to 400px for 20KB-50KB file sizes
+        const MAX_WIDTH = maxWidth;
         let width = img.width;
         let height = img.height;
 

@@ -202,7 +202,7 @@ const AppContent: React.FC = () => {
     const role = isStaffDevice ? 'Staff' : currentUser.role;
     switch (currentPage) {
       case Page.DASHBOARD: 
-        return isStaffDevice ? <StaffDashboard setPage={navigateTo} user={currentUser} /> : <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
+        return isStaffDevice ? <StaffDashboard setPage={navigateTo} user={currentUser} /> : <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} user={currentUser} />;
       case Page.INVENTORY: return <Inventory user={currentUser} role={role} initialFilter={inventoryFilter} clearInitialFilter={() => navigateTo(Page.INVENTORY, 'all')} setPage={navigateTo} />;
       case Page.POS: return <POS user={currentUser} setNavHidden={setIsNavHidden} />;
       case Page.SALES: return <Sales role={role} />;
@@ -213,7 +213,7 @@ const AppContent: React.FC = () => {
       case Page.SETTINGS: return isStaffDevice ? <StaffDashboard setPage={navigateTo} user={currentUser} /> : <Settings user={currentUser} role={role} setRole={(r) => setCurrentUser({...currentUser, role: r})} setPage={navigateTo} deferredPrompt={deferredPrompt} />;
       case Page.CATEGORY_MANAGER: return <CategoryLab setPage={navigateTo} />;
       case Page.AI_ASSISTANT: return <AIAssistant setPage={navigateTo} />;
-      default: return isStaffDevice ? <StaffDashboard setPage={navigateTo} user={currentUser} /> : <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} />;
+      default: return isStaffDevice ? <StaffDashboard setPage={navigateTo} user={currentUser} /> : <Dashboard setPage={navigateTo} role={role} onInventoryFilter={(f) => navigateTo(Page.INVENTORY, f)} user={currentUser} />;
     }
   };
 
