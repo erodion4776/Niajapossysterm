@@ -1,11 +1,14 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, Coins, Share2, Banknote, UserPlus, 
   CheckCircle2, MessageCircle, TrendingUp, Sparkles, 
   ChevronDown, ChevronUp, Gift, Target, Wallet,
-  ShieldCheck, BarChart3, Image as ImageIcon, Smartphone
+  ShieldCheck, BarChart3, Image as ImageIcon, Smartphone,
+  Copy, Check, ArrowRight, Zap, HelpCircle
 } from 'lucide-react';
+import { getRequestCode } from '../utils/security.ts';
+import { formatNaira } from '../utils/whatsapp.ts';
 
 interface AffiliatesProps {
   onBack: () => void;
@@ -28,9 +31,28 @@ const AFFILIATE_FAQ = [
 
 export const Affiliates: React.FC<AffiliatesProps> = ({ onBack }) => {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [requestCode, setRequestCode] = useState('...');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    getRequestCode().then(setRequestCode);
+  }, []);
+
+  const referralLink = `https://naijashop.com.ng/?ref=${requestCode}`;
+  const whatsappMessage = `Oga, stop paying for data to run your shop! I'm using NaijaShop POS and it works 100% offline. Try the 14-day free trial here: ${referralLink}`;
 
   const handleJoinTeam = () => {
     window.open('https://wa.me/2347062228026?text=' + encodeURIComponent("Hello! I want to become a NaijaShop Affiliate and join the Growth Team."), '_blank');
+  };
+
+  const handleShareWhatsApp = () => {
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappMessage)}`, '_blank');
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(referralLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -44,14 +66,64 @@ export const Affiliates: React.FC<AffiliatesProps> = ({ onBack }) => {
       </header>
 
       <main className="flex-1 pb-24">
+        {/* PERSONALIZED HUB SECTION */}
+        <section className="px-6 py-8">
+           <div className="bg-emerald-950 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden border border-emerald-500/20">
+              <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/10 blur-3xl rounded-full"></div>
+              
+              <div className="relative z-10 space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="bg-emerald-500/20 p-2 rounded-xl text-emerald-400">
+                    <Target size={20} />
+                  </div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">My Referral Hub</h3>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-3xl p-6 space-y-4">
+                  <div>
+                    <p className="text-[10px] font-bold text-emerald-500/60 uppercase tracking-widest mb-1">Your Referral Code</p>
+                    <div className="flex items-center justify-between">
+                       <span className="text-2xl font-black tracking-widest text-white">{requestCode}</span>
+                       <button onClick={handleCopyLink} className="p-2 bg-white/10 rounded-lg text-emerald-400 active:scale-90 transition-all">
+                          {copied ? <Check size={18}/> : <Copy size={18}/>}
+                       </button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/5">
+                    <div>
+                      <p className="text-[9px] font-bold text-emerald-500/40 uppercase tracking-widest">Total Earned</p>
+                      <p className="text-lg font-black text-white">₦0.00</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold text-emerald-500/40 uppercase tracking-widest">Pending Payouts</p>
+                      <p className="text-lg font-black text-amber-400">₦0.00</p>
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleShareWhatsApp}
+                  className="w-full bg-emerald-500 text-emerald-950 font-black py-6 rounded-[2rem] flex items-center justify-center gap-3 uppercase text-xs tracking-widest shadow-xl animate-pulse active:scale-95 transition-all"
+                >
+                  <MessageCircle size={20} className="fill-emerald-950" /> SHARE MY LINK ON WHATSAPP
+                </button>
+                
+                <p className="text-[9px] text-center text-emerald-500/40 font-bold uppercase tracking-widest">
+                  Earn ₦2,000 commission for every shop license paid
+                </p>
+              </div>
+           </div>
+        </section>
+
         {/* 1. The "Money-Maker" Hero */}
-        <section className="px-6 py-16 text-center space-y-8 bg-gradient-to-b from-emerald-50 to-white relative overflow-hidden">
+        <section className="px-6 py-12 text-center space-y-8 bg-gradient-to-b from-emerald-50 to-white relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
             <Coins size={300} className="absolute -top-20 -left-20 -rotate-12" />
             <TrendingUp size={200} className="absolute bottom-10 -right-10 rotate-12" />
           </div>
           
-          <div className="inline-flex items-center gap-2 bg-amber-100 px-5 py-2 rounded-full text-amber-700 text-[10px] font-black uppercase tracking-[0.2em] border border-amber-200 animate-bounce">
+          <div className="inline-flex items-center gap-2 bg-amber-100 px-5 py-2 rounded-full text-amber-700 text-[10px] font-black uppercase tracking-[0.2em] border border-amber-200">
             <Sparkles size={14} className="fill-amber-500" /> Pure Hustle. No Entry Fee.
           </div>
 
@@ -68,7 +140,7 @@ export const Affiliates: React.FC<AffiliatesProps> = ({ onBack }) => {
             onClick={handleJoinTeam}
             className="w-full bg-emerald-600 text-white font-black py-7 rounded-[32px] text-xl shadow-[0_20px_40px_-10px_rgba(16,185,129,0.4)] active:scale-95 transition-all flex items-center justify-center gap-3 uppercase tracking-tighter italic relative z-10"
           >
-            Join the Affiliate Team <ArrowLeft className="rotate-180" />
+            Join the Affiliate Team <ArrowRight size={24} />
           </button>
         </section>
 
@@ -119,8 +191,8 @@ export const Affiliates: React.FC<AffiliatesProps> = ({ onBack }) => {
            <div className="space-y-10">
               {[
                 { step: "01", icon: <MessageCircle className="text-blue-500" />, t: "Get Your ID", d: "Chat with us on WhatsApp to get your unique Affiliate ID and customized marketing link." },
-                { step: "02", icon: <Smartphone className="text-amber-500" />, t: "Share the App", d: "Show a shop owner how the app works in Airplane Mode. Let them start the 3-day trial on their own phone." },
-                { step: "03", icon: <Gift className="text-emerald-500" />, t: "Get Paid", d: "When they pay for their lifetime license using your ID, you get ₦2,000 commission instantly." }
+                { step: "02", icon: <Smartphone className="text-amber-500" />, t: "Share the App", d: "Show a shop owner how the app works in Airplane Mode. Let them start the trial on their own phone." },
+                { step: "03", icon: <Gift className="text-emerald-500" />, t: "Get Paid", d: "When they pay for their license using your ID, you get ₦2,000 commission instantly." }
               ].map((step, i) => (
                 <div key={i} className="flex gap-6 relative">
                    {i < 2 && <div className="absolute left-7 top-14 bottom-[-40px] w-0.5 bg-slate-100"></div>}
@@ -171,7 +243,8 @@ export const Affiliates: React.FC<AffiliatesProps> = ({ onBack }) => {
         {/* 5. Affiliate FAQ */}
         <section className="px-6 py-12 space-y-8">
            <div className="flex items-center gap-3">
-              <Target size={24} className="text-emerald-600" />
+              {/* Fix: HelpCircle icon is now imported correctly above */}
+              <HelpCircle size={24} className="text-emerald-600" />
               <h3 className="text-xl font-black uppercase italic tracking-tight">Recruit FAQ</h3>
            </div>
 
@@ -207,7 +280,7 @@ export const Affiliates: React.FC<AffiliatesProps> = ({ onBack }) => {
              onClick={handleJoinTeam}
              className="w-full bg-emerald-600 text-white font-black py-7 rounded-[40px] text-xl shadow-2xl shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-3 uppercase tracking-tighter"
            >
-             Start Earning Now <ArrowLeft className="rotate-180" />
+             Start Earning Now <ArrowRight className="rotate-180" />
            </button>
            <button 
              onClick={onBack}

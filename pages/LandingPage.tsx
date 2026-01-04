@@ -25,6 +25,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
   const [showStickyBanner, setShowStickyBanner] = useState(false);
 
   useEffect(() => {
+    // REFERRAL TRACKING LOGIC
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get('ref');
+    if (refCode) {
+      localStorage.setItem('naija_ref_source', refCode.toUpperCase());
+      // Clean up URL to look professional
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isApple = /ipad|iphone|ipod/.test(userAgent) && !(window as any).MSStream;
     const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;

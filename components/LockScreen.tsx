@@ -66,6 +66,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
     setIsVerifying(false);
   };
 
+  const refSource = localStorage.getItem('naija_ref_source');
+  const whatsappLink = `https://api.whatsapp.com/send?phone=2347062228026&text=${encodeURIComponent(
+    `Hello, I want to activate/renew NaijaShop POS. Request Code: ${requestCode}${refSource ? ` | Referred by: ${refSource}` : ''}`
+  )}`;
+
   if (showOtpScreen) {
     return (
       <div className="fixed inset-0 z-[600] bg-emerald-950 flex flex-col items-center justify-center p-8 text-white text-center animate-in fade-in duration-500">
@@ -111,7 +116,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
           </div>
         </div>
         <a 
-          href={`https://api.whatsapp.com/send?phone=2347062228026&text=Hello,%20I%20want%20to%20activate/renew%20NaijaShop%20POS.%20Request%20Code:%20${requestCode}`} 
+          href={whatsappLink} 
           target="_blank"
           className="w-full bg-emerald-500 text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 active:scale-95 shadow-xl uppercase tracking-widest text-xs"
         >
