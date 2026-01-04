@@ -1,21 +1,24 @@
 
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Lock, ShieldCheck, Key, Copy, Check, AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
+import { MessageCircle, Lock, ShieldCheck, Key, Copy, Check, AlertCircle, ArrowRight, ShieldAlert, User } from 'lucide-react';
 import { getRequestCode, verifyActivationKey } from '../utils/security.ts';
 import { db } from '../db.ts';
+import { DeviceRole } from '../types.ts';
 
 interface LockScreenProps {
   onUnlock: () => void;
   isExpired?: boolean;
+  deviceRole?: DeviceRole;
 }
 
-export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) => {
+export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired, deviceRole }) => {
   const [requestCode, setRequestCode] = useState<string>('LOADING...');
   const [activationKey, setActivationKey] = useState('');
   const [error, setError] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   
+  const isStaff = deviceRole === 'StaffDevice' || localStorage.getItem('user_role') === 'staff';
   const isTrialExpired = localStorage.getItem('is_trialing') === 'true';
 
   // OTP Reveal State
@@ -37,7 +40,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
     const result = await verifyActivationKey(requestCode, activationKey);
     
     if (result.isValid && result.expiryDate && result.signature) {
-      // 1. Storage of Signed Expiry
       localStorage.setItem('license_expiry', result.expiryDate);
       localStorage.setItem('license_signature', result.signature);
       localStorage.setItem('is_activated', 'true');
@@ -47,7 +49,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
       await db.security.put({ key: 'license_signature', value: result.signature });
       await db.settings.put({ key: 'is_activated', value: true });
 
-      // Check if this is a fresh setup or just a renewal
       const isSetupDone = localStorage.getItem('is_setup_pending') === 'false';
       
       if (!isSetupDone) {
@@ -101,9 +102,13 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
         {isExpired ? 'License Expired' : (isTrialExpired ? 'Trial Expired' : 'System Activation')}
       </h1>
       <p className="text-emerald-100/60 mb-8 max-w-xs mx-auto text-sm font-medium">
-        {isExpired 
-          ? 'Your annual license has ended. Pay ₦10,000 for another year of offline access.' 
-          : 'Offline license required. Send your Request Code to get an activation key.'}
+        {isStaff ? (
+          'Shop Access Expired. Please contact your Admin/Boss to renew the shop license and sync your phone.'
+        ) : (
+          isExpired 
+            ? 'Your annual license has ended. Pay ₦10,000 for another year of offline access.' 
+            : 'Offline license required. Send your Request Code to get an activation key.'
+        )}
       </p>
       <div className="w-full max-w-sm space-y-6">
         <div className="bg-emerald-900/40 border border-emerald-800/60 p-6 rounded-[32px] space-y-3 shadow-inner">
@@ -115,30 +120,42 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, isExpired }) =
             </button>
           </div>
         </div>
-        <a 
-          href={whatsappLink} 
-          target="_blank"
-          className="w-full bg-emerald-500 text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 active:scale-95 shadow-xl uppercase tracking-widest text-xs"
-        >
-          <MessageCircle size={24} /> Get Activation Key
-        </a>
-        <div className="relative pt-4">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-emerald-800"></div></div>
-          <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest bg-emerald-950 px-3 text-emerald-700">Enter Key Below</div>
-        </div>
-        <div className="space-y-3">
-          <input 
-            type="text" 
-            placeholder="XXXXX-XXXXXXXX"
-            className={`w-full bg-emerald-900/50 border ${error ? 'border-red-500' : 'border-emerald-700'} rounded-[24px] py-5 text-center font-mono tracking-widest focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all text-sm uppercase shadow-inner`}
-            value={activationKey}
-            onChange={(e) => setActivationKey(e.target.value)}
-          />
-          <button onClick={handleActivate} disabled={isVerifying || !activationKey} className="w-full bg-white text-emerald-900 font-black py-5 rounded-[24px] hover:bg-emerald-50 active:scale-95 transition-all shadow-lg text-xs uppercase tracking-widest">
-            {isVerifying ? 'Verifying...' : 'Verify & Unlock'}
-          </button>
-          {error && <p className="text-red-400 text-[10px] font-black uppercase tracking-widest animate-bounce mt-2">Invalid Activation Key</p>}
-        </div>
+
+        {isStaff ? (
+           <button 
+             onClick={() => window.open('https://wa.me/', '_blank')} 
+             className="w-full bg-emerald-600 text-white font-black py-6 rounded-[28px] flex items-center justify-center gap-3 active:scale-95 shadow-xl uppercase tracking-widest text-xs"
+           >
+             <User size={20} /> MESSAGE SHOP BOSS
+           </button>
+        ) : (
+          <>
+            <a 
+              href={whatsappLink} 
+              target="_blank"
+              className="w-full bg-emerald-500 text-emerald-950 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 active:scale-95 shadow-xl uppercase tracking-widest text-xs"
+            >
+              <MessageCircle size={24} /> Get Activation Key
+            </a>
+            <div className="relative pt-4">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-emerald-800"></div></div>
+              <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest bg-emerald-950 px-3 text-emerald-700">Enter Key Below</div>
+            </div>
+            <div className="space-y-3">
+              <input 
+                type="text" 
+                placeholder="XXXXX-XXXXXXXX"
+                className={`w-full bg-emerald-900/50 border ${error ? 'border-red-500' : 'border-emerald-700'} rounded-[24px] py-5 text-center font-mono tracking-widest focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all text-sm uppercase shadow-inner`}
+                value={activationKey}
+                onChange={(e) => setActivationKey(e.target.value)}
+              />
+              <button onClick={handleActivate} disabled={isVerifying || !activationKey} className="w-full bg-white text-emerald-900 font-black py-5 rounded-[24px] hover:bg-emerald-50 active:scale-95 transition-all shadow-lg text-xs uppercase tracking-widest">
+                {isVerifying ? 'Verifying...' : 'Verify & Unlock'}
+              </button>
+              {error && <p className="text-red-400 text-[10px] font-black uppercase tracking-widest animate-bounce mt-2">Invalid Activation Key</p>}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

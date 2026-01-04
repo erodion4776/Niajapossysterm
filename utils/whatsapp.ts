@@ -142,14 +142,22 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
   const softPosNumber = (await db.settings.get('softPosNumber'))?.value || '';
   const softPosAccount = (await db.settings.get('softPosAccount'))?.value || '';
 
+  // Inherit License Data
+  const licenseExp = await db.security.get('license_expiry');
+  const licenseSig = await db.security.get('license_signature');
+  const trialStart = await db.settings.get('trial_start');
+
   const payload = {
     type: 'INVENTORY_UPDATE',
     shopName,
-    timestamp: Date.now(),
+    timestamp: Date.now(), // Monotonic Sync Check
     inventory,
     categories,
     staffUsers,
     resetStock,
+    license_expiry: licenseExp?.value,
+    license_signature: licenseSig?.value,
+    trial_start: trialStart?.value,
     settings: { softPosBank, softPosNumber, softPosAccount }
   };
 
@@ -183,24 +191,61 @@ export const pushInventoryUpdateToStaff = async (resetStock: boolean = false) =>
 
 /**
  * 2. STAFF -> SYSTEM (Import Products & Prices)
- * Note: Staff's stock count is NOT overwritten.
  */
 export const applyInventoryUpdate = async (data: any) => {
   if (data.type !== 'INVENTORY_UPDATE') throw new Error('Invalid Sync File');
+
+  // KILL SWITCH: Check if the current logged-in staff member is still active
+  const loggedInStaffName = localStorage.getItem('logged_in_staff_name');
+  const deviceRole = localStorage.getItem('device_role');
+
+  if (deviceRole === 'StaffDevice' && loggedInStaffName && data.staffUsers) {
+    const staffExists = data.staffUsers.find((u: any) => u.name === loggedInStaffName);
+    if (!staffExists) {
+      await clearAllData();
+      localStorage.clear();
+      alert("❌ ACCESS REVOKED: You are no longer authorized to manage this shop. Data wiped.");
+      window.location.href = '/';
+      return { added: 0, updated: 0 };
+    }
+  }
+
+  // MONOTONIC CLOCK SYNC: Detect "Time Travel"
+  if (data.timestamp && Date.now() < data.timestamp - (60 * 60 * 1000)) {
+     // If the incoming "Boss Update" is more than 1 hour in the FUTURE compared to local phone time,
+     // it means the staff phone has been set backwards.
+     alert("⚠️ CLOCK ERROR: Your phone date is incorrect. Please set your phone to the correct time to continue.");
+     localStorage.setItem('license_tampered', 'true');
+  }
 
   let added = 0;
   let updated = 0;
   const resetStock = data.resetStock === true;
 
-  await db.transaction('rw', [db.inventory, db.categories, db.settings, db.users], async () => {
-    // 1. Sync Soft POS Settings
+  await db.transaction('rw', [db.inventory, db.categories, db.settings, db.users, db.security], async () => {
+    // 1. Sync License (Inherit from Boss)
+    if (data.license_expiry && data.license_signature) {
+      await db.security.put({ key: 'license_expiry', value: data.license_expiry });
+      await db.security.put({ key: 'license_signature', value: data.license_signature });
+      localStorage.setItem('license_expiry', data.license_expiry);
+      localStorage.setItem('license_signature', data.license_signature);
+      localStorage.setItem('is_activated', 'true');
+      localStorage.removeItem('is_trialing');
+    }
+    
+    if (data.trial_start) {
+      await db.settings.put({ key: 'trial_start', value: data.trial_start });
+      localStorage.setItem('trial_start_date', data.trial_start.toString());
+    }
+
+    // 2. Sync Soft POS Settings
     if (data.settings) {
       await db.settings.put({ key: 'softPosBank', value: data.settings.softPosBank });
       await db.settings.put({ key: 'softPosNumber', value: data.settings.softPosNumber });
       await db.settings.put({ key: 'softPosAccount', value: data.settings.softPosAccount });
     }
 
-    // 2. Sync Categories
+    // 3. Sync Categories
     if (data.categories) {
       for (const cat of data.categories) {
         const { id, ...catData } = cat;
@@ -209,22 +254,29 @@ export const applyInventoryUpdate = async (data: any) => {
       }
     }
 
-    // 3. Sync Inventory (Rules: Update details, KEEP local stock)
+    // 4. Sync Inventory
     if (data.inventory) {
       for (const item of data.inventory) {
         const { id, stock, ...itemData } = item;
         const local = await db.inventory.where('name').equals(item.name).first();
 
         if (local) {
-          // If resetStock is false (default), we only update prices/images
           const finalUpdate = resetStock ? { ...itemData, stock } : itemData;
           await db.inventory.update(local.id!, finalUpdate);
           updated++;
         } else {
-          // New item from Boss
           await db.inventory.add({ ...itemData, stock });
           added++;
         }
+      }
+    }
+    
+    // 5. Update Local Users List (Enforce Kill Switch next login)
+    if (data.staffUsers) {
+      await db.users.where('role').equals('Staff').delete();
+      for (const u of data.staffUsers) {
+        const { id, ...userData } = u;
+        await db.users.add(userData);
       }
     }
   });
@@ -240,7 +292,6 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
   const sn = await db.settings.get('shop_name');
   const shopName = sn?.value || localStorage.getItem('shop_name') || 'NaijaShop';
   
-  // Get relevant debts and wallet updates
   const startOfDay = new Date().setHours(0,0,0,0);
   const debts = await db.debts.where('date').aboveOrEqual(startOfDay).toArray();
   const customers = await db.customers.where('lastTransaction').aboveOrEqual(startOfDay).toArray();
@@ -284,7 +335,6 @@ export const exportStaffSalesReport = async (sales: Sale[]) => {
 
 /**
  * 4. BOSS -> SYSTEM (Merge Staff Report)
- * Logic: Dedut quantity sold from Boss inventory.
  */
 export const reconcileStaffSales = async (report: any, adminName: string = 'Boss') => {
   if (report.type !== 'STAFF_REPORT') throw new Error('Invalid Report File');
@@ -294,7 +344,6 @@ export const reconcileStaffSales = async (report: any, adminName: string = 'Boss
   let debtsMerged = 0;
 
   await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
-    // A. Merge Sales & DEDUCT Stock from Master
     for (const sale of (report.sales || [])) {
       const exists = await db.sales.where('uuid').equals(sale.uuid).first();
       if (exists) {
@@ -302,7 +351,6 @@ export const reconcileStaffSales = async (report: any, adminName: string = 'Boss
         continue;
       }
 
-      // Deduct stock from Master Boss Inventory
       for (const item of sale.items) {
         const invItem = await db.inventory.where('name').equals(item.name).first();
         if (invItem) {
@@ -327,7 +375,6 @@ export const reconcileStaffSales = async (report: any, adminName: string = 'Boss
       mergedSales++;
     }
 
-    // B. Merge Debts
     for (const debt of (report.debts || [])) {
       const exists = debt.sale_uuid ? await db.debts.where('sale_uuid').equals(debt.sale_uuid).first() : null;
       if (!exists) {
@@ -337,7 +384,6 @@ export const reconcileStaffSales = async (report: any, adminName: string = 'Boss
       }
     }
 
-    // C. Sync Wallet Balances
     for (const sCust of (report.customers || [])) {
       const exists = await db.customers.where('phone').equals(sCust.phone).first();
       if (exists) {
@@ -383,7 +429,6 @@ export const restoreFullBackup = async (data: any) => {
     if (data.parked_orders) await db.parked_orders.bulkPut(data.parked_orders);
   });
 
-  // Re-link core states
   const shopName = data.settings?.find((s: any) => s.key === 'shop_name')?.value;
   const licenseExp = data.security?.find((s: any) => s.key === 'license_expiry')?.value;
   if (shopName) localStorage.setItem('shop_name', shopName);
@@ -406,17 +451,20 @@ export const generateStaffInviteKey = async (staff: User) => {
   const bank = await db.settings.get('softPosBank');
   const accNum = await db.settings.get('softPosNumber');
   const accName = await db.settings.get('softPosAccount');
+  const trialStart = await db.settings.get('trial_start');
 
   const payload = {
     secret: 'NAIJA_VERIFIED',
     shopName: sn?.value || 'NaijaShop',
     expiry: exp?.value || '',
     license_signature: sig?.value || '',
+    trial_start: trialStart?.value || '',
     staffName: staff.name,
     staffPin: staff.pin,
     softPosBank: bank?.value || '',
     softPosNumber: accNum?.value || '',
-    softPosAccount: accName?.value || ''
+    softPosAccount: accName?.value || '',
+    boss_time: Date.now()
   };
 
   const key = btoa(JSON.stringify(payload));
@@ -430,7 +478,6 @@ export const generateStaffInviteKey = async (staff: User) => {
         text: message,
       });
     } catch (e) {
-      console.warn("Share failed");
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
     }
   } else {
@@ -448,9 +495,10 @@ export const processStaffInvite = async (base64Key: string) => {
     localStorage.setItem('user_role', 'staff');
     localStorage.setItem('device_role', 'StaffDevice');
     localStorage.setItem('shop_name', data.shopName);
-    localStorage.setItem('is_activated', 'true');
+    localStorage.setItem('is_activated', data.expiry ? 'true' : 'false');
     localStorage.setItem('license_expiry', data.expiry);
     localStorage.setItem('license_signature', data.license_signature);
+    localStorage.setItem('trial_start_date', data.trial_start?.toString() || '');
     localStorage.setItem('is_setup_pending', 'false');
 
     await db.users.add({ name: data.staffName, pin: data.staffPin, role: 'Staff' });
@@ -458,8 +506,14 @@ export const processStaffInvite = async (base64Key: string) => {
     if (data.softPosNumber) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
     if (data.softPosAccount) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
     
-    await db.security.put({ key: 'license_expiry', value: data.expiry });
-    await db.security.put({ key: 'license_signature', value: data.license_signature });
+    if (data.expiry) {
+      await db.security.put({ key: 'license_expiry', value: data.expiry });
+      await db.security.put({ key: 'license_signature', value: data.license_signature });
+    }
+    
+    if (data.trial_start) {
+      await db.settings.put({ key: 'trial_start', value: data.trial_start });
+    }
 
     return { success: true, shopName: data.shopName };
   } catch (e) {

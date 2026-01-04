@@ -200,8 +200,10 @@ const AppContent: React.FC = () => {
     return <Onboarding onComplete={() => { refreshOnboarding(); }} />;
   }
 
-  if (!isStaff && ((!isActivated && !(isTrialing && isTrialValid)) || isExpired)) {
-    return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} />;
+  // UNIVERSAL LICENSE ENFORCEMENT: Staff and Admin devices are both locked if license expires or trial ends
+  const isCurrentlyLocked = ((!isActivated && !(isTrialing && isTrialValid)) || isExpired);
+  if (isCurrentlyLocked) {
+    return <LockScreen onUnlock={() => window.location.reload()} isExpired={isExpired} deviceRole={deviceRole || 'Owner'} />;
   }
 
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
