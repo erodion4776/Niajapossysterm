@@ -1,5 +1,5 @@
 import { db, InventoryItem } from '../db.ts';
-import { supabase, getShopId } from './supabase.ts';
+import { supabase, getShopId, setShopId } from './supabase.ts';
 import { pullFromCloud, pushToCloud } from '../services/syncService.ts';
 
 /**
@@ -26,13 +26,12 @@ class SyncEngine {
   private pendingRealtimeUpdates: any[] = [];
 
   constructor() {
-    // 1. Listen for online events
     window.addEventListener('online', () => {
       console.log("Sync: Device online, initiating background sync...");
       this.triggerBackgroundSync();
     });
     
-    // 2. Background Sync Loop - Every 15 seconds (Local-First requirement)
+    // Background Sync Loop - Every 15 seconds
     setInterval(() => {
       this.triggerBackgroundSync();
     }, 15000);
@@ -41,14 +40,25 @@ class SyncEngine {
   }
 
   private async init() {
+    // Ensure Dexie settings are synced with localStorage for Shop ID
+    const setting = await db.settings.get('shop_cloud_uuid');
+    if (setting?.value && !localStorage.getItem('shop_cloud_uuid')) {
+      localStorage.setItem('shop_cloud_uuid', setting.value);
+    }
+
     const shopId = getShopId();
+    if (!shopId) {
+      console.error("Sync Error: No Shop ID found on this device. Staff must join via link.");
+      return;
+    }
+    
     console.log("Sync: Initializing connection for Shop ID:", shopId);
     
-    if (navigator.onLine && shopId) {
-      // Force "Initial Pull" for Staff or fresh installs
+    if (navigator.onLine) {
+      // Force "Initial Pull" if inventory is empty
       const count = await db.inventory.count();
       if (count === 0) {
-        console.log("Sync: Local inventory empty, forcing initial pull...");
+        console.log("Sync: Local inventory empty, forcing first-time pull...");
         await this.performInitialPull();
       }
       this.startRealtimeListener();
@@ -58,43 +68,64 @@ class SyncEngine {
 
   private triggerBackgroundSync() {
     if (!navigator.onLine || this.isSyncing) return;
-    this.sync(); // Non-blocking fire-and-forget
+    this.sync(); 
     this.startRealtimeListener();
   }
 
   /**
-   * Performs a forceful full inventory pull from Supabase.
+   * Forcefully pull Inventory AND Categories from Supabase.
    */
   public async performInitialPull() {
     if (!navigator.onLine) return;
     const shopId = getShopId();
-    if (!shopId) return;
+    if (!shopId) {
+      console.error("Sync: Cannot pull, Shop ID missing");
+      return;
+    }
 
     this.onStatusChange('pulling');
     try {
       console.debug('Sync: Starting Full Cloud Pull for shop:', shopId);
       
-      const { data: cloudItems, error } = await supabase
+      // 1. Pull Inventory
+      const { data: cloudItems, error: invError } = await supabase
         .from('inventory')
         .select('*')
         .eq('shop_id', shopId);
 
-      if (error) {
-        console.error("Sync: Fetch failed", error.message);
-        throw error;
-      }
+      if (invError) throw invError;
 
       if (cloudItems) {
         const dexieItems = cloudItems.map(item => this.mapCloudToLocal(item));
         await db.inventory.bulkPut(dexieItems as InventoryItem[]);
-        console.log(`Sync: Initial pull success, ${dexieItems.length} products added.`);
+      }
+
+      // 2. Pull Categories
+      const { data: cloudCats, error: catError } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('shop_id', shopId);
+      
+      if (!catError && cloudCats) {
+        const dexieCats = cloudCats.map(cat => ({
+          uuid: cat.uuid,
+          name: cat.name,
+          image: cat.image,
+          dateCreated: cat.date_created,
+          last_updated: cat.last_updated,
+          synced: 1
+        }));
+        await db.categories.bulkPut(dexieCats);
       }
       
+      console.log(`Sync: Pull success for shop ${shopId}.`);
       localStorage.setItem('last_inventory_sync', Date.now().toString());
       this.onStatusChange('synced');
-    } catch (err) {
-      console.error('Sync: Full pull failed', err);
+      return true;
+    } catch (err: any) {
+      console.error('Sync: Full pull failed', err.message);
       this.onStatusChange('error');
+      return false;
     }
   }
 
@@ -118,17 +149,12 @@ class SyncEngine {
     } as InventoryItem;
   }
 
-  /**
-   * Real-time Subscription (The "Listener")
-   * Throttled: Buffers multiple changes and updates every 1s to prevent hanging.
-   */
   private startRealtimeListener() {
     const shopId = getShopId();
     if (!shopId || (this.realtimeChannel && this.currentListenerShopId === shopId)) return;
 
     if (this.realtimeChannel) supabase.removeChannel(this.realtimeChannel);
 
-    console.log("Sync: Starting Real-time Inventory Listener...");
     this.currentListenerShopId = shopId;
     this.realtimeChannel = supabase
       .channel(`inventory_changes_${shopId}`)
@@ -145,7 +171,7 @@ class SyncEngine {
 
   private async processThrottledUpdates() {
     const now = Date.now();
-    if (now - this.lastRealtimeUpdate < 1000) return; // Wait 1s between UI updates
+    if (now - this.lastRealtimeUpdate < 1000) return; 
 
     this.lastRealtimeUpdate = now;
     const updates = [...this.pendingRealtimeUpdates];
@@ -183,42 +209,32 @@ class SyncEngine {
     try {
       let count = 0;
       for (const tableName of SYNCABLE_TABLES) {
-        count += await (db as any)[tableName].where('synced').equals(0).count();
+        const table = (db as any)[tableName];
+        if (table) count += await table.where('synced').equals(0).count();
       }
       return count;
     } catch { return 0; }
   }
 
-  /**
-   * Background Sync Loop with 10s Timeout Protection
-   */
   public async sync() {
     if (this.isSyncing || !navigator.onLine) return;
-    
     const shopId = getShopId();
     if (!shopId) return;
     
     this.isSyncing = true;
     this.onStatusChange('pending');
-
-    // 10 Second Timeout
-    const timeout = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Sync Timeout')), 10000)
-    );
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Sync Timeout')), 15000));
 
     try {
       await Promise.race([
         (async () => {
-          // Push local changes (synced=0)
           await pushToCloud();
-          // Pull remote changes
           await pullFromCloud();
         })(),
         timeout
       ]);
       this.onStatusChange('synced');
     } catch (error: any) {
-      console.warn('Sync loop skipped or timed out:', error.message);
       this.onStatusChange(error.message === 'Sync Timeout' ? 'offline' : 'error');
     } finally {
       this.isSyncing = false;

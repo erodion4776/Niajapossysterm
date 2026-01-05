@@ -13,7 +13,7 @@ import {
   ChevronRight, RefreshCw, Send, Download, Loader2,
   CheckCircle2, AlertCircle, Sparkles, BookOpen, Wallet,
   Info, LogOut, Clock, Smartphone, Zap, Banknote, Landmark, TrendingUp,
-  Cloud, CloudOff, CloudLightning
+  Cloud, CloudOff, CloudLightning, Check
 } from 'lucide-react';
 import { Page } from '../types.ts';
 
@@ -29,11 +29,22 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
 
   const [isExporting, setIsExporting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showSyncSuccess, setShowSyncSuccess] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
 
   // Sync Engine integration
   useEffect(() => {
     syncEngine.subscribeStatus(setSyncStatus);
+    
+    // Automatic First-Time Pull Check
+    const checkInventory = async () => {
+      const count = await db.inventory.count();
+      if (count === 0 && navigator.onLine) {
+        console.log("Dashboard: Inventory empty, triggering auto-pull...");
+        await syncEngine.performInitialPull();
+      }
+    };
+    checkInventory();
   }, []);
 
   const todayRange = useMemo(() => {
@@ -42,6 +53,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
     return { start: start.getTime(), end: end.getTime() };
   }, []);
 
+  // Sum up ALL sales for today recorded on this device for the logged-in staff
   const todaySales = useLiveQuery(() => 
     db.sales
       .where('timestamp')
@@ -69,7 +81,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
     }
     setIsRefreshing(true);
     try {
-      await syncEngine.performInitialPull();
+      const success = await syncEngine.performInitialPull();
+      if (success) {
+        setShowSyncSuccess(true);
+        setTimeout(() => setShowSyncSuccess(false), 3000);
+      }
     } catch (err) {
       alert("Failed to refresh stock.");
     } finally {
@@ -137,11 +153,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
 
       <section className="bg-emerald-900/10 dark:bg-emerald-900/20 border-2 border-emerald-500/20 p-8 rounded-[40px] shadow-sm relative overflow-hidden group">
          <div className="relative z-10 space-y-5">
-            <div className="flex items-center justify-between">
-               <div className="flex items-center gap-2">
-                  <div className="p-2 bg-emerald-600 text-white rounded-xl"><TrendingUp size={16}/></div>
-                  <p className="text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em]">TOTAL SALES TODAY</p>
-               </div>
+            <div className="flex items-center gap-2">
+               <div className="p-2 bg-emerald-600 text-white rounded-xl"><TrendingUp size={16}/></div>
+               <p className="text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em]">TOTAL SALES TODAY</p>
             </div>
             <div className="space-y-1">
                <h2 className="text-5xl font-black tracking-tighter">{formatNaira(stats.revenue)}</h2>
@@ -187,8 +201,23 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
           </div>
 
           <div className="grid grid-cols-1 gap-3">
-            <button onClick={handleManualRefresh} disabled={isRefreshing} className="w-full bg-emerald-50 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all border border-emerald-100 dark:border-emerald-700/50 shadow-sm">
-               {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 📥 SYNC PRICES FROM CLOUD
+            <button 
+              onClick={handleManualRefresh} 
+              disabled={isRefreshing} 
+              className={`w-full font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all border shadow-sm ${
+                showSyncSuccess 
+                  ? 'bg-emerald-600 text-white border-emerald-600' 
+                  : 'bg-emerald-50 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300 border-emerald-100 dark:border-emerald-700/50'
+              }`}
+            >
+               {isRefreshing ? (
+                 <Loader2 size={18} className="animate-spin" />
+               ) : showSyncSuccess ? (
+                 <Check size={18} strokeWidth={3} />
+               ) : (
+                 <Download size={18} />
+               )}
+               {showSyncSuccess ? '✅ PRICES UPDATED!' : '📥 SYNC PRICES FROM CLOUD'}
             </button>
             <button onClick={handleSendReport} disabled={isExporting} className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all shadow-lg">
                {isExporting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} 📤 SEND DAILY REPORT
