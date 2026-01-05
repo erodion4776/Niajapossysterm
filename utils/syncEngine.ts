@@ -22,34 +22,30 @@ class SyncEngine {
   private onStatusChange: (status: SyncStatus) => void = () => {};
   private realtimeChannel: any = null;
   private currentListenerShopId: string | null = null;
+  private lastRealtimeUpdate = 0;
+  private pendingRealtimeUpdates: any[] = [];
 
   constructor() {
     // 1. Listen for online events
     window.addEventListener('online', () => {
-      console.log("Sync: Device online, initiating sync...");
-      this.sync();
-      this.startRealtimeListener();
+      console.log("Sync: Device online, initiating background sync...");
+      this.triggerBackgroundSync();
     });
     
-    // 2. Background Sync Loop
+    // 2. Background Sync Loop - Every 15 seconds (Local-First requirement)
     setInterval(() => {
-      if (navigator.onLine) {
-        this.sync();
-        this.startRealtimeListener();
-      } else {
-        this.updateStatus();
-      }
-    }, 45 * 1000);
+      this.triggerBackgroundSync();
+    }, 15000);
 
     this.init();
   }
 
   private async init() {
     const shopId = getShopId();
-    console.log("Sync: Starting connection for Shop ID:", shopId);
+    console.log("Sync: Initializing connection for Shop ID:", shopId);
     
     if (navigator.onLine && shopId) {
-      // Check if inventory is empty - force initial pull if so
+      // Force "Initial Pull" for Staff or fresh installs
       const count = await db.inventory.count();
       if (count === 0) {
         console.log("Sync: Local inventory empty, forcing initial pull...");
@@ -58,6 +54,12 @@ class SyncEngine {
       this.startRealtimeListener();
     }
     this.updateStatus();
+  }
+
+  private triggerBackgroundSync() {
+    if (!navigator.onLine || this.isSyncing) return;
+    this.sync(); // Non-blocking fire-and-forget
+    this.startRealtimeListener();
   }
 
   /**
@@ -70,7 +72,7 @@ class SyncEngine {
 
     this.onStatusChange('pulling');
     try {
-      console.debug('Sync: Attempting Full Cloud Pull for shop:', shopId);
+      console.debug('Sync: Starting Full Cloud Pull for shop:', shopId);
       
       const { data: cloudItems, error } = await supabase
         .from('inventory')
@@ -78,19 +80,18 @@ class SyncEngine {
         .eq('shop_id', shopId);
 
       if (error) {
-        console.error("Sync Error:", error.message);
-        alert(`Cloud Sync Error: ${error.message}. Please check if RLS policies are enabled.`);
+        console.error("Sync: Fetch failed", error.message);
         throw error;
       }
 
       if (cloudItems) {
         const dexieItems = cloudItems.map(item => this.mapCloudToLocal(item));
         await db.inventory.bulkPut(dexieItems as InventoryItem[]);
-        console.log(`Sync: Successfully pulled ${dexieItems.length} products.`);
+        console.log(`Sync: Initial pull success, ${dexieItems.length} products added.`);
       }
       
       localStorage.setItem('last_inventory_sync', Date.now().toString());
-      this.updateStatus();
+      this.onStatusChange('synced');
     } catch (err) {
       console.error('Sync: Full pull failed', err);
       this.onStatusChange('error');
@@ -117,12 +118,17 @@ class SyncEngine {
     } as InventoryItem;
   }
 
+  /**
+   * Real-time Subscription (The "Listener")
+   * Throttled: Buffers multiple changes and updates every 1s to prevent hanging.
+   */
   private startRealtimeListener() {
     const shopId = getShopId();
     if (!shopId || (this.realtimeChannel && this.currentListenerShopId === shopId)) return;
 
     if (this.realtimeChannel) supabase.removeChannel(this.realtimeChannel);
 
+    console.log("Sync: Starting Real-time Inventory Listener...");
     this.currentListenerShopId = shopId;
     this.realtimeChannel = supabase
       .channel(`inventory_changes_${shopId}`)
@@ -130,21 +136,33 @@ class SyncEngine {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'inventory', filter: `shop_id=eq.${shopId}` },
         async (payload) => {
-          const { eventType, new: newItem, old: oldItem } = payload;
-          if (eventType === 'INSERT' || eventType === 'UPDATE') {
-            console.log('Cloud Sync: Local stock updated for', newItem.name);
-            const dexieData = this.mapCloudToLocal(newItem);
-            const existing = await db.inventory.where('uuid').equals(newItem.uuid).first();
-            if (existing) await db.inventory.update(existing.id!, dexieData);
-            else await db.inventory.add(dexieData);
-          } else if (eventType === 'DELETE' && oldItem?.uuid) {
-            await db.inventory.where('uuid').equals(oldItem.uuid).delete();
-          }
-          localStorage.setItem('last_inventory_sync', Date.now().toString());
-          this.updateStatus();
+          this.pendingRealtimeUpdates.push(payload);
+          this.processThrottledUpdates();
         }
       )
       .subscribe();
+  }
+
+  private async processThrottledUpdates() {
+    const now = Date.now();
+    if (now - this.lastRealtimeUpdate < 1000) return; // Wait 1s between UI updates
+
+    this.lastRealtimeUpdate = now;
+    const updates = [...this.pendingRealtimeUpdates];
+    this.pendingRealtimeUpdates = [];
+
+    for (const payload of updates) {
+      const { eventType, new: newItem, old: oldItem } = payload;
+      if (eventType === 'INSERT' || eventType === 'UPDATE') {
+        const dexieData = this.mapCloudToLocal(newItem);
+        const existing = await db.inventory.where('uuid').equals(newItem.uuid).first();
+        if (existing) await db.inventory.update(existing.id!, dexieData);
+        else await db.inventory.add(dexieData);
+      } else if (eventType === 'DELETE' && oldItem?.uuid) {
+        await db.inventory.where('uuid').equals(oldItem.uuid).delete();
+      }
+    }
+    localStorage.setItem('last_inventory_sync', Date.now().toString());
   }
 
   public subscribeStatus(callback: (status: SyncStatus) => void) {
@@ -172,7 +190,7 @@ class SyncEngine {
   }
 
   /**
-   * Main Sync Execution with Timeout Protection
+   * Background Sync Loop with 10s Timeout Protection
    */
   public async sync() {
     if (this.isSyncing || !navigator.onLine) return;
@@ -183,7 +201,7 @@ class SyncEngine {
     this.isSyncing = true;
     this.onStatusChange('pending');
 
-    // 10 Second Timeout to prevent "Orange Spinner" getting stuck
+    // 10 Second Timeout
     const timeout = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Sync Timeout')), 10000)
     );
@@ -191,7 +209,9 @@ class SyncEngine {
     try {
       await Promise.race([
         (async () => {
+          // Push local changes (synced=0)
           await pushToCloud();
+          // Pull remote changes
           await pullFromCloud();
         })(),
         timeout

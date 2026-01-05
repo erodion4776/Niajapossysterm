@@ -38,7 +38,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
   const [lastSyncTs, setLastSyncTs] = useState(() => localStorage.getItem('last_inventory_sync'));
 
-  /* Fix: Moved selectedCustomer and other hooks to top of component to avoid 'used before declaration' errors */
   // 3. Checkout & Customer State
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'Transfer' | 'Card' | 'Debt'>('Cash');
@@ -130,14 +129,10 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
     }));
   };
 
-  // 8. Financial Logic
   const saleTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
-  // Use available wallet balance to offset saleTotal automatically if a customer is selected
   const walletCreditAvailable = selectedCustomer?.walletBalance || 0;
   const walletCreditApplied = Math.min(saleTotal, walletCreditAvailable);
   const netTotalAfterWallet = saleTotal - walletCreditApplied;
-
   const numericAmountPaid = Number(amountPaid) || 0;
   const isUnderpaid = (paymentMode !== 'Debt') && numericAmountPaid > 0 && numericAmountPaid < netTotalAfterWallet;
   const balanceOwed = isUnderpaid ? (netTotalAfterWallet - numericAmountPaid) : 0;
@@ -151,7 +146,6 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
     return false;
   }, [cart.length, paymentMode, customerName, customerPhone, isUnderpaid, saveChangeToWallet, changeDue, isProcessing]);
 
-  // 9. Handlers
   const resetCheckoutState = () => {
     setCustomerPhone('');
     setCustomerName('');
@@ -164,69 +158,18 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
     if (setNavHidden) setNavHidden(false);
   };
 
-  const togglePaymentMode = (mode: 'Cash' | 'Transfer' | 'Card' | 'Debt') => {
-    setPaymentMode(mode);
-    if (mode === 'Debt') {
-      setAmountPaid('');
-      setSaveChangeToWallet(false);
-    }
-  };
-
-  const handleLookupCustomer = async (explicitPhone?: string) => {
-    const phoneToSearch = explicitPhone || customerPhone;
-    if (!phoneToSearch) return;
-    setIsSearchingCustomer(true);
-    try {
-      const customer = await db.customers.where('phone').equals(phoneToSearch).first();
-      if (customer) {
-        setSelectedCustomer(customer);
-        setCustomerName(customer.name);
-      } else {
-        setSelectedCustomer(null);
-      }
-    } finally {
-      setIsSearchingCustomer(false);
-    }
-  };
-
-  const handleParkCart = async () => {
-    if (cart.length === 0) return;
-    try {
-      await db.parked_orders.add({
-        cartItems: cart,
-        total: saleTotal,
-        customerNote: parkNote || 'Unnamed Customer',
-        timestamp: Date.now(),
-        staff_id: String(user.id || user.role)
-      });
-      setCart([]);
-      setParkNote('');
-      setShowParkModal(false);
-      setIsCartExpanded(false);
-      setShowParkedToast(true);
-      setTimeout(() => setShowParkedToast(false), 2500);
-      if (navigator.vibrate) navigator.vibrate(100);
-    } catch (err) {
-      alert("Failed to park order");
-    }
-  };
-
-  const handleResumeOrder = (order: ParkedOrder) => {
-    if (cart.length > 0 && !confirm("Current cart has items. Replace with saved order?")) return;
-    setCart(order.cartItems);
-    db.parked_orders.delete(order.id!);
-    setShowParkedList(false);
-    setIsCartExpanded(false);
-    if (navigator.vibrate) navigator.vibrate(50);
-  };
-
+  /**
+   * "Instant-Save" Logic (Local-First)
+   * The UI never waits for Supabase.
+   */
   const handleCheckout = async (explicitMode?: string) => {
     if (cart.length === 0 || isProcessing) return;
-    setIsProcessing(true);
+    setIsProcessing(true); // Only prevents double clicks
 
     const modeToSave = explicitMode || paymentMode;
 
     try {
+      // 1. PERFORM ALL OPERATIONS LOCALLY (DEXIE)
       await db.transaction('rw', [db.inventory, db.sales, db.customers, db.debts, db.stock_logs], async () => {
         let finalCustomer = selectedCustomer;
         if (customerPhone && customerName && !finalCustomer) {
@@ -237,7 +180,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
               name: customerName,
               lastTransaction: Date.now(),
               last_updated: Date.now(),
-              synced: 0
+              synced: 0 // Mark for background sync
             }); 
           } else {
             const id = await db.customers.add({
@@ -253,6 +196,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           }
         }
 
+        // Subtract stock locally
         for (const item of cart) {
           if (!item.id) continue;
           const invItem = await db.inventory.get(item.id);
@@ -276,6 +220,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           }
         }
 
+        // Financial calc
         let appliedFromWallet = 0;
         let finalCashPaid = 0;
         let finalPaymentMethod = modeToSave;
@@ -308,12 +253,14 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
             if (saveChangeToWallet && changeDue > 0) newWalletBalance += changeDue;
             finalPaymentMethod = modeToSave;
           }
+          
           await db.customers.update(finalCustomer.id!, { 
             walletBalance: newWalletBalance,
             lastTransaction: Date.now(),
             last_updated: Date.now(),
             synced: 0
           });
+
           if (netDebtToRecord > 0) {
             const itemsSummary = cart.map(i => `${i.name} x${i.quantity}`).join(', ');
             await db.debts.add({
@@ -348,20 +295,24 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           staff_name: user.name || user.role,
           customer_phone: finalCustomer?.phone,
           last_updated: Date.now(),
-          synced: 0
+          synced: 0 // Background sync flag
         };
 
         const saleId = await db.sales.add(sale);
         setLastSale({ ...sale, id: saleId as number });
-        syncEngine.sync();
       });
 
+      // 2. SHOW SUCCESS SCREEN IMMEDIATELY
       setCart([]);
       setIsCartExpanded(false);
       setShowSuccessModal(true);
       resetCheckoutState();
+      
+      // 3. BACKGROUND SYNC (No Await)
+      syncEngine.sync();
+      
     } catch (error: any) {
-      alert('Checkout failed: ' + error.message);
+      alert('Local Save Failed: ' + error.message);
       setIsProcessing(false);
     }
   };
@@ -430,17 +381,18 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                </h1>
             </div>
             <div className="flex items-center gap-3">
-              {/* Cloud Sync Status Indicator */}
               <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-emerald-900/40 px-3 py-1.5 rounded-full border border-slate-100 dark:border-emerald-800/40">
-                {syncStatus === 'synced' || syncStatus === 'pending' ? (
+                {syncStatus === 'synced' || syncStatus === 'pending' || syncStatus === 'pulling' ? (
                   <>
                     <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_5px_#10b981]"></div>
-                    <span className="text-[8px] font-black uppercase text-emerald-600 dark:text-emerald-400">Cloud Sync: Active</span>
+                    <span className="text-[8px] font-black uppercase text-emerald-600 dark:text-emerald-400">
+                      {syncStatus === 'pulling' ? 'Syncing...' : 'Active Sync'}
+                    </span>
                   </>
                 ) : (
                   <>
                     <div className="w-1.5 h-1.5 bg-slate-300 rounded-full shadow-[0_0_5px_#cbd5e1]"></div>
-                    <span className="text-[8px] font-black uppercase text-slate-400">Cloud Sync: Offline</span>
+                    <span className="text-[8px] font-black uppercase text-slate-400">Offline</span>
                   </>
                 )}
               </div>
@@ -463,7 +415,7 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
           <div className="flex items-center gap-1.5 pl-1 mt-1">
              <RefreshCw size={8} className="text-slate-400 dark:text-emerald-700 animate-spin-slow" />
              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-emerald-700">
-               Prices last updated: <span className="text-emerald-600 dark:text-emerald-50">{lastSyncText}</span>
+               Stock Freshness: <span className="text-emerald-600 dark:text-emerald-50">{lastSyncText}</span>
              </p>
           </div>
         </header>
@@ -537,12 +489,48 @@ export const POS: React.FC<POSProps> = ({ user, setNavHidden }) => {
                 {!isCartExpanded && (
                    <div className="flex gap-2">
                       <button onClick={(e) => { e.stopPropagation(); setShowParkModal(true); }} className="bg-amber-500 text-white px-4 py-2.5 rounded-2xl font-black text-[10px] uppercase flex items-center gap-1.5 active:scale-95 transition-all shadow-lg shadow-amber-200"><Pause size={14}/> Hold</button>
-                      <div className="bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase">Checkout <ChevronUp size={14} className="inline ml-1" /></div>
+                      <div onClick={() => setIsCartExpanded(true)} className="bg-emerald-600 text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase">Checkout <ChevronUp size={14} className="inline ml-1" /></div>
                    </div>
                 )}
               </div>
             </button>
-            {/* ... cart contents same as before ... */}
+            
+            {isCartExpanded && (
+               <div className="flex-1 overflow-auto space-y-6 pt-4 custom-scrollbar">
+                  <div className="space-y-3">
+                    {cart.map(item => (
+                      <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-emerald-950/40 rounded-3xl border border-slate-100 dark:border-emerald-800/40">
+                        <div className="flex items-center gap-4">
+                           <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-800/40 flex items-center justify-center text-emerald-600 font-black">
+                              {item.image ? <img src={item.image} className="w-full h-full object-cover rounded-2xl" /> : item.name.charAt(0)}
+                           </div>
+                           <div>
+                              <p className="font-bold text-slate-800 dark:text-emerald-50 text-sm">{item.name}</p>
+                              <p className="text-emerald-600 dark:text-emerald-400 font-black text-xs">{formatNaira(item.price * item.quantity)}</p>
+                           </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button onClick={() => updateQuantity(item.id, -1)} className="p-2 bg-white dark:bg-emerald-800 rounded-xl shadow-sm text-slate-400 active:scale-90"><Minus size={16} /></button>
+                          <span className="font-black w-6 text-center dark:text-white">{item.quantity}</span>
+                          <button onClick={() => updateQuantity(item.id, 1)} className="p-2 bg-emerald-600 text-white rounded-xl shadow-sm active:scale-90"><Plus size={16} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-emerald-50 dark:bg-emerald-900/50 p-6 rounded-[32px] space-y-4">
+                     <div className="flex justify-between items-center"><span className="text-slate-400 font-bold text-xs">Total Bill</span><span className="text-2xl font-black text-emerald-600">{formatNaira(saleTotal)}</span></div>
+                  </div>
+
+                  <button 
+                    onClick={() => handleCheckout()}
+                    disabled={isCheckoutDisabled}
+                    className="w-full bg-emerald-600 text-white font-black py-6 rounded-[32px] shadow-xl uppercase text-xs tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isProcessing ? <Loader2 className="animate-spin" /> : <CheckCircle size={20} />} Finish Sale
+                  </button>
+               </div>
+            )}
           </div>
         </>
       )}
