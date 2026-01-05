@@ -1,7 +1,8 @@
 import { Sale, db, User, Customer, Category, InventoryItem, clearAllData } from '../db.ts';
 import pako from 'pako';
-import { getShopId } from './supabase.ts';
+import { getShopId, setShopId } from './supabase.ts';
 import { pullFromCloud } from '../services/syncService.ts';
+import { getRequestCode } from './security.ts';
 
 export const formatNaira = (amount: number) => {
   return new Intl.NumberFormat('en-NG', {
@@ -443,9 +444,6 @@ export const restoreFullBackup = async (data: any) => {
   return { success: true, shopName: shopName || 'Shop' };
 };
 
-/**
- * FIX: Added generateStaffInviteKey to resolve export error in Settings.tsx
- */
 export const generateStaffInviteKey = async (staff: User) => {
   const sn = await db.settings.get('shop_name');
   const exp = await db.security.get('license_expiry');
@@ -454,7 +452,9 @@ export const generateStaffInviteKey = async (staff: User) => {
   const accNum = await db.settings.get('softPosNumber');
   const accName = await db.settings.get('softPosAccount');
   const trialStart = await db.settings.get('trial_start');
-  const shopCloudUuid = getShopId();
+  
+  // The Boss's Request Code becomes the Shop ID for the cloud silo.
+  const shopCloudUuid = await getRequestCode();
 
   const payload = {
     secret: 'NAIJA_VERIFIED',
@@ -505,7 +505,7 @@ export const processStaffInvite = async (base64Key: string) => {
 
     // 2. APPLY THE CLOUD SILO ID FROM BOSS
     if (data.shopCloudUuid) {
-      localStorage.setItem('shop_cloud_uuid', data.shopCloudUuid);
+      setShopId(data.shopCloudUuid);
     }
 
     // 3. APPLY SHOP IDENTITY

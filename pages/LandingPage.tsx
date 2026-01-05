@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import ReactGA from 'react-ga4';
 import { 
@@ -12,6 +11,8 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Page } from '../types.ts';
+import { getRequestCode } from '../utils/security.ts';
+import { setShopId } from '../utils/supabase.ts';
 
 interface LandingPageProps {
   onStartTrial: () => void;
@@ -47,7 +48,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
     return () => clearTimeout(timer);
   }, []);
 
-  const handleStartTrialClick = () => {
+  const handleStartTrialClick = async () => {
     ReactGA.event({
       category: "Conversion",
       action: "Trial Started",
@@ -65,10 +66,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartTrial, onNaviga
     
     // Atomic Initialization of Trial State
     const now = Date.now().toString();
+    const requestCode = await getRequestCode();
+    
     localStorage.setItem('is_trialing', 'true');
     localStorage.setItem('trial_start_date', now);
     localStorage.setItem('is_setup_pending', 'true');
     localStorage.setItem('device_role', 'Owner');
+    
+    // Use Request Code as the permanent Shop ID for cloud silo
+    setShopId(requestCode);
 
     setIsPreparing(true);
     
