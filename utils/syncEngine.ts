@@ -1,18 +1,17 @@
 
 import { db } from '../db.ts';
-import { supabase, isSupabaseConfigured } from './supabase.ts';
-import { getRequestCode } from './security.ts';
+import { supabase, getShopId } from './supabase.ts';
 
 /**
- * SYNCABLE_TABLES: Defined by the core data required for a full shop cloud view.
+ * Tables that need to be synchronized to the cloud for a complete shop overview.
  */
 const SYNCABLE_TABLES = [
-  'inventory', 
-  'categories', 
-  'customers', 
-  'sales', 
-  'expenses', 
-  'debts', 
+  'inventory',
+  'categories',
+  'customers',
+  'sales',
+  'expenses',
+  'debts',
   'users'
 ] as const;
 
@@ -23,11 +22,17 @@ class SyncEngine {
   private onStatusChange: (status: SyncStatus) => void = () => {};
 
   constructor() {
-    // 1. Initial trigger and network listeners
+    // 1. Listen for online events to trigger immediate sync
     window.addEventListener('online', () => this.sync());
     
     // 2. The Sync Loop: Every 30 seconds, check if the device is navigator.onLine
-    setInterval(() => this.sync(), 30 * 1000);
+    setInterval(() => {
+      if (navigator.onLine) {
+        this.sync();
+      } else {
+        this.updateStatus();
+      }
+    }, 30 * 1000);
   }
 
   /**
@@ -53,7 +58,7 @@ class SyncEngine {
     try {
       for (const tableName of SYNCABLE_TABLES) {
         const table = (db as any)[tableName];
-        // Dexie stores boolean-like synced flag as 0 (false) or 1 (true)
+        // synced: 0 means "not yet pushed to cloud"
         count += await table.where('synced').equals(0).count();
       }
     } catch (e) {
@@ -63,10 +68,11 @@ class SyncEngine {
   }
 
   /**
-   * Main Sync Execution
+   * Main Sync Execution Logic
    */
   public async sync() {
-    if (this.isSyncing || !navigator.onLine || !isSupabaseConfigured) {
+    // Safety checks: skip if already syncing or offline
+    if (this.isSyncing || !navigator.onLine) {
       this.updateStatus();
       return;
     }
@@ -74,17 +80,19 @@ class SyncEngine {
     this.isSyncing = true;
     this.onStatusChange('pending');
 
-    // 5. Shop ID: Fetch the Boss's unique Request Code for identification
-    const shopId = await getRequestCode();
-    
     try {
-      // Process each table sequentially to ensure reliable batching
+      // 5. Shop ID: Every record sent to Supabase must include the shop_id
+      // Using the persistent Shop UUID from the consolidated supabase utility
+      const shopId = getShopId();
+      
+      // Process tables sequentially
       for (const tableName of SYNCABLE_TABLES) {
         await this.syncTable(tableName, shopId);
       }
+      
       this.onStatusChange('synced');
     } catch (error) {
-      console.error('NaijaShop Cloud Sync Error:', error);
+      console.error('NaijaShop Cloud Sync Loop Error:', error);
       this.onStatusChange('error');
     } finally {
       this.isSyncing = false;
@@ -93,41 +101,37 @@ class SyncEngine {
   }
 
   /**
-   * Synchronizes a specific Dexie table with its Supabase counterpart.
+   * Pushes unsynced changes for a specific table to Supabase.
    */
   private async syncTable(tableName: string, shopId: string) {
     const table = (db as any)[tableName];
     
-    // 2. Push Local Changes: Find any records with synced: 0
-    const unsynced = await table.where('synced').equals(0).toArray();
+    // Push Local Changes: Look for any records in Dexie that have a synced: 0 flag.
+    const unsyncedRecords = await table.where('synced').equals(0).toArray();
     
-    if (unsynced.length > 0) {
-      // 3. Prepare Payload
-      const payload = unsynced.map(item => {
-        // Strip the local auto-increment 'id' to let the cloud manage its own ID space
-        // while relying solely on the 'uuid' for data mapping.
-        const { id, ...cleanData } = item;
-        
+    if (unsyncedRecords.length > 0) {
+      // Prepare payload: Strip local auto-increment IDs and ensure UUID + ShopID
+      const payload = unsyncedRecords.map(record => {
+        const { id, ...dataToSync } = record;
         return {
-          ...cleanData,
-          uuid: item.uuid || crypto.randomUUID(), // Guarantee a UUID exists
-          shop_id: shopId,                      // Always include shop identity
-          synced: 1,                            // Target copy should be marked as synced
-          last_updated: item.last_updated || Date.now()
+          ...dataToSync,
+          uuid: record.uuid || crypto.randomUUID(), // Guarantee UUID
+          shop_id: shopId,                          // Attach device/shop identity
+          synced: 1,                                // Set to synced for the cloud copy
+          last_updated: record.last_updated || Date.now()
         };
       });
 
-      // 3. Supabase Upsert: Pushing local changes to the cloud
-      // Strictly uses 'uuid' as the unique constraint to prevent duplicates.
+      // Supabase Upsert: Use uuid as the primary key for all upserts.
       const { error } = await supabase
         .from(tableName)
         .upsert(payload, { onConflict: 'uuid' });
 
       if (!error) {
-        // 4. Mark as Synced locally once Supabase confirms success
-        const uuids = payload.map(p => p.uuid);
-        await table.where('uuid').anyOf(uuids).modify({ synced: 1 });
-        console.debug(`SyncEngine: Uploaded ${payload.length} records to ${tableName}`);
+        // Mark as Synced: Update local Dexie records once cloud confirms success.
+        const successfullyPushedUuids = payload.map(p => p.uuid);
+        await table.where('uuid').anyOf(successfullyPushedUuids).modify({ synced: 1 });
+        console.debug(`SyncEngine: Successfully pushed ${payload.length} records to ${tableName}`);
       } else {
         throw error;
       }
@@ -135,11 +139,12 @@ class SyncEngine {
   }
 
   /**
-   * opportunistic sync trigger after a local update
+   * Helper to manually trigger an opportunistic sync (e.g. after a big sale)
    */
   public trigger() {
     this.sync();
   }
 }
 
+// Singleton instance
 export const syncEngine = new SyncEngine();
