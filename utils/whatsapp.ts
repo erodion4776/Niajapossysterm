@@ -1,6 +1,7 @@
 import { Sale, db, User, Customer, Category, InventoryItem, clearAllData } from '../db.ts';
 import pako from 'pako';
 import { getShopId } from './supabase.ts';
+import { pullFromCloud } from '../services/syncService.ts';
 
 export const formatNaira = (amount: number) => {
   return new Intl.NumberFormat('en-NG', {
@@ -550,6 +551,15 @@ export const processStaffInvite = async (base64Key: string) => {
     localStorage.setItem('user_role', 'staff');
     localStorage.setItem('is_setup_pending', 'false');
     localStorage.setItem('isAuthenticated', 'false'); // Require login
+
+    // 8. TRIGGER INITIAL CLOUD PULL TO GET PRODUCTS
+    try {
+      if (navigator.onLine) {
+        await pullFromCloud();
+      }
+    } catch (syncErr) {
+      console.warn("Initial sync pull failed, background sync will try later", syncErr);
+    }
 
     return { success: true, shopName: data.shopName };
   } catch (error) {

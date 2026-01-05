@@ -1,6 +1,6 @@
-
 import { db } from '../db.ts';
 import { supabase, getShopId } from './supabase.ts';
+import { pullFromCloud, pushToCloud } from '../services/syncService.ts';
 
 /**
  * Tables that need to be synchronized to the cloud for a complete shop overview.
@@ -68,7 +68,7 @@ class SyncEngine {
   }
 
   /**
-   * Main Sync Execution Logic
+   * Main Sync Execution Logic (Bidirectional)
    */
   public async sync() {
     // Safety checks: skip if already syncing or offline
@@ -81,14 +81,11 @@ class SyncEngine {
     this.onStatusChange('pending');
 
     try {
-      // 5. Shop ID: Every record sent to Supabase must include the shop_id
-      // Using the persistent Shop UUID from the consolidated supabase utility
-      const shopId = getShopId();
+      // 1. Push Local Changes to Cloud
+      await pushToCloud();
       
-      // Process tables sequentially
-      for (const tableName of SYNCABLE_TABLES) {
-        await this.syncTable(tableName, shopId);
-      }
+      // 2. Pull Remote Changes from Cloud
+      await pullFromCloud();
       
       this.onStatusChange('synced');
     } catch (error) {
@@ -97,44 +94,6 @@ class SyncEngine {
     } finally {
       this.isSyncing = false;
       this.updateStatus();
-    }
-  }
-
-  /**
-   * Pushes unsynced changes for a specific table to Supabase.
-   */
-  private async syncTable(tableName: string, shopId: string) {
-    const table = (db as any)[tableName];
-    
-    // Push Local Changes: Look for any records in Dexie that have a synced: 0 flag.
-    const unsyncedRecords = await table.where('synced').equals(0).toArray();
-    
-    if (unsyncedRecords.length > 0) {
-      // Prepare payload: Strip local auto-increment IDs and ensure UUID + ShopID
-      const payload = unsyncedRecords.map(record => {
-        const { id, ...dataToSync } = record;
-        return {
-          ...dataToSync,
-          uuid: record.uuid || crypto.randomUUID(), // Guarantee UUID
-          shop_id: shopId,                          // Attach device/shop identity
-          synced: 1,                                // Set to synced for the cloud copy
-          last_updated: record.last_updated || Date.now()
-        };
-      });
-
-      // Supabase Upsert: Use uuid as the primary key for all upserts.
-      const { error } = await supabase
-        .from(tableName)
-        .upsert(payload, { onConflict: 'uuid' });
-
-      if (!error) {
-        // Mark as Synced: Update local Dexie records once cloud confirms success.
-        const successfullyPushedUuids = payload.map(p => p.uuid);
-        await table.where('uuid').anyOf(successfullyPushedUuids).modify({ synced: 1 });
-        console.debug(`SyncEngine: Successfully pushed ${payload.length} records to ${tableName}`);
-      } else {
-        throw error;
-      }
     }
   }
 
