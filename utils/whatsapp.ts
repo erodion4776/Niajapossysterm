@@ -1,6 +1,6 @@
-
 import { Sale, db, User, Customer, Category, InventoryItem, clearAllData } from '../db.ts';
 import pako from 'pako';
+import { getShopId } from './supabase.ts';
 
 export const formatNaira = (amount: number) => {
   return new Intl.NumberFormat('en-NG', {
@@ -55,6 +55,7 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
     message += `📌 Status: Partially Settled\n`;
   } else {
     const totalPayment = (sale.walletUsed || 0) + (sale.cashPaid || 0);
+    message += `--------------------------\n`;
     message += `✅ Total Paid: ${formatNaira(totalPayment)}\n`;
   }
   
@@ -81,7 +82,7 @@ export const shareReceiptToWhatsApp = async (sale: Sale) => {
 /**
  * CORE BACKUP ENGINE (GZIP)
  */
-export const backupToWhatsApp = async (data: any, forceTextOnly = false): Promise<BackupResult> => {
+export const backupToWhatsApp = async (data: any, forceTextOnly = false): Promise<any> => {
   let finalData = { ...data };
 
   if (forceTextOnly) {
@@ -212,8 +213,6 @@ export const applyInventoryUpdate = async (data: any) => {
 
   // MONOTONIC CLOCK SYNC: Detect "Time Travel" bypasses
   if (data.timestamp && Date.now() < (data.timestamp - (60 * 60 * 1000))) {
-     // If the incoming "Boss Update" is significantly in the FUTURE compared to local phone time,
-     // it means the staff phone has been set backwards to cheat the license expiry.
      alert("⚠️ CLOCK ERROR: Your phone date is incorrect. Please set your phone to the correct time to continue.");
      localStorage.setItem('license_tampered', 'true');
      window.location.reload();
@@ -454,10 +453,12 @@ export const generateStaffInviteKey = async (staff: User) => {
   const accNum = await db.settings.get('softPosNumber');
   const accName = await db.settings.get('softPosAccount');
   const trialStart = await db.settings.get('trial_start');
+  const shopCloudUuid = getShopId();
 
   const payload = {
     secret: 'NAIJA_VERIFIED',
     shopName: sn?.value || 'NaijaShop',
+    shopCloudUuid,
     expiry: exp?.value || '',
     license_signature: sig?.value || '',
     trial_start: trialStart?.value || '',
@@ -498,48 +499,61 @@ export const processStaffInvite = async (base64Key: string) => {
       return { success: false, error: "Incorrect Phone Date" };
     }
 
+    // 1. CLEAR CURRENT LOCAL DATA FOR FRESH JOIN
     await clearAllData();
 
-    localStorage.setItem('user_role', 'staff');
-    localStorage.setItem('device_role', 'StaffDevice');
-    localStorage.setItem('shop_name', data.shopName);
-    localStorage.setItem('is_activated', data.expiry ? 'true' : 'false');
-    localStorage.setItem('license_expiry', data.expiry);
-    localStorage.setItem('license_signature', data.license_signature);
-    localStorage.setItem('trial_start_date', data.trial_start?.toString() || '');
-    localStorage.setItem('is_setup_pending', 'false');
+    // 2. APPLY THE CLOUD SILO ID FROM BOSS
+    if (data.shopCloudUuid) {
+      localStorage.setItem('shop_cloud_uuid', data.shopCloudUuid);
+    }
 
-    // Fix: Added required 'uuid', 'last_updated', and 'synced' properties to the user creation object
-    await db.users.add({ 
-      uuid: crypto.randomUUID(), 
-      name: data.staffName, 
-      pin: data.staffPin, 
-      role: 'Staff', 
-      last_updated: Date.now(), 
-      synced: 0 
-    });
+    // 3. APPLY SHOP IDENTITY
+    if (data.shopName) {
+      await db.settings.put({ key: 'shop_name', value: data.shopName });
+      localStorage.setItem('shop_name', data.shopName);
+    }
 
+    // 4. APPLY LICENSE (INHERIT BOSS ACTIVATION)
+    if (data.expiry) {
+      await db.security.put({ key: 'license_expiry', value: data.expiry });
+      localStorage.setItem('license_expiry', data.expiry);
+    }
+    if (data.license_signature) {
+      await db.security.put({ key: 'license_signature', value: data.license_signature });
+      localStorage.setItem('license_signature', data.license_signature);
+    }
+    if (data.trial_start) {
+      await db.settings.put({ key: 'trial_start', value: data.trial_start });
+      localStorage.setItem('trial_start_date', String(data.trial_start));
+    }
+    
+    localStorage.setItem('is_activated', 'true');
+    localStorage.removeItem('is_trialing');
+
+    // 5. APPLY SOFT POS SETTINGS
     if (data.softPosBank) await db.settings.put({ key: 'softPosBank', value: data.softPosBank });
     if (data.softPosNumber) await db.settings.put({ key: 'softPosNumber', value: data.softPosNumber });
     if (data.softPosAccount) await db.settings.put({ key: 'softPosAccount', value: data.softPosAccount });
-    
-    if (data.expiry) {
-      await db.security.put({ key: 'license_expiry', value: data.expiry });
-      await db.security.put({ key: 'license_signature', value: data.license_signature });
-    }
-    
-    if (data.trial_start) {
-      await db.settings.put({ key: 'trial_start', value: data.trial_start });
-    }
+
+    // 6. CREATE LOCAL USER FOR LOGIN
+    await db.users.add({
+      uuid: crypto.randomUUID(),
+      name: data.staffName,
+      pin: data.staffPin,
+      role: 'Staff',
+      last_updated: Date.now(),
+      synced: 0
+    });
+
+    // 7. SET TERMINAL FLAGS
+    localStorage.setItem('device_role', 'StaffDevice');
+    localStorage.setItem('user_role', 'staff');
+    localStorage.setItem('is_setup_pending', 'false');
+    localStorage.setItem('isAuthenticated', 'false'); // Require login
 
     return { success: true, shopName: data.shopName };
-  } catch (e) {
-    return { success: false, error: (e as Error).message };
+  } catch (error) {
+    console.error("Staff Invite Failed:", error);
+    return { success: false, error: "Invalid Link" };
   }
-};
-
-export type BackupResult = {
-  success: boolean;
-  method: 'FILE_SHARE' | 'TEXT_SHARE' | 'DOWNLOAD';
-  fileName?: string;
 };
