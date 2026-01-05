@@ -21,6 +21,7 @@ class SyncEngine {
   private isSyncing = false;
   private onStatusChange: (status: SyncStatus) => void = () => {};
   private realtimeChannel: any = null;
+  private currentListenerShopId: string | null = null;
 
   constructor() {
     // 1. Listen for online events
@@ -30,14 +31,16 @@ class SyncEngine {
       this.startRealtimeListener();
     });
     
-    // 2. Background Sync Loop
+    // 2. Background Sync Loop: Checks every 30s
     setInterval(() => {
       if (navigator.onLine) {
         this.sync();
+        // Ensure listener is active if shopId was recently set
+        this.startRealtimeListener();
       } else {
         this.updateStatus();
       }
-    }, 60 * 1000); // Once a minute background loop
+    }, 30 * 1000);
 
     // 3. Initial Startup logic
     this.init();
@@ -56,7 +59,6 @@ class SyncEngine {
 
   /**
    * Performs a forceful full inventory pull from Supabase.
-   * This ignores the last sync timestamp to ensure the Staff device is 100% up to date.
    */
   public async performInitialPull() {
     if (!navigator.onLine) return;
@@ -66,7 +68,6 @@ class SyncEngine {
     try {
       console.debug('SyncEngine: Performing Full Cloud Pull for shop:', shopId);
       
-      // Fetch all items from cloud inventory for this shop
       const { data: cloudItems, error } = await supabase
         .from('inventory')
         .select('*')
@@ -74,28 +75,11 @@ class SyncEngine {
 
       if (error) throw error;
 
-      if (cloudItems && cloudItems.length > 0) {
-        const dexieItems = cloudItems.map(item => ({
-          uuid: item.uuid,
-          name: item.name,
-          costPrice: item.cost_price,
-          sellingPrice: item.selling_price,
-          stock: item.stock,
-          unit: item.unit,
-          supplierName: item.supplier_name,
-          minStock: item.min_stock,
-          expiryDate: item.expiry_date,
-          category: item.category,
-          barcode: item.barcode,
-          dateAdded: item.date_added,
-          image: item.image,
-          last_updated: item.last_updated,
-          synced: 1
-        }));
-
-        // bulkPut preserves existing items but overwrites with cloud data (Master copy)
+      if (cloudItems) {
+        const dexieItems = cloudItems.map(item => this.mapCloudToLocal(item));
+        // bulkPut overwrites local with cloud Master copy
         await db.inventory.bulkPut(dexieItems as InventoryItem[]);
-        console.log(`SyncEngine: Successfully pulled ${dexieItems.length} products from Admin.`);
+        console.log(`SyncEngine: Pulled ${dexieItems.length} products from cloud.`);
       }
       
       localStorage.setItem('last_inventory_sync', Date.now().toString());
@@ -107,23 +91,49 @@ class SyncEngine {
   }
 
   /**
+   * Field mapper to handle Snake Case (Supabase) to Camel Case (Dexie)
+   */
+  private mapCloudToLocal(item: any): InventoryItem {
+    return {
+      uuid: item.uuid,
+      name: item.name,
+      costPrice: item.cost_price,
+      sellingPrice: item.selling_price,
+      stock: item.stock,
+      unit: item.unit,
+      supplierName: item.supplier_name,
+      minStock: item.min_stock,
+      expiryDate: item.expiry_date,
+      category: item.category,
+      barcode: item.barcode,
+      dateAdded: item.date_added,
+      image: item.image,
+      last_updated: item.last_updated,
+      synced: 1
+    } as InventoryItem;
+  }
+
+  /**
    * Connects to Supabase Realtime to listen for inventory updates.
-   * This is what keeps Staff prices/stock updated when Admin makes changes.
+   * Handles INSERT, UPDATE, and DELETE.
    */
   private startRealtimeListener() {
     const shopId = getShopId();
     if (!shopId) return;
     
-    // Close existing channel if any
+    // Skip if already listening to this shop
+    if (this.realtimeChannel && this.currentListenerShopId === shopId) return;
+
+    // Cleanup old channel if switching shops or restarting
     if (this.realtimeChannel) {
       supabase.removeChannel(this.realtimeChannel);
-      this.realtimeChannel = null;
     }
 
     console.debug('SyncEngine: Starting Realtime Listener for shop:', shopId);
+    this.currentListenerShopId = shopId;
 
     this.realtimeChannel = supabase
-      .channel(`inventory_updates_${shopId}`)
+      .channel(`inventory_changes_${shopId}`)
       .on(
         'postgres_changes',
         {
@@ -133,43 +143,33 @@ class SyncEngine {
           filter: `shop_id=eq.${shopId}`
         },
         async (payload) => {
-          console.debug('SyncEngine: Cloud update detected:', payload);
+          const { eventType, new: newItem, old: oldItem } = payload;
           
-          if (payload.new) {
-            const item = payload.new as any;
-            const dexieData: Partial<InventoryItem> = {
-              uuid: item.uuid,
-              name: item.name,
-              costPrice: item.cost_price,
-              sellingPrice: item.selling_price,
-              stock: item.stock,
-              unit: item.unit,
-              supplierName: item.supplier_name,
-              minStock: item.min_stock,
-              expiryDate: item.expiry_date,
-              category: item.category,
-              barcode: item.barcode,
-              dateAdded: item.date_added,
-              image: item.image,
-              last_updated: item.last_updated,
-              synced: 1 // Crucial: tell Dexie this came from cloud
-            };
-
-            const localItem = await db.inventory.where('uuid').equals(item.uuid).first();
-            if (localItem) {
-              await db.inventory.update(localItem.id!, dexieData);
-            } else {
-              await db.inventory.add(dexieData as InventoryItem);
-            }
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            console.log(`Cloud Sync: Local stock updated for ${newItem.name}`);
+            const dexieData = this.mapCloudToLocal(newItem);
             
-            localStorage.setItem('last_inventory_sync', Date.now().toString());
-            this.updateStatus();
+            const existing = await db.inventory.where('uuid').equals(newItem.uuid).first();
+            if (existing) {
+              await db.inventory.update(existing.id!, dexieData);
+            } else {
+              await db.inventory.add(dexieData);
+            }
+          } 
+          else if (eventType === 'DELETE') {
+            console.log('Cloud Sync: Item deleted in cloud, removing locally...');
+            if (oldItem && oldItem.uuid) {
+              await db.inventory.where('uuid').equals(oldItem.uuid).delete();
+            }
           }
+          
+          localStorage.setItem('last_inventory_sync', Date.now().toString());
+          this.updateStatus();
         }
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          console.log("SyncEngine: Realtime Active ✅");
+          console.log("SyncEngine: Real-time Cloud Active ✅");
         }
       });
   }
@@ -200,7 +200,7 @@ class SyncEngine {
         count += await table.where('synced').equals(0).count();
       }
     } catch (e) {
-      console.warn("SyncEngine: Error counting pending records", e);
+      // Database might be closed or busy
     }
     return count;
   }
@@ -221,11 +221,8 @@ class SyncEngine {
     this.onStatusChange('pending');
 
     try {
-      // 1. Push local changes
       await pushToCloud();
-      // 2. Pull remote changes (Incremental)
       await pullFromCloud();
-      
       this.onStatusChange('synced');
     } catch (error) {
       console.error('SyncEngine: Cloud Sync Error:', error);
