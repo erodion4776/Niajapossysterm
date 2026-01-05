@@ -27,25 +27,21 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
   const shopName = localStorage.getItem('shop_name') || 'NaijaShop';
   const lastSyncTs = localStorage.getItem('last_inventory_sync');
 
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
-  const syncInputRef = useRef<HTMLInputElement>(null);
 
   // Sync Engine integration
   useEffect(() => {
     syncEngine.subscribeStatus(setSyncStatus);
   }, []);
 
-  // Today's Date Range
   const todayRange = useMemo(() => {
     const start = new Date(); start.setHours(0,0,0,0);
     const end = new Date(); end.setHours(23,59,59,999);
     return { start: start.getTime(), end: end.getTime() };
   }, []);
 
-  // Filter query by staff_id to ensure they only see what they sold on this terminal
   const todaySales = useLiveQuery(() => 
     db.sales
       .where('timestamp')
@@ -55,26 +51,14 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
     [todayRange, user]
   );
 
-  // RECONCILIATION LOGIC
   const stats = useMemo(() => {
     if (!todaySales) return { count: 0, items: 0, revenue: 0, cash: 0, transfer: 0, debt: 0 };
-    
     const count = todaySales.length;
     const items = todaySales.reduce((sum, s) => sum + s.items.reduce((iS, i) => iS + i.quantity, 0), 0);
     const revenue = todaySales.reduce((sum, s) => sum + (s.total || 0), 0);
     const cash = todaySales.reduce((sum, s) => sum + (s.cashPaid || 0), 0);
-    
-    const transfer = todaySales.reduce((sum, s) => {
-      if (['Transfer', 'Card'].includes(s.paymentMethod)) {
-        return sum + (s.total - (s.walletUsed || 0));
-      }
-      return sum;
-    }, 0);
-
-    const debt = todaySales.reduce((sum, s) => {
-      return sum + Math.max(0, s.total - (s.cashPaid || 0) - (s.walletUsed || 0));
-    }, 0);
-
+    const transfer = todaySales.reduce((sum, s) => ['Transfer', 'Card'].includes(s.paymentMethod) ? sum + (s.total - (s.walletUsed || 0)) : sum, 0);
+    const debt = todaySales.reduce((sum, s) => sum + Math.max(0, s.total - (s.cashPaid || 0) - (s.walletUsed || 0)), 0);
     return { count, items, revenue, cash, transfer, debt };
   }, [todaySales]);
 
@@ -86,36 +70,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
     setIsRefreshing(true);
     try {
       await syncEngine.performInitialPull();
-      alert("✅ Refresh Complete! All prices and stock updated from Admin.");
     } catch (err) {
       alert("Failed to refresh stock.");
     } finally {
       setIsRefreshing(false);
     }
-  };
-
-  const handleSyncFromBoss = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsSyncing(true);
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const arrayBuffer = event.target?.result as ArrayBuffer;
-        const decompressed = pako.ungzip(new Uint8Array(arrayBuffer), { to: 'string' });
-        const data = JSON.parse(decompressed);
-        
-        const result = await applyInventoryUpdate(data);
-        alert(`✅ Sync Success!\n- Updated ${result.updated} prices\n- Added ${result.added} new products.\nYour local stock levels were protected.`);
-        window.location.reload();
-      } catch (err) {
-        alert("Sync failed: Please use the .json.gz file sent by Oga.");
-      } finally {
-        setIsSyncing(false);
-        if (syncInputRef.current) syncInputRef.current.value = '';
-      }
-    };
-    reader.readAsArrayBuffer(file);
   };
 
   const handleSendReport = async () => {
@@ -135,7 +94,21 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
   };
 
   return (
-    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500 max-h-screen overflow-y-auto custom-scrollbar">
+    <div className="p-4 space-y-6 pb-24 animate-in fade-in duration-500 max-h-screen overflow-y-auto custom-scrollbar relative">
+      {/* FULL SCREEN PULL PROGRESS */}
+      {syncStatus === 'pulling' && (
+        <div className="fixed inset-0 z-[2000] bg-emerald-950 flex flex-col items-center justify-center p-8 text-center animate-in fade-in">
+           <div className="w-20 h-20 bg-emerald-500/20 rounded-[32px] flex items-center justify-center mb-6 animate-pulse">
+              <RefreshCw size={40} className="text-emerald-500 animate-spin" />
+           </div>
+           <h2 className="text-white text-2xl font-black italic uppercase tracking-tighter mb-2">Connecting to Admin...</h2>
+           <p className="text-emerald-500/60 text-xs font-bold uppercase tracking-widest animate-pulse">Downloading Shop Inventory</p>
+           <div className="w-full max-w-xs h-1.5 bg-white/10 rounded-full mt-8 overflow-hidden">
+              <div className="h-full bg-emerald-500 animate-[shimmer_2s_infinite] w-full origin-left"></div>
+           </div>
+        </div>
+      )}
+
       <header className="flex justify-between items-start">
         <div className="flex-1">
           <p className="text-emerald-500 text-[9px] font-black uppercase tracking-[0.3em] mb-1">Staff Workspace</p>
@@ -153,72 +126,53 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
           </p>
         </div>
         <div className="flex gap-2">
-           <button 
-             onClick={handleManualRefresh}
-             disabled={isRefreshing}
-             className="p-3 bg-emerald-50 dark:bg-emerald-900 border border-emerald-100 dark:border-emerald-800 rounded-2xl shadow-sm text-emerald-600 active:scale-90 transition-all"
-             title="Refresh Stock"
-           >
+           <button onClick={handleManualRefresh} disabled={isRefreshing} className="p-3 bg-emerald-50 dark:bg-emerald-900 border border-emerald-100 rounded-2xl text-emerald-600 active:scale-90 transition-all">
              {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
            </button>
-           <button 
-             onClick={() => { localStorage.removeItem('user_role'); localStorage.removeItem('logged_in_staff_name'); window.location.reload(); }}
-             className="p-3 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl shadow-sm text-red-400 active:scale-90 transition-all"
-           >
+           <button onClick={() => { localStorage.removeItem('user_role'); window.location.reload(); }} className="p-3 bg-white dark:bg-emerald-900 border border-slate-100 rounded-2xl text-red-400">
              <LogOut size={18} />
            </button>
         </div>
       </header>
 
-      {/* SHIFT RECONCILIATION PRIMARY CARD */}
-      <section className="bg-emerald-900/10 dark:bg-emerald-900/20 border-2 border-emerald-500/20 text-emerald-950 dark:text-white p-8 rounded-[40px] shadow-sm relative overflow-hidden group">
+      <section className="bg-emerald-900/10 dark:bg-emerald-900/20 border-2 border-emerald-500/20 p-8 rounded-[40px] shadow-sm relative overflow-hidden group">
          <div className="relative z-10 space-y-5">
             <div className="flex items-center justify-between">
                <div className="flex items-center gap-2">
                   <div className="p-2 bg-emerald-600 text-white rounded-xl"><TrendingUp size={16}/></div>
                   <p className="text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em]">TOTAL SALES TODAY</p>
                </div>
-               <button onClick={handleManualRefresh} className="text-[8px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1 active:scale-90">
-                 <RefreshCw size={10} className={isRefreshing ? 'animate-spin' : ''} /> Sync Stock
-               </button>
             </div>
-            
             <div className="space-y-1">
                <h2 className="text-5xl font-black tracking-tighter">{formatNaira(stats.revenue)}</h2>
                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Personal Sales History on this Device</p>
             </div>
-
             <div className="flex items-center gap-2 pt-2">
-               <div className="px-3 py-1.5 bg-emerald-600/10 dark:bg-white/10 rounded-full border border-emerald-500/10 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+               <div className="px-3 py-1.5 bg-emerald-600/10 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                   <Package size={10}/> {stats.items} Items Moved
                </div>
-               <div className="px-3 py-1.5 bg-emerald-600/10 dark:bg-white/10 rounded-full border border-emerald-500/10 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                  <History size={10}/> {stats.count} Receipts Issued
+               <div className="px-3 py-1.5 bg-emerald-600/10 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <History size={10}/> {stats.count} Receipts
                </div>
             </div>
          </div>
       </section>
 
-      {/* PAYMENT BREAKDOWN (For Drawer Reconciliation) */}
       <div className="grid grid-cols-3 gap-2">
-         <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all">
+         <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
             <Banknote size={16} className="text-emerald-500 mx-auto mb-1.5" />
-            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Cash: </p>
             <p className="text-[10px] font-black text-emerald-600 truncate">{formatNaira(stats.cash)}</p>
          </div>
-         <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all">
+         <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
             <Landmark size={16} className="text-blue-500 mx-auto mb-1.5" />
-            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Transfer/POS</p>
             <p className="text-[10px] font-black text-blue-600 truncate">{formatNaira(stats.transfer)}</p>
          </div>
-         <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20 active:scale-95 transition-all">
+         <div className="bg-white dark:bg-emerald-900/40 p-4 rounded-[28px] text-center shadow-sm border border-slate-50 dark:border-emerald-800/20">
             <BookOpen size={16} className="text-amber-500 mx-auto mb-1.5" />
-            <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Total Debt</p>
             <p className="text-[10px] font-black text-amber-500 truncate">{formatNaira(stats.debt)}</p>
          </div>
       </div>
 
-      {/* SYNC CENTER */}
       <section className="bg-white dark:bg-emerald-900/40 border-2 border-dashed border-emerald-200 dark:border-emerald-800 p-6 rounded-[32px] space-y-6">
           <div className="flex justify-between items-center">
              <div className="flex items-center gap-3">
@@ -236,20 +190,12 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
             <button onClick={handleManualRefresh} disabled={isRefreshing} className="w-full bg-emerald-50 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all border border-emerald-100 dark:border-emerald-700/50 shadow-sm">
                {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 📥 SYNC PRICES FROM CLOUD
             </button>
-            <button onClick={handleSendReport} disabled={isExporting} className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-100 dark:shadow-none">
+            <button onClick={handleSendReport} disabled={isExporting} className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all shadow-lg">
                {isExporting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} 📤 SEND DAILY REPORT
             </button>
           </div>
-          
-          <div className="bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-2xl flex items-start gap-3">
-             <Info className="text-slate-300 shrink-0 mt-0.5" size={14} />
-             <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">
-               Cloud sync is active. Updates from Admin happen automatically. If you don't see a new price, tap "Sync Prices from Cloud".
-             </p>
-          </div>
       </section>
 
-      {/* QUICK STATUS */}
       <div className="grid grid-cols-2 gap-3">
          <div className="bg-white dark:bg-emerald-900/40 p-5 rounded-[32px] border border-slate-50 dark:border-emerald-800/20 shadow-sm space-y-2">
             <div className="p-2 bg-blue-50 dark:bg-blue-900/40 w-fit rounded-xl text-blue-600"><Smartphone size={18}/></div>
@@ -261,10 +207,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fast Action</p>
             <p className="text-xs font-black text-emerald-600 uppercase italic tracking-tight">Open POS Terminal</p>
          </div>
-      </div>
-
-      <div className="pt-4 text-center">
-        <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.4em]">NaijaShop Offline Sync Loop 🇳🇬</p>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { supabase, getShopId } from './supabase.ts';
 import { pullFromCloud, pushToCloud } from '../services/syncService.ts';
 
 /**
- * Tables that need to be synchronized to the cloud for a complete shop overview.
+ * Tables that need to be synchronized to the cloud.
  */
 const SYNCABLE_TABLES = [
   'inventory',
@@ -15,7 +15,7 @@ const SYNCABLE_TABLES = [
   'users'
 ] as const;
 
-export type SyncStatus = 'synced' | 'pending' | 'offline' | 'error';
+export type SyncStatus = 'synced' | 'pending' | 'offline' | 'error' | 'pulling';
 
 class SyncEngine {
   private isSyncing = false;
@@ -26,33 +26,36 @@ class SyncEngine {
   constructor() {
     // 1. Listen for online events
     window.addEventListener('online', () => {
-      console.log("SyncEngine: Device online, initiating sync...");
+      console.log("Sync: Device online, initiating sync...");
       this.sync();
       this.startRealtimeListener();
     });
     
-    // 2. Background Sync Loop: Checks every 30s
+    // 2. Background Sync Loop
     setInterval(() => {
       if (navigator.onLine) {
         this.sync();
-        // Ensure listener is active if shopId was recently set
         this.startRealtimeListener();
       } else {
         this.updateStatus();
       }
-    }, 30 * 1000);
+    }, 45 * 1000);
 
-    // 3. Initial Startup logic
     this.init();
   }
 
   private async init() {
-    if (navigator.onLine) {
-      const shopId = getShopId();
-      if (shopId) {
+    const shopId = getShopId();
+    console.log("Sync: Starting connection for Shop ID:", shopId);
+    
+    if (navigator.onLine && shopId) {
+      // Check if inventory is empty - force initial pull if so
+      const count = await db.inventory.count();
+      if (count === 0) {
+        console.log("Sync: Local inventory empty, forcing initial pull...");
         await this.performInitialPull();
-        this.startRealtimeListener();
       }
+      this.startRealtimeListener();
     }
     this.updateStatus();
   }
@@ -65,34 +68,35 @@ class SyncEngine {
     const shopId = getShopId();
     if (!shopId) return;
 
+    this.onStatusChange('pulling');
     try {
-      console.debug('SyncEngine: Performing Full Cloud Pull for shop:', shopId);
+      console.debug('Sync: Attempting Full Cloud Pull for shop:', shopId);
       
       const { data: cloudItems, error } = await supabase
         .from('inventory')
         .select('*')
         .eq('shop_id', shopId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Sync Error:", error.message);
+        alert(`Cloud Sync Error: ${error.message}. Please check if RLS policies are enabled.`);
+        throw error;
+      }
 
       if (cloudItems) {
         const dexieItems = cloudItems.map(item => this.mapCloudToLocal(item));
-        // bulkPut overwrites local with cloud Master copy
         await db.inventory.bulkPut(dexieItems as InventoryItem[]);
-        console.log(`SyncEngine: Pulled ${dexieItems.length} products from cloud.`);
+        console.log(`Sync: Successfully pulled ${dexieItems.length} products.`);
       }
       
       localStorage.setItem('last_inventory_sync', Date.now().toString());
       this.updateStatus();
     } catch (err) {
-      console.error('SyncEngine: Full pull failed', err);
+      console.error('Sync: Full pull failed', err);
       this.onStatusChange('error');
     }
   }
 
-  /**
-   * Field mapper to handle Snake Case (Supabase) to Camel Case (Dexie)
-   */
   private mapCloudToLocal(item: any): InventoryItem {
     return {
       uuid: item.uuid,
@@ -113,70 +117,36 @@ class SyncEngine {
     } as InventoryItem;
   }
 
-  /**
-   * Connects to Supabase Realtime to listen for inventory updates.
-   * Handles INSERT, UPDATE, and DELETE.
-   */
   private startRealtimeListener() {
     const shopId = getShopId();
-    if (!shopId) return;
-    
-    // Skip if already listening to this shop
-    if (this.realtimeChannel && this.currentListenerShopId === shopId) return;
+    if (!shopId || (this.realtimeChannel && this.currentListenerShopId === shopId)) return;
 
-    // Cleanup old channel if switching shops or restarting
-    if (this.realtimeChannel) {
-      supabase.removeChannel(this.realtimeChannel);
-    }
+    if (this.realtimeChannel) supabase.removeChannel(this.realtimeChannel);
 
-    console.debug('SyncEngine: Starting Realtime Listener for shop:', shopId);
     this.currentListenerShopId = shopId;
-
     this.realtimeChannel = supabase
       .channel(`inventory_changes_${shopId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'inventory',
-          filter: `shop_id=eq.${shopId}`
-        },
+        { event: '*', schema: 'public', table: 'inventory', filter: `shop_id=eq.${shopId}` },
         async (payload) => {
           const { eventType, new: newItem, old: oldItem } = payload;
-          
           if (eventType === 'INSERT' || eventType === 'UPDATE') {
-            console.log(`Cloud Sync: Local stock updated for ${newItem.name}`);
+            console.log('Cloud Sync: Local stock updated for', newItem.name);
             const dexieData = this.mapCloudToLocal(newItem);
-            
             const existing = await db.inventory.where('uuid').equals(newItem.uuid).first();
-            if (existing) {
-              await db.inventory.update(existing.id!, dexieData);
-            } else {
-              await db.inventory.add(dexieData);
-            }
-          } 
-          else if (eventType === 'DELETE') {
-            console.log('Cloud Sync: Item deleted in cloud, removing locally...');
-            if (oldItem && oldItem.uuid) {
-              await db.inventory.where('uuid').equals(oldItem.uuid).delete();
-            }
+            if (existing) await db.inventory.update(existing.id!, dexieData);
+            else await db.inventory.add(dexieData);
+          } else if (eventType === 'DELETE' && oldItem?.uuid) {
+            await db.inventory.where('uuid').equals(oldItem.uuid).delete();
           }
-          
           localStorage.setItem('last_inventory_sync', Date.now().toString());
           this.updateStatus();
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log("SyncEngine: Real-time Cloud Active ✅");
-        }
-      });
+      .subscribe();
   }
 
-  /**
-   * Subscribe to sync status updates (for UI indicators)
-   */
   public subscribeStatus(callback: (status: SyncStatus) => void) {
     this.onStatusChange = callback;
     this.updateStatus();
@@ -187,56 +157,54 @@ class SyncEngine {
       this.onStatusChange('offline');
       return;
     }
-    
     const pendingCount = await this.getPendingCount();
     this.onStatusChange(pendingCount > 0 ? 'pending' : 'synced');
   }
 
   private async getPendingCount(): Promise<number> {
-    let count = 0;
     try {
+      let count = 0;
       for (const tableName of SYNCABLE_TABLES) {
-        const table = (db as any)[tableName];
-        count += await table.where('synced').equals(0).count();
+        count += await (db as any)[tableName].where('synced').equals(0).count();
       }
-    } catch (e) {
-      // Database might be closed or busy
-    }
-    return count;
+      return count;
+    } catch { return 0; }
   }
 
   /**
-   * Main Sync Execution Logic (Bidirectional)
+   * Main Sync Execution with Timeout Protection
    */
   public async sync() {
-    if (this.isSyncing || !navigator.onLine) {
-      this.updateStatus();
-      return;
-    }
-
+    if (this.isSyncing || !navigator.onLine) return;
+    
     const shopId = getShopId();
     if (!shopId) return;
     
     this.isSyncing = true;
     this.onStatusChange('pending');
 
+    // 10 Second Timeout to prevent "Orange Spinner" getting stuck
+    const timeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Sync Timeout')), 10000)
+    );
+
     try {
-      await pushToCloud();
-      await pullFromCloud();
+      await Promise.race([
+        (async () => {
+          await pushToCloud();
+          await pullFromCloud();
+        })(),
+        timeout
+      ]);
       this.onStatusChange('synced');
-    } catch (error) {
-      console.error('SyncEngine: Cloud Sync Error:', error);
-      this.onStatusChange('error');
+    } catch (error: any) {
+      console.warn('Sync loop skipped or timed out:', error.message);
+      this.onStatusChange(error.message === 'Sync Timeout' ? 'offline' : 'error');
     } finally {
       this.isSyncing = false;
       this.updateStatus();
     }
   }
-
-  public trigger() {
-    this.sync();
-  }
 }
 
-// Singleton instance
 export const syncEngine = new SyncEngine();
