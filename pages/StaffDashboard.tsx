@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, User as DBUser } from '../db.ts';
@@ -30,6 +29,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
   const syncInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +78,22 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
     return { count, items, revenue, cash, transfer, debt };
   }, [todaySales]);
 
+  const handleManualRefresh = async () => {
+    if (!navigator.onLine) {
+      alert("⚠️ Oga, you need internet to refresh prices from Admin.");
+      return;
+    }
+    setIsRefreshing(true);
+    try {
+      await syncEngine.performInitialPull();
+      alert("✅ Refresh Complete! All prices and stock updated from Admin.");
+    } catch (err) {
+      alert("Failed to refresh stock.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleSyncFromBoss = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -125,7 +141,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
           <p className="text-emerald-500 text-[9px] font-black uppercase tracking-[0.3em] mb-1">Staff Workspace</p>
           <div className="flex items-center gap-3">
              <h1 className="text-2xl font-black text-slate-800 dark:text-emerald-50 tracking-tight italic uppercase truncate max-w-[150px]">{shopName}</h1>
-             {/* Cloud Status Icon for Staff */}
              <div className="flex items-center gap-1">
                 {syncStatus === 'synced' && <Cloud className="text-emerald-500" size={14} />}
                 {syncStatus === 'pending' && <RefreshCw className="text-amber-500 animate-spin" size={14} />}
@@ -137,20 +152,35 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
             Logged in: {staffName} <CheckCircle2 size={10} className="text-emerald-500"/>
           </p>
         </div>
-        <button 
-          onClick={() => { localStorage.removeItem('user_role'); localStorage.removeItem('logged_in_staff_name'); window.location.reload(); }}
-          className="p-3 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl shadow-sm text-red-400 active:scale-90 transition-all"
-        >
-          <LogOut size={18} />
-        </button>
+        <div className="flex gap-2">
+           <button 
+             onClick={handleManualRefresh}
+             disabled={isRefreshing}
+             className="p-3 bg-emerald-50 dark:bg-emerald-900 border border-emerald-100 dark:border-emerald-800 rounded-2xl shadow-sm text-emerald-600 active:scale-90 transition-all"
+             title="Refresh Stock"
+           >
+             {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+           </button>
+           <button 
+             onClick={() => { localStorage.removeItem('user_role'); localStorage.removeItem('logged_in_staff_name'); window.location.reload(); }}
+             className="p-3 bg-white dark:bg-emerald-900 border border-slate-100 dark:border-emerald-800 rounded-2xl shadow-sm text-red-400 active:scale-90 transition-all"
+           >
+             <LogOut size={18} />
+           </button>
+        </div>
       </header>
 
       {/* SHIFT RECONCILIATION PRIMARY CARD */}
       <section className="bg-emerald-900/10 dark:bg-emerald-900/20 border-2 border-emerald-500/20 text-emerald-950 dark:text-white p-8 rounded-[40px] shadow-sm relative overflow-hidden group">
          <div className="relative z-10 space-y-5">
-            <div className="flex items-center gap-2">
-               <div className="p-2 bg-emerald-600 text-white rounded-xl"><TrendingUp size={16}/></div>
-               <p className="text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em]">TOTAL SALES TODAY</p>
+            <div className="flex items-center justify-between">
+               <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-600 text-white rounded-xl"><TrendingUp size={16}/></div>
+                  <p className="text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em]">TOTAL SALES TODAY</p>
+               </div>
+               <button onClick={handleManualRefresh} className="text-[8px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1 active:scale-90">
+                 <RefreshCw size={10} className={isRefreshing ? 'animate-spin' : ''} /> Sync Stock
+               </button>
             </div>
             
             <div className="space-y-1">
@@ -203,10 +233,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
           </div>
 
           <div className="grid grid-cols-1 gap-3">
-            <label className="w-full bg-emerald-50 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all cursor-pointer border border-emerald-100 dark:border-emerald-700/50 shadow-sm">
-               <input type="file" ref={syncInputRef} className="hidden" accept=".json.gz,.gz" onChange={handleSyncFromBoss} />
-               {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 📥 UPDATE SHOP FROM BOSS
-            </label>
+            <button onClick={handleManualRefresh} disabled={isRefreshing} className="w-full bg-emerald-50 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300 font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all border border-emerald-100 dark:border-emerald-700/50 shadow-sm">
+               {isRefreshing ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />} 📥 SYNC PRICES FROM CLOUD
+            </button>
             <button onClick={handleSendReport} disabled={isExporting} className="w-full bg-emerald-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 uppercase text-[11px] tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-100 dark:shadow-none">
                {isExporting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />} 📤 SEND DAILY REPORT
             </button>
@@ -215,7 +244,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ setPage, user })
           <div className="bg-slate-50 dark:bg-emerald-950/40 p-4 rounded-2xl flex items-start gap-3">
              <Info className="text-slate-300 shrink-0 mt-0.5" size={14} />
              <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">
-               Oga, please reconcile your Cash and Transfer alerts above before sending the report. This helps catch mistakes early!
+               Cloud sync is active. Updates from Admin happen automatically. If you don't see a new price, tap "Sync Prices from Cloud".
              </p>
           </div>
       </section>
